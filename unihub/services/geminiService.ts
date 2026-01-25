@@ -2,121 +2,133 @@
 import { GoogleGenAI } from "@google/genai";
 import { Product, Order } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 /**
- * Predicts market trends and recommends specific items to look out for.
+ * STRATEGY TOOL: Predicts market trends and recommends items.
  */
 export const predictMarketTrends = async (products: Product[], orders: Order[]): Promise<string> => {
   try {
-    const context = `I have ${products.length} products and ${orders.length} sales. Current stock categories: ${products.map(p => p.category).join(', ')}.`;
-    const prompt = `Act as a Student Business Mentor at a University in Ghana. 
-    Analyze this context: ${context}.
-    Provide:
-    1. TOP 3 ITEMS TO LOOK OUT FOR: List 3 specific hot items (e.g. particular brands of mini-fans, snacks, or tech) that students need right now.
-    2. MARKET GAP: What is currently missing from campus stores that you should buy from the city market today?
-    3. WEEKLY TIP: One way to get more students to trust you.
-    Keep it in simple, encouraging English with emojis.`;
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const context = `I am running 'UniHub', a campus delivery business. I have ${products.length} products and ${orders.length} sales. Current categories: ${products.map(p => p.category).join(', ')}.`;
+    const prompt = `${context}
+    Act as a UniHub Business Mentor. 
+    1. List TOP 3 SPECIFIC ITEMS (brands/models) students at a Ghana university need right now.
+    2. Identify a MARKET GAP based on my categories.
+    3. Give a 1-sentence tip to move stock faster.
+    Use simple English and emojis.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
-    return response.text || "Analysis complete. Waiting for next market sync.";
+    return response.text || "Analysis complete. Waiting for more data.";
   } catch (error) {
-    return "The market analyst is currently busy. Try again in a few minutes!";
+    console.error("AI Error:", error);
+    return "The Strategy Bot is currently reloading. Please try again in a moment.";
   }
 };
 
 /**
- * Generates catchy WhatsApp or Social Media ad text for a product.
+ * ADS MAKER: Generates catchy WhatsApp/Social Media text.
  */
 export const generateAdText = async (product: Product): Promise<string> => {
   try {
-    const prompt = `Act as a Marketing Expert for students. 
-    Create a catchy WhatsApp Status/Instagram caption for this product:
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `Act as a cool UniHub Marketing Expert.
+    Create a catchy WhatsApp Status or Instagram caption for:
     Item: ${product.name}
     Price: GHS ${product.sellingPrice}
-    Category: ${product.category}
     
-    Make it:
-    - Energetic and cool for university students.
-    - Include a "Call to Action" (e.g. "DM to order now").
-    - Use student slang (Ghanian campus style like 'charley', 'mad', etc. but keep it polite).
-    - Use emojis.`;
+    Guidelines:
+    - Use Ghana campus student slang (cool but polite).
+    - Make it sound like an 'exclusive drop' from UniHub.
+    - End with a Call to Action (e.g., 'DM to secure yours').
+    - Use many emojis.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
-    return response.text || "Could not generate ad text.";
+    return response.text || "Could not generate ad text. Try a shorter product name.";
   } catch (error) {
-    return "Error creating ad post.";
+    console.error("AI Error:", error);
+    return "The Ads Bot is stuck in traffic. Please try again.";
   }
 };
 
 /**
- * Provides new business ideas for university students.
+ * SIDE HUSTLES: Provides new business ideas for students.
  */
-export const getBusinessIdeas = async (): Promise<string> => {
+export const getBusinessIdeas = async (products: Product[]): Promise<string> => {
   try {
-    const prompt = `Act as a Creative Entrepreneurship Coach.
-    Suggest 3 NEW simple business ideas for a student living in a university hostel in Ghana.
-    The ideas should:
-    - Require very little starting money.
-    - Be something that can be done while studying.
-    - Solve a common student problem (e.g. hunger, laundry, charging, printing).
-    Explain why each idea will make money and how to start it today.`;
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const context = `I already sell: ${products.map(p => p.name).slice(0, 5).join(', ')}.`;
+    const prompt = `${context}
+    Act as a UniHub Innovation Coach.
+    Suggest 3 NEW simple side-hustles for a student in a Ghana university hostel.
+    - Low starting cost.
+    - Solves a hostel problem (e.g., laundry, late-night food, tech fix).
+    - Explain 'How to start today'.
+    Keep it very practical and encouraging.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
-    return response.text || "No new ideas right now. Focus on your current sales!";
+    return response.text || "No new ideas right now. Focus on your current stock!";
   } catch (error) {
-    return "The idea bot is thinking too hard. Try later.";
+    console.error("AI Error:", error);
+    return "The Idea Bot is brainstorming. Try again later.";
   }
 };
 
 /**
- * Drafts professional customer replies
+ * CHAT BOT: Drafts professional customer replies.
  */
 export const draftCustomerReply = async (query: string): Promise<string> => {
   try {
-    const prompt = `Act as a Professional Store Manager. A student customer just asked: "${query}".
-    Write a polite, professional WhatsApp reply that:
-    - Sounds helpful but firm.
-    - Encourages them to complete their purchase.
-    - Uses 1 or 2 relevant emojis.`;
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `Act as the UniHub Customer Success Manager. 
+    A student just sent this WhatsApp message: "${query}".
+    
+    Write a reply that is:
+    - Extremely polite and professional.
+    - Clear about the delivery to their hostel.
+    - Persuasive so they complete the order.
+    - Use 1 or 2 emojis.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
-    return response.text || "No draft generated.";
+    return response.text || "Customer query analyzed. No draft needed.";
   } catch (error) {
-    return "Could not generate reply draft.";
+    console.error("AI Error:", error);
+    return "The Chat Bot is busy with another customer. Try again.";
   }
 };
 
 /**
- * Suggests price optimizations for products
+ * PRICE AUDIT: Suggests price optimizations.
  */
 export const optimizePricing = async (product: Product): Promise<string> => {
   try {
-    const prompt = `Act as a Pricing Strategist.
-    Product: ${product.name}
-    Cost: GHS ${product.sourcePrice}
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `Act as a UniHub Pricing Specialist.
+    Item: ${product.name}
+    Current Cost: GHS ${product.sourcePrice}
     Current Sale Price: GHS ${product.sellingPrice}
     
-    Is this price fair for a student? Suggest a 'Best Price' and why.`;
+    Analyze if this margin is good for a student business in Ghana. 
+    Suggest a 'Sweet Spot' price that students won't find too expensive but gives you good profit.
+    Explain your logic in 2 short sentences.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
     });
-    return response.text || "Pricing audit complete.";
+    return response.text || "Pricing looks good from here!";
   } catch (error) {
-    return "Pricing analyst is offline.";
+    console.error("AI Error:", error);
+    return "The Pricing Analyst is calculating. Try again.";
   }
 };
