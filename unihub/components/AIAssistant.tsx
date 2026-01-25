@@ -52,21 +52,21 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ products }) => {
           setAdText(null);
           setFlyerUrl(null);
           
-          // Parallel execution for speed
-          const [text, img] = await Promise.all([
-            generateAdParagraph(prod),
-            generateFlyerImage(prod)
-          ]);
-          
+          // Generate ad text first for immediate feedback
+          const text = await generateAdParagraph(prod);
           setAdText(text);
+
+          // Attempt image generation
+          const img = await generateFlyerImage(prod);
           setFlyerUrl(img);
           
           if (!img) {
-            setError("Ad text generated, but the flyer image was blocked or failed. Try a simpler product name.");
+            setError("Ad text is ready! However, the visual asset was blocked by AI safety filters. This often happens if the product name sounds restricted. The text is still available below.");
           }
         }
       }
     } catch (e) {
+      console.error(e);
       setError("Connection to AI services lost. Check your internet or API key.");
     } finally {
       setLoading(false);
@@ -135,11 +135,11 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ products }) => {
       </div>
 
       {error && (
-        <div className="max-w-3xl mx-auto bg-rose-50 border border-rose-100 p-5 rounded-3xl flex items-center gap-4 animate-bounce">
+        <div className="max-w-3xl mx-auto bg-rose-50 border border-rose-100 p-5 rounded-3xl flex items-center gap-4 animate-in slide-in-from-top-4">
           <div className="w-10 h-10 bg-rose-500 text-white rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-rose-200">
             <i className="fas fa-exclamation-triangle"></i>
           </div>
-          <p className="text-[11px] font-black uppercase text-rose-600 tracking-widest leading-relaxed">{error}</p>
+          <p className="text-[11px] font-black uppercase text-rose-600 tracking-widest leading-relaxed flex-1">{error}</p>
         </div>
       )}
 
@@ -188,20 +188,22 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ products }) => {
         {phase === 'creative' && (adText || flyerUrl) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
              {/* Text Output */}
-             <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-50 flex flex-col">
-                <div className="flex items-center justify-between mb-8">
-                  <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-4 py-1.5 rounded-xl">Marketing Copy</span>
-                  <button 
-                    onClick={() => {navigator.clipboard.writeText(adText || ''); alert('Copy successful!')}}
-                    className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-all"
-                  >
-                    <i className="fas fa-copy text-sm"></i>
-                  </button>
-                </div>
-                <div className="flex-1 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
-                  <p className="text-slate-700 font-medium whitespace-pre-wrap text-sm leading-relaxed">{adText}</p>
-                </div>
-             </div>
+             {adText && (
+               <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-50 flex flex-col">
+                  <div className="flex items-center justify-between mb-8">
+                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-4 py-1.5 rounded-xl">Marketing Copy</span>
+                    <button 
+                      onClick={() => {navigator.clipboard.writeText(adText || ''); alert('Copy successful!')}}
+                      className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-all"
+                    >
+                      <i className="fas fa-copy text-sm"></i>
+                    </button>
+                  </div>
+                  <div className="flex-1 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
+                    <p className="text-slate-700 font-medium whitespace-pre-wrap text-sm leading-relaxed">{adText}</p>
+                  </div>
+               </div>
+             )}
 
              {/* Visual Output */}
              <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-50 flex flex-col items-center">
@@ -210,21 +212,25 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ products }) => {
                   <div className="w-full space-y-8">
                     <img 
                       src={flyerUrl} 
-                      alt="Market AI Flyer" 
+                      alt="Market AI Asset" 
                       className="w-full aspect-square rounded-[2rem] shadow-2xl border-8 border-white object-cover" 
                     />
                     <a 
                       href={flyerUrl} 
-                      download={`${selectedProductId}-flyer.png`} 
+                      download={`${selectedProductId}-asset.png`} 
                       className="block w-full bg-emerald-600 text-white py-5 rounded-[2rem] font-black text-[10px] uppercase tracking-[0.4em] text-center shadow-xl shadow-emerald-100 hover:bg-emerald-700 hover:-translate-y-1 transition-all"
                     >
-                      Save Flyer Image
+                      Save Asset
                     </a>
                   </div>
                 ) : (
-                  <div className="flex-1 w-full flex flex-col items-center justify-center text-slate-200 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-100 p-10 text-center">
-                    <i className="fas fa-image text-5xl mb-6"></i>
-                    <p className="text-[10px] font-black uppercase tracking-widest">Visual generation pending or restricted</p>
+                  <div className="flex-1 w-full flex flex-col items-center justify-center text-slate-200 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-100 p-10 text-center min-h-[300px]">
+                    {loading && !flyerUrl ? (
+                      <i className="fas fa-spinner fa-spin text-4xl mb-6 text-indigo-200"></i>
+                    ) : (
+                      <i className="fas fa-image text-5xl mb-6"></i>
+                    )}
+                    <p className="text-[10px] font-black uppercase tracking-widest">{loading ? 'Creating Visual...' : 'Visual Generation Filtered'}</p>
                   </div>
                 )}
              </div>
