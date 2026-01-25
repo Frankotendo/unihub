@@ -1,153 +1,114 @@
 
 import React from 'react';
-import { CircleDollarSign, TrendingUp, Package, Archive, Dot, Truck } from 'lucide-react';
-import SummaryCard from './SummaryCard';
 import { Product, Order } from '../types';
 
-// Define the interface for the Dashboard props to satisfy TypeScript requirements in App.tsx
 interface DashboardProps {
   products: Product[];
   orders: Order[];
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ products, orders }) => {
-  // Calculate summary statistics from the provided products and orders data
-  const totalRevenue = orders.reduce((sum, order) => sum + (order.amountPaid || 0), 0);
-  const totalProfit = orders.reduce((sum, order) => sum + (order.profit || 0), 0);
-  const ordersCount = orders.length;
-  const activeStock = products.filter(p => p.isApproved !== false).length;
+  const totalRevenue = orders.reduce((acc, order) => {
+    const p = products.find(prod => prod.id === order.productId);
+    return acc + (p?.sellingPrice || 0);
+  }, 0);
+
+  const totalProfit = orders.reduce((acc, order) => acc + order.profit, 0);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto animate-fadeIn">
-      {/* Header */}
-      <header className="flex justify-between items-start mb-10">
-        <div>
-          <h2 className="text-4xl font-extrabold text-[#101928] tracking-tight mb-2 uppercase">Overview</h2>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">
-            Tracking movement from market to hostel
-          </p>
+    <div className="space-y-10 animate-in fade-in duration-1000">
+      <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
+        <div className="space-y-1">
+          <h2 className="text-3xl font-black uppercase italic tracking-tighter text-slate-900">Overview</h2>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">Tracking movement from market to hostel</p>
         </div>
-        <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-full border border-slate-100 shadow-sm">
-          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Hub Online</span>
+        <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-full border border-slate-100 shadow-sm">
+           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+           <span className="text-[10px] font-black uppercase text-slate-400">Hub Online</span>
         </div>
-      </header>
-
-      {/* Summary Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <SummaryCard 
-          label="Money Earned" 
-          value={`GHS ${totalRevenue.toLocaleString()}`} 
-          icon={<CircleDollarSign size={20} />} 
-          iconBg="bg-blue-50"
-          iconColor="text-blue-600"
-        />
-        <SummaryCard 
-          label="My Profit" 
-          value={`GHS ${totalProfit.toLocaleString()}`} 
-          icon={<TrendingUp size={20} />} 
-          iconBg="bg-emerald-50"
-          iconColor="text-emerald-600"
-        />
-        <SummaryCard 
-          label="Orders Moved" 
-          value={ordersCount} 
-          icon={<Truck size={20} className="-scale-x-100" />} 
-          iconBg="bg-orange-50"
-          iconColor="text-orange-600"
-        />
-        <SummaryCard 
-          label="Active Stock" 
-          value={activeStock} 
-          icon={<Archive size={20} />} 
-          iconBg="bg-slate-50"
-          iconColor="text-slate-600"
-        />
       </div>
 
-      {/* Bottom Layout Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Delivery Stream Section */}
-        <div className="lg:col-span-8 bg-white rounded-[40px] p-10 border border-slate-50 shadow-sm relative overflow-hidden min-h-[400px]">
-           <div className="relative z-10">
-              <h3 className="text-xs font-black text-slate-300 uppercase tracking-[0.2em] mb-8">Delivery Stream</h3>
-              
-              {orders.length > 0 ? (
-                <div className="space-y-4">
-                  {orders.slice(0, 5).map(order => (
-                    <div key={order.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                      <div className="flex items-center gap-4">
-                        <div className="bg-white p-2 rounded-xl shadow-sm">
-                          <Package size={16} className="text-indigo-600" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-black text-slate-800 uppercase">{order.customerName}</p>
-                          <p className="text-[10px] text-slate-400 font-bold">{order.orderDate}</p>
-                        </div>
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${
-                        order.status === 'delivered' ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-600'
-                      }`}>
-                        {order.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full mt-20 opacity-20">
-                  <div className="flex space-x-4 mb-4">
-                    <div className="w-16 h-1 bg-slate-200 rounded-full" />
-                    <div className="w-4 h-1 bg-slate-200 rounded-full" />
-                    <div className="w-2 h-1 bg-slate-200 rounded-full" />
-                  </div>
-                  <div className="flex items-center space-x-4">
-                     <Package size={48} className="text-slate-400" />
-                  </div>
-                </div>
-              )}
-           </div>
-           
-           {/* Abstract path background */}
-           <div className="absolute top-1/2 left-0 w-full px-10">
-              <div className="border-b-2 border-dashed border-slate-100 w-full h-1" />
-           </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricCard title="Money Earned" value={`GHS ${totalRevenue}`} icon="fa-sack-dollar" color="text-indigo-600" />
+        <MetricCard title="My Profit" value={`GHS ${totalProfit}`} icon="fa-arrow-trend-up" color="text-emerald-600" />
+        <MetricCard title="Orders Moved" value={orders.length.toString()} icon="fa-truck-ramp-box" color="text-amber-600" />
+        <MetricCard title="Active Stock" value={products.filter(p => p.isApproved !== false).length.toString()} icon="fa-box-archive" color="text-slate-900" />
+      </div>
 
-           {orders.length === 0 && (
-             <div className="absolute bottom-10 left-0 w-full flex flex-col items-center text-center">
-                <div className="bg-slate-50 p-3 rounded-full mb-4">
-                  <Truck className="text-slate-300 animate-bounce" size={20} />
-                </div>
-                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Awaiting sales traffic...</p>
-             </div>
-           )}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 bg-white p-8 rounded-[3rem] shadow-xl border border-slate-50 relative overflow-hidden">
+          <div className="flex justify-between items-center mb-10">
+             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Delivery Stream</h3>
+             <i className="fas fa-route text-slate-100 text-2xl"></i>
+          </div>
+          <div className="space-y-6 relative z-10">
+            {orders.slice(0, 4).map((order, idx) => (
+              <div key={order.id} className="flex items-center justify-between p-5 bg-slate-50/50 rounded-2xl border border-transparent hover:border-slate-100 transition-all group">
+                 <div className="flex items-center gap-6">
+                    <div className="relative">
+                       <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-400 shadow-sm">
+                          <i className="fas fa-truck-fast text-xs group-hover:delivery-move"></i>
+                       </div>
+                       {idx < 3 && <div className="absolute top-12 left-1/2 -translate-x-1/2 w-0.5 h-6 bg-slate-100 border-dashed border-l-2"></div>}
+                    </div>
+                    <div>
+                       <p className="text-xs font-black uppercase tracking-tight text-slate-800">{order.customerName}</p>
+                       <p className="text-[9px] font-bold text-slate-400 uppercase">{order.status} • {order.orderDate}</p>
+                    </div>
+                 </div>
+                 <div className="text-right">
+                    <p className="text-sm font-black text-slate-900">GHS {order.amountPaid}</p>
+                    <p className="text-[9px] font-black text-emerald-500 uppercase">+{order.profit} Profit</p>
+                 </div>
+              </div>
+            ))}
+            {orders.length === 0 && (
+               <div className="py-20 text-center text-slate-200">
+                  <i className="fas fa-satellite-dish text-4xl mb-4"></i>
+                  <p className="text-[10px] font-black uppercase tracking-widest">Awaiting sales traffic...</p>
+               </div>
+            )}
+          </div>
+          {/* Background Decorative Path */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.03]" viewBox="0 0 100 100" preserveAspectRatio="none">
+             <path d="M10 20 Q 50 10 90 20 T 10 80" fill="none" stroke="currentColor" strokeWidth="2" className="road-animate" />
+          </svg>
         </div>
 
-        {/* Fast Movement Sidebar */}
-        <div className="lg:col-span-4 bg-[#4F46E5] text-white rounded-[40px] p-8 relative overflow-hidden flex flex-col justify-end">
-          <div className="absolute top-8 left-8 bg-white/10 p-4 rounded-3xl">
-            <Dot size={40} className="text-white animate-ping absolute top-0 left-0 opacity-20" />
-            <TrendingUp size={24} className="text-white relative z-10" />
-          </div>
-
-          <div className="mt-20">
-            <h3 className="text-3xl font-black italic uppercase leading-none mb-6">
-              Fast<br />Movement
-            </h3>
-            <p className="text-sm font-medium text-white/80 leading-relaxed mb-6">
-              Most students order tech gadgets between 7pm and 10pm. Ensure your AI bot drafts posts for this window.
-            </p>
-            <div className="flex items-center space-x-2 text-[10px] font-black uppercase tracking-widest text-white/50">
-              <span>View Insights</span>
-              <span className="text-lg">→</span>
-            </div>
-          </div>
-
-          {/* Background Decoration */}
-          <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
+        <div className="bg-indigo-600 p-10 rounded-[3rem] text-white shadow-2xl relative flex flex-col justify-between overflow-hidden">
+           <div className="relative z-10">
+              <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center mb-8 backdrop-blur-md">
+                 <i className="fas fa-fire-flame-curved text-2xl"></i>
+              </div>
+              <h3 className="text-2xl font-black uppercase italic mb-4 leading-tight">Fast<br/>Movement</h3>
+              <p className="text-sm font-medium opacity-80 leading-relaxed">Most students order tech gadgets between 7pm and 10pm. Ensure your AI bot drafts posts for this window!</p>
+           </div>
+           <div className="relative z-10 pt-10">
+              <div className="flex justify-between items-end">
+                 <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Success Rate</span>
+                 <span className="text-3xl font-black">98%</span>
+              </div>
+              <div className="w-full h-2 bg-white/10 rounded-full mt-3 overflow-hidden">
+                 <div className="h-full bg-white rounded-full w-[98%]"></div>
+              </div>
+           </div>
+           <i className="fas fa-truck-bolt absolute bottom-[-40px] right-[-40px] text-[180px] opacity-10 -rotate-12 pointer-events-none"></i>
         </div>
       </div>
     </div>
   );
 };
+
+const MetricCard: React.FC<{ title: string; value: string; icon: string; color: string }> = ({ title, value, icon, color }) => (
+  <div className="bg-white p-8 rounded-[2.5rem] shadow-lg border border-slate-50 flex flex-col justify-between group hover:shadow-xl transition-all">
+    <div className={`w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center ${color} group-hover:scale-110 transition-transform`}>
+      <i className={`fas ${icon} text-lg`}></i>
+    </div>
+    <div className="mt-8">
+      <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">{title}</p>
+      <p className="text-2xl font-black text-slate-900 leading-none">{value}</p>
+    </div>
+  </div>
+);
 
 export default Dashboard;

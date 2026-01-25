@@ -1,137 +1,149 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { Product, Order } from "../types";
 
-export type AIModelType = 'gemini-3-flash-preview' | 'gemini-3-pro-preview';
-
-export interface DiagnosticReport {
-  status: 'passed' | 'warning' | 'failed';
-  latency: number;
-  recommendedModel: AIModelType;
-  envDetected: 'vercel' | 'local' | 'unknown';
-  fixesApplied: string[];
-}
-
-const getModel = (modelName: AIModelType = 'gemini-3-flash-preview') => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  return { ai, modelName };
-};
-
 /**
- * DEEP DIAGNOSTIC: Analyzes the deployment bridge and applies runtime hot-fixes
+ * STRATEGY & TRENDS: The "working" blueprint for all other functions.
  */
-export const runDeepDiagnostic = async (): Promise<DiagnosticReport> => {
-  const start = Date.now();
-  const fixes: string[] = [];
-  const isVercel = window.location.hostname.includes('vercel.app');
-  
-  if (isVercel) fixes.push("Vercel Edge Detection: active");
-  
+export const predictMarketTrends = async (products: Product[], orders: Order[]): Promise<string> => {
   try {
-    const { ai } = getModel('gemini-3-flash-preview');
-    // Test a tiny prompt to measure overhead
-    await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: 'T',
-      config: { maxOutputTokens: 1 }
-    });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const productList = products.map(p => p.name).join(', ') || 'no items yet';
+    const categoryList = products.map(p => p.category).join(', ') || 'no categories yet';
     
-    const latency = Date.now() - start;
-    let status: 'passed' | 'warning' | 'failed' = 'passed';
-    let recommended: AIModelType = 'gemini-3-pro-preview';
+    const prompt = `Act as a UniHub Senior Strategy Advisor for a campus delivery business in Ghana.
+    CONTEXT:
+    - Business: UniHub (Hostel Delivery)
+    - Current Products: ${productList}
+    - Product Categories: ${categoryList}
+    - Total Sales Count: ${orders.length}
 
-    // Logic: If we are on Vercel AND latency is risky (> 2.5s overhead), force Flash.
-    if (latency > 2500 || isVercel) {
-      status = 'warning';
-      recommended = 'gemini-3-flash-preview';
-      fixes.push("Protocol: Enforced Flash Modality (Timeout Prevention)");
-      fixes.push("Buffer: Token Truncation enabled");
-    }
-
-    if (!process.env.API_KEY) {
-      status = 'failed';
-      fixes.push("CRITICAL: API_KEY missing from Environment Variables");
-    } else {
-      fixes.push("Security: Key Validation Passed");
-    }
-
-    return {
-      status,
-      latency,
-      recommendedModel: recommended,
-      envDetected: isVercel ? 'vercel' : 'local',
-      fixesApplied: fixes
-    };
-  } catch (e: any) {
-    return {
-      status: 'failed',
-      latency: 0,
-      recommendedModel: 'gemini-3-flash-preview',
-      envDetected: isVercel ? 'vercel' : 'unknown',
-      fixesApplied: ["ERROR: " + (e.message || "Connection refused by host")]
-    };
-  }
-};
-
-/**
- * WRAPPER: Ensures every call respects the Vercel-optimized model choice
- */
-export const queryGemini = async (
-  model: AIModelType, 
-  prompt: string, 
-  systemInstruction?: string
-): Promise<string> => {
-  try {
-    const { ai } = getModel(model);
+    TASK:
+    1. TRENDS: Mention 3 specific items (brands/types) currently "moving" in Ghana universities.
+    2. STRATEGY: Suggest 1 way to improve hostel delivery speed.
+    3. MARKET GAP: What should I buy from the market today that isn't in my stock?
     
-    // Auto-fix for Vercel: If using Pro on Vercel, we append a 'Be concise' warning
-    const isVercel = window.location.hostname.includes('vercel.app');
-    const optimizedPrompt = (isVercel && model === 'gemini-3-pro-preview') 
-      ? `${prompt}\n\n[SYSTEM OVERRIDE: Be extremely concise to avoid Vercel 10s timeout.]`
-      : prompt;
+    Keep the tone: Encouraging, student-friendly, uses emojis.`;
 
     const response = await ai.models.generateContent({
-      model: model,
-      contents: optimizedPrompt,
-      config: {
-        systemInstruction: systemInstruction || "You are a helpful business assistant for Ghana university students.",
-        temperature: 0.7,
-        topP: 0.95,
-      }
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
     });
-
-    return response.text || "No data received.";
-  } catch (error: any) {
-    console.error("Gemini Error:", error);
-    if (error.message?.includes("fetch")) {
-      throw new Error("Vercel Bridge Timeout: The model took too long to think. Try switching to 'Flash Engine' in the Engine tab.");
-    }
-    throw error;
+    return response.text || "Insight stream interrupted. Please refresh.";
+  } catch (error) {
+    console.error("AI Error (Trends):", error);
+    return "The Hub Analyst is checking the routes. Try again in 30 seconds.";
   }
 };
 
-// Legacy exports updated to use the new Query Wrapper
-export const predictMarketTrends = async (products: Product[], orders: Order[], model: AIModelType) => {
-  const prompt = `Act as Strategy Chief. Current Stock: ${products.map(p=>p.name).join(', ')}. Analyze trends for Ghana hostels. Use slang like 'charley'.`;
-  return queryGemini(model, prompt);
+/**
+ * AD TEXT GENERATOR: Catchy copy for WhatsApp and Social Media.
+ */
+export const generateAdText = async (product: Product): Promise<string> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `Act as the UniHub Marketing Lead. 
+    Create a catchy, high-energy WhatsApp Status / Instagram caption for this item:
+    ITEM: ${product.name}
+    PRICE: GHS ${product.sellingPrice}
+    HUB: UniHub (Hostel Delivery)
+
+    REQUIREMENTS:
+    - Use student slang common in Ghana (e.g., 'charley', 'mad', 'levels').
+    - Emphasize "Direct Hostel Delivery".
+    - Include a clear call to action (e.g., "DM for instant drop").
+    - Use plenty of relevant emojis.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+    });
+    return response.text || "Ad generator stalled. Try a different item.";
+  } catch (error) {
+    console.error("AI Error (Ads):", error);
+    return "The Marketing Bot is re-fueling. Try again shortly.";
+  }
 };
 
-export const generateAdText = async (product: Product, model: AIModelType) => {
-  const prompt = `Create a WhatsApp ad for ${product.name} at GHS ${product.sellingPrice}. Use student vibes.`;
-  return queryGemini(model, prompt);
+/**
+ * BUSINESS IDEAS: Innovative campus hustles.
+ */
+export const getBusinessIdeas = async (products: Product[]): Promise<string> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const currentStock = products.map(p => p.name).slice(0, 5).join(', ');
+    
+    const prompt = `Act as a Creative Business Coach for UniHub.
+    Suggest 3 NEW, low-cost business ideas that a university student in Ghana can start today alongside UniHub.
+    
+    IDEAS SHOULD:
+    - Be tailored to hostel life.
+    - Solve a problem (hunger, tech, convenience).
+    - Leverage the existing UniHub delivery network.
+    
+    Explain why each idea will make money and how to start with less than 200 GHS.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+    });
+    return response.text || "Ideas are cooking. Please check back later.";
+  } catch (error) {
+    console.error("AI Error (Ideas):", error);
+    return "The Idea Lab is currently brainstorming. Try again soon.";
+  }
 };
 
-export const getBusinessIdeas = async (products: Product[], model: AIModelType) => {
-  const prompt = `Suggest 3 new student side-hustles. Existing business delivers: ${products.map(p=>p.name).join(', ')}.`;
-  return queryGemini(model, prompt);
+/**
+ * CUSTOMER CHAT BOT: Drafts professional and persuasive replies.
+ */
+export const draftCustomerReply = async (query: string): Promise<string> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `Act as the UniHub Customer Support Expert.
+    A customer just sent this message on WhatsApp: "${query}"
+
+    TASK:
+    Write a reply that is:
+    - Professional yet friendly (Ghana student vibe).
+    - Clear about the delivery process.
+    - Persuasive to ensure they place the order.
+    - Include 1-2 emojis.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+    });
+    return response.text || "Reply draft failed. Try shorter text.";
+  } catch (error) {
+    console.error("AI Error (Replies):", error);
+    return "The Chat Assistant is on a break. Try again in a minute.";
+  }
 };
 
-export const draftCustomerReply = async (query: string, model: AIModelType) => {
-  const prompt = `Customer asked: "${query}". Draft a reply to close the sale.`;
-  return queryGemini(model, prompt);
-};
+/**
+ * PRICING AUDIT: Optimized margins for student markets.
+ */
+export const optimizePricing = async (product: Product): Promise<string> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const prompt = `Act as the UniHub Financial Auditor.
+    PRODUCT: ${product.name}
+    YOUR COST: GHS ${product.sourcePrice}
+    SELLING FOR: GHS ${product.sellingPrice}
 
-export const optimizePricing = async (product: Product, model: AIModelType) => {
-  const prompt = `Audit price for ${product.name}. Cost: ${product.sourcePrice}, Selling: ${product.sellingPrice}. Give advice.`;
-  return queryGemini(model, prompt);
+    TASK:
+    - Is this a fair price for a Ghana university student?
+    - Is the profit margin healthy?
+    - Suggest the absolute "best price" to sell fast while keeping profit.
+    Keep it to 3 bullet points.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+    });
+    return response.text || "Pricing audit skipped.";
+  } catch (error) {
+    console.error("AI Error (Pricing):", error);
+    return "The Financial Bot is crunching numbers. Try again later.";
+  }
 };

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Location, Product, Order, BusinessSettings, LogisticsPartner, LocalVendor, Category } from './types';
 import Dashboard from './components/Dashboard';
@@ -87,26 +88,6 @@ const App: React.FC = () => {
     setProducts([newProd, ...products]);
   };
 
-  const handleShareStore = async () => {
-    const shareUrl = `${window.location.origin}${window.location.pathname}#store`;
-    const shareData = {
-      title: `${settings.storeName} - Campus Delivery`,
-      text: `Check out the latest drops on ${settings.storeName}! Direct delivery to all hostels. 🚚🎒`,
-      url: shareUrl,
-    };
-
-    if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-      } catch (err) {
-        console.warn('Share cancelled or failed');
-      }
-    } else {
-      navigator.clipboard.writeText(shareUrl);
-      alert('Store link copied to clipboard! Share it on WhatsApp! 🚀');
-    }
-  };
-
   if (viewMode === 'store') {
     return (
       <PublicCatalog 
@@ -150,14 +131,9 @@ const App: React.FC = () => {
           ))}
         </div>
 
-        <div className="space-y-3 mt-6">
-          <button onClick={() => window.location.hash = '#store'} className="w-full bg-slate-800 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all flex items-center justify-center gap-3 border border-slate-700">
-            <i className="fas fa-external-link-alt"></i> Open Store
-          </button>
-          <button onClick={handleShareStore} className="w-full bg-indigo-600 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all flex items-center justify-center gap-3 shadow-lg">
-            <i className="fas fa-share-nodes"></i> Share Store
-          </button>
-        </div>
+        <button onClick={() => window.location.hash = '#store'} className="w-full bg-slate-800 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all flex items-center justify-center gap-3 mt-6 border border-slate-700">
+          <i className="fas fa-external-link-alt"></i> Open Store
+        </button>
       </nav>
 
       <header className="md:hidden bg-[#0f172a] text-white px-6 py-4 flex items-center justify-between sticky top-0 z-[100] border-b border-slate-800">
@@ -166,7 +142,7 @@ const App: React.FC = () => {
           <select value={activeTab} onChange={(e) => setActiveTab(e.target.value as TabType)} className="bg-white/10 border-none rounded-xl px-4 py-2 text-xs font-bold outline-none">
             {navItems.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
-          <button onClick={handleShareStore} className="bg-indigo-600 p-2 rounded-xl"><i className="fas fa-share-nodes"></i></button>
+          <button onClick={() => window.location.hash = '#store'} className="bg-indigo-600 p-2 rounded-xl"><i className="fas fa-eye"></i></button>
         </div>
       </header>
 
@@ -193,10 +169,7 @@ const App: React.FC = () => {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Profit Margin (%)</label>
                     <input type="number" className="w-full px-6 py-4 rounded-xl bg-slate-50 border-2 border-transparent focus:border-indigo-500 outline-none font-bold" value={settings.defaultMarkupPercent} onChange={e => setSettings({...settings, defaultMarkupPercent: Number(e.target.value)})} />
                   </div>
-                  <div className="pt-6 grid grid-cols-1 gap-4">
-                    <button onClick={handleShareStore} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-500 transition-all flex items-center justify-center gap-3">
-                      <i className="fas fa-share-nodes"></i> Broadcast Store Link
-                    </button>
+                  <div className="pt-6">
                     <button onClick={() => {
                         const data = JSON.stringify({ products, orders, settings, vendors, logistics });
                         const blob = new Blob([data], { type: 'application/json' });

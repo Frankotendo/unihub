@@ -1,6 +1,4 @@
 
-import React from 'react';
-
 export enum Location {
   DORMAA = 'Dormaa (Local Hub)',
   KUMASI = 'Kumasi Central',
@@ -12,11 +10,6 @@ export enum Location {
 
 export type Category = 'Hostel Essentials' | 'School Items' | 'Tech & Gadgets' | 'Fashion' | 'Food & Snacks' | 'Cosmetics' | 'General';
 
-export interface DeliveryOption {
-  location: string;
-  cost: number;
-}
-
 export interface Product {
   id: string;
   name: string;
@@ -24,8 +17,7 @@ export interface Product {
   sourcePrice: number;
   sellingPrice: number;
   location: Location | string;
-  deliveryCost: number; // Legacy field for basic cost
-  deliveryOptions?: DeliveryOption[]; // New flexible delivery tiers
+  deliveryCost: number;
   stock: number;
   imageUrl?: string;
   imageSource?: 'uploaded' | 'ai' | 'url';
@@ -70,13 +62,4 @@ export interface LogisticsPartner {
   contact: string;
   type: string;
   location: string;
-}
-
-// Added StatCardProps to fix SummaryCard.tsx error
-export interface StatCardProps {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-  iconBg: string;
-  iconColor: string;
 }
