@@ -1,0 +1,7 @@
+{
+  "name": "UniDrop Hub",
+  "description": "AI-powered dropshipping command center for university students. Features smart inventory management, AI creative studio for text/image ads, and real-time market intelligence.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
