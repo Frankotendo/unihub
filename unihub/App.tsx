@@ -9,11 +9,16 @@ import HubManager from './components/HubManager';
 import PublicCatalog from './components/PublicCatalog';
 import AIAssistant from './components/AIAssistant';
 import MarketingAI from './components/MarketingAI';
-import { Menu, X, Zap } from 'lucide-react';
+import AdminLogin from './components/AdminLogin';
+import { Menu, X, Zap, ShieldAlert } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppView>(AppView.INSIGHTS);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return sessionStorage.getItem('unidrop_auth') === 'true';
+  });
+  
   const [viewMode, setViewMode] = useState<'admin' | 'store'>(() => {
     const hash = window.location.hash;
     return (hash === '#store' || hash === '#join') ? 'store' : 'admin';
@@ -32,7 +37,8 @@ const App: React.FC = () => {
       currency: 'GHS',
       deliveryNote: 'Delivering to all hostels within 24 hours.',
       defaultMarkupPercent: 20,
-      activeHubs: ['Dormaa', 'Kumasi', 'Accra']
+      activeHubs: ['Dormaa', 'Kumasi', 'Accra'],
+      adminPassword: 'UNIDROP_ADMIN_2025' // Default password
     };
   });
 
@@ -69,6 +75,21 @@ const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  const handleLogin = (password: string) => {
+    if (password === (settings.adminPassword || 'UNIDROP_ADMIN_2025')) {
+      setIsAuthenticated(true);
+      sessionStorage.setItem('unidrop_auth', 'true');
+      return true;
+    }
+    return false;
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    sessionStorage.removeItem('unidrop_auth');
+    setActiveTab(AppView.INSIGHTS);
+  };
+
   const handleScoutSubmission = (data: { name: string, itemName: string, price: number, category: Category }) => {
     const markupPrice = Math.ceil(data.price * (1 + settings.defaultMarkupPercent / 100));
     const newProd: Product = {
@@ -97,6 +118,11 @@ const App: React.FC = () => {
         onScoutSubmit={handleScoutSubmission}
       />
     );
+  }
+
+  // Admin access protection
+  if (!isAuthenticated) {
+    return <AdminLogin onLogin={handleLogin} storeName={settings.storeName} />;
   }
 
   const renderContent = () => {
@@ -139,7 +165,7 @@ const App: React.FC = () => {
         return (
           <div className="max-w-2xl bg-white p-6 md:p-10 rounded-3xl md:rounded-[3rem] shadow-xl border border-slate-100 mx-auto">
             <h2 className="text-2xl font-black mb-8 italic uppercase tracking-tighter">System Configuration</h2>
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Shop Name</label>
                 <input type="text" className="w-full px-6 py-4 rounded-xl bg-slate-50 border-none font-bold outline-none" value={settings.storeName} onChange={e => setSettings({...settings, storeName: e.target.value})} />
@@ -148,17 +174,40 @@ const App: React.FC = () => {
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">WhatsApp Number</label>
                 <input type="text" className="w-full px-6 py-4 rounded-xl bg-slate-50 border-none font-bold outline-none" value={settings.whatsappNumber} onChange={e => setSettings({...settings, whatsappNumber: e.target.value})} />
               </div>
-              <button onClick={() => {
-                const data = JSON.stringify({ products, orders, settings, vendors, logistics });
-                const blob = new Blob([data], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `unidrop_data_backup.json`;
-                a.click();
-              }} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-600 transition-all">
-                Export Local Ledger
-              </button>
+
+              {/* SECURITY SECTION */}
+              <div className="p-8 bg-slate-900 rounded-[2.5rem] border border-white/5 space-y-6">
+                <div className="flex items-center gap-3">
+                  <ShieldAlert className="text-indigo-400" size={20} />
+                  <h3 className="text-white font-black uppercase text-[10px] tracking-widest">Vault Security</h3>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest px-2">Update Admin Access Key</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-6 py-4 rounded-xl bg-white/5 border border-white/10 text-white font-bold outline-none focus:border-indigo-500 transition-colors" 
+                    value={settings.adminPassword} 
+                    onChange={e => setSettings({...settings, adminPassword: e.target.value})} 
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button onClick={() => {
+                  const data = JSON.stringify({ products, orders, settings, vendors, logistics });
+                  const blob = new Blob([data], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `unidrop_data_backup.json`;
+                  a.click();
+                }} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all">
+                  Export Local Ledger
+                </button>
+                <button onClick={handleLogout} className="w-full bg-slate-50 text-slate-400 py-4 rounded-2xl font-bold text-[10px] uppercase tracking-widest hover:text-rose-500 transition-all">
+                  Exit Secure Terminal (Logout)
+                </button>
+              </div>
             </div>
           </div>
         );
