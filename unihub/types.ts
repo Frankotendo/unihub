@@ -64,6 +64,7 @@ export interface BusinessSettings {
   deliveryNote: string;
   defaultMarkupPercent: number;
   activeHubs: string[];
+  adminPassword?: string;
 }
 
 export interface Order {
