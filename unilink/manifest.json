@@ -1,0 +1,24 @@
+
+{
+  "name": "UniHub Dispatch",
+  "short_name": "UniHub",
+  "description": "Secure campus ride-sharing and logistics engine.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=unihub&backgroundColor=f59e0b",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=unihub&backgroundColor=f59e0b",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
