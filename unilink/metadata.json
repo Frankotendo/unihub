@@ -1,7 +1,0 @@
-{
-  "name": "UniLink Transport",
-  "description": "Student transport pooling and link-up hub for Dormaa. Connect with Taxis, Pragia, and Shuttles in real-time.",
-  "requestFramePermissions": [
-    "geolocation"
-  ]
-}
