@@ -1,179 +1,171 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
-import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from '@supabase/supabase-js';
 
-// --- SUPABASE SETUP ---
+// --- Supabase Setup ---
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").trim();
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
-
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error("Supabase env vars missing");
-}
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// --- TYPES ---
+// --- Types ---
 type VehicleType = 'Pragia' | 'Taxi' | 'Shuttle';
 type NodeStatus = 'forming' | 'qualified' | 'dispatched' | 'completed';
 type PortalMode = 'passenger' | 'driver' | 'admin';
 
 interface Passenger { id: string; name: string; phone: string; }
-interface RideNode { id: string; destination: string; origin: string; capacityNeeded: number; passengers: Passenger[]; status: NodeStatus; leaderName: string; leaderPhone: string; farePerPerson: number; createdAt: string; assignedDriverId?: string; verificationCode?: string; isSolo?: boolean; isLongDistance?: boolean; negotiatedTotalFare?: number; }
-interface Driver { id: string; name: string; vehicleType: VehicleType; licensePlate: string; contact: string; walletBalance: number; rating: number; status: 'online' | 'busy' | 'offline'; pin: string; }
-interface TopupRequest { id: string; driverId: string; amount: number; momoReference: string; status: 'pending' | 'approved' | 'rejected'; timestamp: string; }
-interface Transaction { id: string; driverId: string; amount: number; type: 'commission' | 'topup'; timestamp: string; }
-interface AppSettings { adminMomo: string; adminMomoName: string; whatsappNumber: string; commissionPerSeat: number; adminSecret: string; farePerPragia: number; farePerTaxi: number; soloMultiplier: number; aboutMeText: string; aboutMeImages: string[]; }
+interface RideNode {
+  id: string; origin: string; destination: string; capacityNeeded: number;
+  passengers: Passenger[]; status: NodeStatus; leaderName: string;
+  leaderPhone: string; farePerPerson: number; assignedDriverId?: string;
+  verificationCode?: string; negotiatedTotalFare?: number;
+  isSolo?: boolean; isLongDistance?: boolean; createdAt: string;
+}
+interface Driver {
+  id: string; name: string; vehicleType: VehicleType; licensePlate: string;
+  contact: string; walletBalance: number; rating: number; status: string; pin: string;
+}
+interface Transaction { id: string; driverId: string; amount: number; type: string; timestamp: string; }
+interface TopupRequest { id: string; driverId: string; amount: number; momoReference: string; status: string; timestamp: string; }
 
-// --- APP ---
+// --- App ---
 const App: React.FC = () => {
-  const [viewMode, setViewMode] = useState<PortalMode>('passenger');
-  const [activeDriverId, setActiveDriverId] = useState<string | null>(() => sessionStorage.getItem('unihub_driver_session_v11'));
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => sessionStorage.getItem('unihub_admin_auth_v11') === 'true');
-  const [isNewUser, setIsNewUser] = useState(() => !localStorage.getItem('unihub_seen_welcome_v11'));
-
-  // Core state
-  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [nodes, setNodes] = useState<RideNode[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [topupRequests, setTopupRequests] = useState<TopupRequest[]>([]);
-  const [settings, setSettings] = useState<AppSettings>({
-    adminMomo: '', adminMomoName: '', whatsappNumber: '', commissionPerSeat: 0,
-    adminSecret: '', farePerPragia: 0, farePerTaxi: 0, soloMultiplier: 1,
-    aboutMeText: '', aboutMeImages: []
-  });
+  const [viewMode, setViewMode] = useState<PortalMode>('passenger');
+  const [activeDriverId, setActiveDriverId] = useState<string | null>(null);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const activeDriver = useMemo(() => drivers.find(d => d.id === activeDriverId), [drivers, activeDriverId]);
-  
-  // --- INITIAL LOAD & REALTIME SUBSCRIPTIONS ---
+  // --- Fetch & Realtime Setup ---
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const { data: driversData } = await supabase.from('drivers').select('*');
-        if (driversData) setDrivers(driversData);
-
-        const { data: nodesData } = await supabase.from('nodes').select('*');
-        if (nodesData) setNodes(nodesData);
-
-        const { data: txData } = await supabase.from('transactions').select('*');
-        if (txData) setTransactions(txData);
-
-        const { data: topupData } = await supabase.from('topup_requests').select('*');
-        if (topupData) setTopupRequests(topupData);
-
-        const { data: settingsData } = await supabase.from('settings').select('*').eq('id', 'singleton').single();
-        if (settingsData) setSettings(settingsData);
-      } catch (err) {
-        console.error('Supabase fetch error:', err);
-      }
+    const fetchAll = async () => {
+      setLoading(true);
+      const { data: n } = await supabase.from('nodes').select('*');
+      const { data: d } = await supabase.from('drivers').select('*');
+      const { data: t } = await supabase.from('transactions').select('*');
+      const { data: r } = await supabase.from('topup_requests').select('*');
+      if (n) setNodes(n as RideNode[]);
+      if (d) setDrivers(d as Driver[]);
+      if (t) setTransactions(t as Transaction[]);
+      if (r) setTopupRequests(r as TopupRequest[]);
+      setLoading(false);
     };
+    fetchAll();
 
-    fetchData();
-
-    // Realtime subscriptions
+    // --- Real-time subscriptions ---
     const subs: any[] = [];
-
-    subs.push(
-      supabase.from('drivers').on('*', payload => {
-        setDrivers(prev => {
-          if (payload.eventType === 'DELETE') return prev.filter(d => d.id !== payload.old.id);
-          const idx = prev.findIndex(d => d.id === payload.new.id);
-          if (idx >= 0) prev[idx] = payload.new; else prev.push(payload.new);
-          return [...prev];
-        });
-      }).subscribe()
-    );
-
-    subs.push(
-      supabase.from('nodes').on('*', payload => {
-        setNodes(prev => {
-          if (payload.eventType === 'DELETE') return prev.filter(n => n.id !== payload.old.id);
-          const idx = prev.findIndex(n => n.id === payload.new.id);
-          if (idx >= 0) prev[idx] = payload.new; else prev.push(payload.new);
-          return [...prev];
-        });
-      }).subscribe()
-    );
-
-    subs.push(
-      supabase.from('transactions').on('INSERT', payload => setTransactions(prev => [...prev, payload.new])).subscribe()
-    );
-
-    subs.push(
-      supabase.from('topup_requests').on('*', payload => {
-        setTopupRequests(prev => {
-          if (payload.eventType === 'DELETE') return prev.filter(r => r.id !== payload.old.id);
-          const idx = prev.findIndex(r => r.id === payload.new.id);
-          if (idx >= 0) prev[idx] = payload.new; else prev.push(payload.new);
-          return [...prev];
-        });
-      }).subscribe()
-    );
-
-    subs.push(
-      supabase.from('settings:id=singleton').on('UPDATE', payload => setSettings(payload.new)).subscribe()
-    );
+    ['nodes','drivers','transactions','topup_requests'].forEach(table => {
+      const sub = supabase.from(table).on('*', () => fetchAll()).subscribe();
+      subs.push(sub);
+    });
 
     return () => subs.forEach(s => supabase.removeSubscription(s));
   }, []);
 
-  // --- EXAMPLE ACTIONS USING SUPABASE ---
+  // --- Core Actions ---
+  const joinNode = async (nodeId: string, name: string, phone: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    const passengers = [...node.passengers, { id: `P-${Date.now()}`, name, phone }];
+    const status = passengers.length >= node.capacityNeeded ? 'qualified' : 'forming';
+    await supabase.from('nodes').update({ passengers, status }).eq('id', nodeId);
+  };
+
   const acceptRide = async (nodeId: string, driverId: string, customFare?: number) => {
+    const node = nodes.find(n => n.id === nodeId);
     const driver = drivers.find(d => d.id === driverId);
-    if (!driver || driver.walletBalance < settings.commissionPerSeat) { alert("Insufficient Balance!"); return; }
+    if (!node || !driver) return alert("Node or Driver not found.");
+    if (driver.walletBalance < 2) return alert("Insufficient balance");
 
     const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
-
+    const negotiatedFare = customFare || node.negotiatedTotalFare || node.farePerPerson;
+    
     await supabase.from('nodes').update({
       status: 'dispatched',
       assignedDriverId: driverId,
       verificationCode,
-      negotiatedTotalFare: customFare || null
+      negotiatedTotalFare: negotiatedFare
     }).eq('id', nodeId);
 
     await supabase.from('drivers').update({
-      walletBalance: driver.walletBalance - settings.commissionPerSeat
+      walletBalance: driver.walletBalance - 2
     }).eq('id', driverId);
 
     await supabase.from('transactions').insert([{
-      driverId,
-      amount: settings.commissionPerSeat,
-      type: 'commission',
-      timestamp: new Date().toISOString()
+      id: `TX-${Date.now()}`, driverId, amount: 2, type: 'commission', timestamp: new Date().toISOString()
     }]);
-
-    alert(customFare ? `Negotiated trip accepted at ₵${customFare}!` : "Job accepted!");
   };
 
-  const joinNode = async (nodeId: string, name: string, phone: string) => {
+  const verifyRide = async (nodeId: string, code: string) => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
-    if (node.passengers.length >= node.capacityNeeded) return;
-
-    const newPassengers = [...node.passengers, { id: `P-${Date.now()}`, name, phone }];
-    const newStatus = newPassengers.length >= node.capacityNeeded ? 'qualified' : 'forming';
-
-    await supabase.from('nodes').update({
-      passengers: newPassengers,
-      status: newStatus
-    }).eq('id', nodeId);
+    if (node.verificationCode === code) {
+      await supabase.from('nodes').update({ status: 'completed' }).eq('id', nodeId);
+      alert("Ride verified!");
+    } else alert("Wrong code!");
   };
 
   const requestTopup = async (driverId: string, amount: number, ref: string) => {
     await supabase.from('topup_requests').insert([{
-      driverId,
-      amount,
-      momoReference: ref,
-      status: 'pending',
-      timestamp: new Date().toISOString()
+      id: `REQ-${Date.now()}`, driverId, amount, momoReference: ref, status: 'pending', timestamp: new Date().toISOString()
     }]);
-    alert("Topup request sent!");
   };
 
-  // --- UI-only state persists locally ---
-  const dismissWelcome = () => { setIsNewUser(false); localStorage.setItem('unihub_seen_welcome_v11', 'true'); };
+  const approveTopup = async (reqId: string) => {
+    const req = topupRequests.find(r => r.id === reqId);
+    if (!req || req.status !== 'pending') return;
+    const driver = drivers.find(d => d.id === req.driverId);
+    if (!driver) return;
 
-  return <div>{/* Your UI JSX here */}</div>;
+    await supabase.from('drivers').update({
+      walletBalance: driver.walletBalance + req.amount
+    }).eq('id', req.driverId);
+
+    await supabase.from('topup_requests').update({ status: 'approved' }).eq('id', reqId);
+
+    await supabase.from('transactions').insert([{
+      id: `TX-${Date.now()}`, driverId: req.driverId, amount: req.amount, type: 'topup', timestamp: new Date().toISOString()
+    }]);
+  };
+
+  const registerDriver = async (d: Omit<Driver,'id'|'walletBalance'|'rating'|'status'>) => {
+    await supabase.from('drivers').insert([{
+      ...d, id: `DRV-${Date.now()}`, walletBalance: 0, rating: 5, status: 'online'
+    }]);
+  };
+
+  const deleteDriver = async (driverId: string) => {
+    const activeMission = nodes.some(n => n.assignedDriverId === driverId && (n.status==='qualified'||n.status==='dispatched'));
+    if (activeMission) return alert("Cannot delete driver on active mission");
+    await supabase.from('drivers').delete().eq('id', driverId);
+  };
+
+  // --- Helpers ---
+  const activeDriver = useMemo(() => drivers.find(d => d.id === activeDriverId), [drivers, activeDriverId]);
+
+  if (loading) return <div style={{color:'white'}}>Loading…</div>;
+
+  return (
+    <div style={{color:'white',background:'black',minHeight:'100vh',padding:'1rem'}}>
+      <h1>UniHub Dispatch</h1>
+
+      <h2>Ride Nodes</h2>
+      {nodes.map(n=>(
+        <div key={n.id} style={{border:'1px solid white',padding:'0.5rem',margin:'0.5rem 0'}}>
+          {n.origin} → {n.destination} | Seats {n.passengers.length}/{n.capacityNeeded} | Status: {n.status}
+          <button onClick={()=>joinNode(n.id,'Test','0241234567')}>Join Node</button>
+        </div>
+      ))}
+
+      <h2>Drivers</h2>
+      {drivers.map(d=>(
+        <div key={d.id}>{d.name} | Balance: ₵{d.walletBalance}</div>
+      ))}
+    </div>
+  );
 };
 
+// --- Render ---
 ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
