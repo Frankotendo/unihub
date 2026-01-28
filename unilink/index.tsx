@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
+import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from '@supabase/supabase-js';
 
 // --- SUPABASE SETUP ---
