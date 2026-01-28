@@ -1,16 +1,17 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
-import { GoogleGenAI } from "@google/genai";
 import { createClient } from '@supabase/supabase-js';
 
 // --- SUPABASE CLIENT SETUP ---
-const SUPABASE_URL = (process.env as any).VITE_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = (process.env as any).VITE_SUPABASE_ANON_KEY || "";
+// We access these directly so Vite's 'define' can replace them at build time.
+// Do not destructure process.env or access import.meta.env as it leads to undefined errors in this setup.
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || "";
 
-const isValidUrl = (url: string) => {
+const isValidUrl = (url: any) => {
   try {
-    return url.startsWith('http');
+    return url && typeof url === 'string' && url.startsWith('http');
   } catch {
     return false;
   }
@@ -215,7 +216,7 @@ const App: React.FC = () => {
        </div>
        <h1 className="text-xl font-black text-white uppercase italic">Setup Required</h1>
        <div className="text-slate-500 text-xs mt-4 max-w-xs leading-relaxed space-y-4">
-         <p>The Supabase environment variables are missing or invalid in your Vercel Project Dashboard.</p>
+         <p>Supabase environment variables are missing from the build. Note: You must Redeploy on Vercel after adding variables.</p>
          <div className="bg-white/5 p-4 rounded-xl text-left font-mono text-[10px] space-y-2">
             <p className={isValidUrl(SUPABASE_URL) ? 'text-emerald-500' : 'text-rose-500'}>
               {isValidUrl(SUPABASE_URL) ? '✓ URL detected' : '✗ VITE_SUPABASE_URL missing'}
@@ -224,6 +225,7 @@ const App: React.FC = () => {
               {SUPABASE_ANON_KEY ? '✓ Key detected' : '✗ VITE_SUPABASE_ANON_KEY missing'}
             </p>
          </div>
+         <p className="text-[9px] opacity-60">To fix: Go to Vercel Deployments > Redeploy.</p>
        </div>
     </div>
   );
@@ -269,7 +271,7 @@ const App: React.FC = () => {
         </div>
 
         {activeDriver && (
-          <div className="bg-indigo-500/10 p-6 rounded-[2.5rem] border border-indigo-500/20 relative overflow-hidden group">
+          <div className="bg-indigo-50/10 p-6 rounded-[2.5rem] border border-indigo-500/20 relative overflow-hidden group">
              <p className="text-[9px] font-black uppercase text-indigo-400 mb-1">Active Pilot</p>
              <p className="text-lg font-black text-white truncate">{activeDriver.name}</p>
              <button onClick={() => { setActiveDriverId(null); sessionStorage.removeItem('unihub_driver_session_v12'); setViewMode('passenger'); }} className="mt-4 w-full py-2 bg-rose-600/20 text-rose-500 rounded-xl text-[9px] font-black uppercase">End Shift</button>
