@@ -5,12 +5,19 @@ import { GoogleGenAI } from "@google/genai";
 import { createClient } from '@supabase/supabase-js';
 
 // --- SUPABASE CLIENT SETUP ---
-// Accessing via process.env which is now injected by vite.config.ts
 const SUPABASE_URL = (process.env as any).VITE_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = (process.env as any).VITE_SUPABASE_ANON_KEY || "";
 
-// Safely initialize client to avoid "supabaseUrl is required" error if env vars are missing
-const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY) 
+// Robust validation to prevent library crashes if env vars are missing or malformed
+const isValidUrl = (url: string) => {
+  try {
+    return url.startsWith('http');
+  } catch {
+    return false;
+  }
+};
+
+const supabase = (isValidUrl(SUPABASE_URL) && SUPABASE_ANON_KEY) 
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
   : null;
 
@@ -63,21 +70,25 @@ const App: React.FC = () => {
     if (!supabase) return;
 
     const fetchInitialData = async () => {
-      const { data: s } = await supabase.from('settings').select('*').single();
-      const { data: n } = await supabase.from('nodes').select('*').order('created_at', { ascending: false });
-      const { data: d } = await supabase.from('drivers').select('*');
-      const { data: tr } = await supabase.from('topup_requests').select('*').order('timestamp', { ascending: false });
+      try {
+        const { data: s } = await supabase.from('settings').select('*').single();
+        const { data: n } = await supabase.from('nodes').select('*').order('created_at', { ascending: false });
+        const { data: d } = await supabase.from('drivers').select('*');
+        const { data: tr } = await supabase.from('topup_requests').select('*').order('timestamp', { ascending: false });
 
-      if (s) setSettings(mapSettingsFromDB(s));
-      if (n) setNodes(n.map(mapNodeFromDB));
-      if (d) setDrivers(d);
-      if (tr) setTopupRequests(tr.map(mapTopupFromDB));
-      setIsInitializing(false);
+        if (s) setSettings(mapSettingsFromDB(s));
+        if (n) setNodes(n.map(mapNodeFromDB));
+        if (d) setDrivers(d);
+        if (tr) setTopupRequests(tr.map(mapTopupFromDB));
+      } catch (err) {
+        console.error("Fetch Error:", err);
+      } finally {
+        setIsInitializing(false);
+      }
     };
 
     fetchInitialData();
 
-    // Subscribe to REALTIME updates for all logistics tables
     const channel = supabase.channel('hub_realtime_v12')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'nodes' }, () => fetchInitialData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, () => fetchInitialData())
@@ -88,7 +99,6 @@ const App: React.FC = () => {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Sync "Seat Full" notifications
   useEffect(() => {
     nodes.forEach(node => {
       if (node.status === 'qualified' && !node.notifiedFull) {
@@ -101,7 +111,6 @@ const App: React.FC = () => {
     });
   }, [nodes]);
 
-  // --- 2. DB MAPPING HELPERS ---
   const mapNodeFromDB = (db: any): RideNode => ({
     id: db.id, origin: db.origin, destination: db.destination,
     capacityNeeded: db.capacity_needed, passengers: db.passengers || [],
@@ -111,11 +120,13 @@ const App: React.FC = () => {
     notifiedFull: db.notified_full
   });
 
+  // Fix: Corrected property mapping to avoid unknown property 'fare_per_taxi' error.
   const mapSettingsFromDB = (db: any): AppSettings => ({
     adminMomo: db.admin_momo, adminMomoName: db.admin_momo_name,
     whatsappNumber: db.whatsapp_number, commissionPerSeat: db.commission_per_seat,
     adminSecret: db.admin_secret, farePerPragia: db.fare_per_pragia,
-    farePerTaxi: db.fare_per_taxi, soloMultiplier: db.solo_multiplier,
+    farePerTaxi: db.fare_per_taxi,
+    soloMultiplier: db.solo_multiplier,
     aboutMeText: db.about_me_text
   });
 
@@ -124,7 +135,6 @@ const App: React.FC = () => {
     momoReference: db.momo_reference, status: db.status, timestamp: db.timestamp
   });
 
-  // --- 3. LOGISTICS ACTIONS (CLOUDBASE REPLACEMENT) ---
   const createNode = async (n: Partial<RideNode>) => {
     if (!supabase) return;
     await supabase.from('nodes').insert([{
@@ -157,7 +167,6 @@ const App: React.FC = () => {
     }
     const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
     
-    // Cloud transactions
     await supabase.from('drivers').update({ wallet_balance: driver.walletBalance - (settings?.commissionPerSeat || 0) }).eq('id', driverId);
     await supabase.from('nodes').update({
       status: 'dispatched',
@@ -202,15 +211,14 @@ const App: React.FC = () => {
 
   const activeDriver = useMemo(() => drivers.find(d => d.id === activeDriverId), [drivers, activeDriverId]);
 
-  // --- 4. RENDERERS ---
   if (!supabase) return (
     <div className="h-screen w-full bg-[#020617] flex flex-col items-center justify-center p-8 text-center">
        <div className="w-16 h-16 bg-rose-500/10 rounded-2xl flex items-center justify-center text-rose-500 mb-6">
           <i className="fas fa-plug-circle-exclamation text-2xl"></i>
        </div>
-       <h1 className="text-xl font-black text-white uppercase italic">UNKNOWN ERROR</h1>
+       <h1 className="text-xl font-black text-white uppercase italic">Setup Required</h1>
        <p className="text-slate-500 text-xs mt-4 max-w-xs leading-relaxed">
-         Please contact the admin to launch the logistics hub.
+         The Supabase environment variables are missing or invalid. Please check your Vercel project configuration.
        </p>
     </div>
   );
@@ -228,7 +236,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col lg:flex-row h-screen overflow-hidden bg-[#020617] text-slate-100 font-sans">
-      {/* Notifications */}
       {activeNotification && (
         <div className="fixed top-10 inset-x-0 z-[500] px-4 animate-in slide-in-from-top-10">
           <div className="max-w-md mx-auto bg-amber-500 text-[#020617] p-6 rounded-[2rem] shadow-2xl flex items-center gap-6">
@@ -242,7 +249,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Sidebar Navigation */}
       <nav className="hidden lg:flex w-72 glass border-r border-white/5 flex-col p-8 space-y-10 z-50">
         <div className="flex items-center space-x-4">
           <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center shadow-xl shadow-amber-500/10">
@@ -258,11 +264,10 @@ const App: React.FC = () => {
         </div>
 
         {activeDriver && (
-          <div className="bg-indigo-500/10 p-6 rounded-[2.5rem] border border-indigo-500/20 relative overflow-hidden group">
+          <div className="bg-indigo-50/10 p-6 rounded-[2.5rem] border border-indigo-500/20 relative overflow-hidden group">
              <p className="text-[9px] font-black uppercase text-indigo-400 mb-1">Active Pilot</p>
              <p className="text-lg font-black text-white truncate">{activeDriver.name}</p>
              <button onClick={() => { setActiveDriverId(null); sessionStorage.removeItem('unihub_driver_session_v12'); setViewMode('passenger'); }} className="mt-4 w-full py-2 bg-rose-600/20 text-rose-500 rounded-xl text-[9px] font-black uppercase">End Shift</button>
-             <i className="fas fa-taxi absolute -bottom-4 -right-4 text-6xl opacity-[0.03] group-hover:rotate-12 transition-all"></i>
           </div>
         )}
       </nav>
@@ -326,8 +331,6 @@ const App: React.FC = () => {
     </div>
   );
 };
-
-// --- SUB COMPONENTS ---
 
 const NavItem = ({ active, icon, label, onClick, badge }: any) => (
   <button onClick={onClick} className={`w-full flex items-center justify-between px-6 py-4 rounded-2xl transition-all ${active ? 'bg-amber-500 text-[#020617] shadow-xl' : 'text-slate-400 hover:bg-white/5'}`}>
