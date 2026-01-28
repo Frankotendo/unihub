@@ -2,14 +2,14 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
+
+ // --- SUPABASE CLIENT SETUP ---
 import { createClient } from '@supabase/supabase-js';
 
-
-// --- SUPABASE CLIENT SETUP ---
-// Using import.meta.env for VITE_ variables is the standard and most reliable way in Vite projects.
-// We also add .trim() to prevent issues with accidental spaces in environment variables.
+// Using import.meta.env for VITE_ variables is the standard in Vite projects.
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").trim();
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+
 const isValidUrl = (url: string) => {
   try {
     return url && typeof url === 'string' && url.startsWith('http');
@@ -23,6 +23,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 
 
 // --- TYPES & INTERFACES ---
