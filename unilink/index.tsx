@@ -184,6 +184,7 @@ const App: React.FC = () => {
     }
   };
 
+  // Fix: Property name from fare_per_taxi to farePerTaxi to match AppSettings interface
   const updateGlobalSettings = async (newSettings: AppSettings) => {
     if (!supabase) return;
     await supabase.from('settings').update({
@@ -225,7 +226,7 @@ const App: React.FC = () => {
               {SUPABASE_ANON_KEY ? '✓ Key detected' : '✗ VITE_SUPABASE_ANON_KEY missing'}
             </p>
          </div>
-         <p className="text-[9px] opacity-60">To fix: Go to Vercel Deployments > Redeploy.</p>
+         <p className="text-[9px] opacity-60">To fix: Go to Vercel Deployments &gt; Redeploy.</p>
        </div>
     </div>
   );
