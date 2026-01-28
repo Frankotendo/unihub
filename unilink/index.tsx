@@ -19,6 +19,7 @@ const isValidUrl = (url: string) => {
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error("Supabase env vars missing");
 }
+import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
