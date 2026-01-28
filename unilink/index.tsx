@@ -6,9 +6,8 @@ import { createClient } from '@supabase/supabase-js';
 // --- SUPABASE CLIENT SETUP ---
 // Using import.meta.env for VITE_ variables is the standard and most reliable way in Vite projects.
 // We also add .trim() to prevent issues with accidental spaces in environment variables.
-const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL || "").trim();
-const SUPABASE_ANON_KEY = ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || "").trim();
-
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || "").trim();
+const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
 const isValidUrl = (url: string) => {
   try {
     return url && typeof url === 'string' && url.startsWith('http');
@@ -17,9 +16,12 @@ const isValidUrl = (url: string) => {
   }
 };
 
-const supabase = (isValidUrl(SUPABASE_URL) && SUPABASE_ANON_KEY) 
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
-  : null;
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error("Supabase env vars missing");
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 
 // --- TYPES ---
 type VehicleType = 'Pragia' | 'Taxi' | 'Shuttle';
