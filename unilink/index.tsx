@@ -4,12 +4,12 @@ import ReactDOM from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
 
 // --- SUPABASE CLIENT SETUP ---
-// We access these directly so Vite's 'define' can replace them at build time.
-// Do not destructure process.env or access import.meta.env as it leads to undefined errors in this setup.
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "";
-const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || "";
+// Using import.meta.env for VITE_ variables is the standard and most reliable way in Vite projects.
+// We also add .trim() to prevent issues with accidental spaces in environment variables.
+const SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL || "").trim();
+const SUPABASE_ANON_KEY = ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || "").trim();
 
-const isValidUrl = (url: any) => {
+const isValidUrl = (url: string) => {
   try {
     return url && typeof url === 'string' && url.startsWith('http');
   } catch {
@@ -184,7 +184,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Fix: Property name from fare_per_taxi to farePerTaxi to match AppSettings interface
   const updateGlobalSettings = async (newSettings: AppSettings) => {
     if (!supabase) return;
     await supabase.from('settings').update({
