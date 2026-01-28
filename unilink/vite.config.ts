@@ -18,5 +18,9 @@ export default defineConfig(({ mode }) => {
       // Expose the API_KEY to the application code via process.env
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
     }
+         input: {
+        main: resolve(__dirname, 'index.html'),
+        sw: resolve(__dirname, 'sw.js') // ensure SW is included
+      },
   };
 });
