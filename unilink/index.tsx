@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createRoot } from 'react-dom/client';
-import '/index.css'; // optional, only if you created index.css
+//import '/index.css'; // optional, only if you created index.css
 
 /**
  * Supabase client setup
