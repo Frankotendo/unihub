@@ -1,0 +1,9 @@
+
+{
+  "name": "UniHub Dispatch",
+  "description": "Secure campus ride-sharing and node management with manual MoMo credit release, custom admin key vault, and driver PIN authentication.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
