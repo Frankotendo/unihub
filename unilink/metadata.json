@@ -1,0 +1,7 @@
+{
+  "name": "UniHub Dispatch",
+  "description": "Secure campus ride-sharing and logistics engine powered by Supabase Realtime.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
