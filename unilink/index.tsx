@@ -2,9 +2,8 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import React from 'react';
 import { createRoot } from 'react-dom/client';
-import '../index.css'; // optional, only if you created index.css
+import '/index.css'; // optional, only if you created index.css
 
 const root = createRoot(document.getElementById('root'));
 root.render(
@@ -14,9 +13,6 @@ root.render(
   </div>
 );
 
-const root = createRoot(document.getElementById('root'));
-root.render(<App />);
-/**
  * Supabase client setup
  */
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
