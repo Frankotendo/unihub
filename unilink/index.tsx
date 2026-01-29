@@ -492,6 +492,7 @@ const App: React.FC = () => {
   const updateGlobalSettings = async (newSettings: AppSettings) => {
     const { id, ...data } = newSettings;
     await supabase.from('unihub_settings').upsert({ id: 1, ...data });
+    alert("Hub Settings Updated Successfully!");
   };
 
   const hubRevenue = useMemo(() => transactions.reduce((a, b) => a + b.amount, 0), [transactions]);
@@ -1373,12 +1374,23 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
   const [newDriver, setNewDriver] = useState<Partial<Driver>>({ vehicleType: 'Pragia', pin: '0000' });
   const [newMission, setNewMission] = useState<Partial<HubMission>>({ location: '', description: '', entryFee: 5, status: 'open' });
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
-  const [removalKey, setRemovalKey] = useState('');
   
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const wallpaperInputRef = useRef<HTMLInputElement>(null);
+  const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
+  useEffect(() => { setLocalSettings(settings); }, [settings]);
 
   const filteredDrivers = drivers.filter((d: any) => d.name.toLowerCase().includes(search.toLowerCase()));
+
+  const handleSettingImage = async (e: React.ChangeEvent<HTMLInputElement>, field: 'wallpaper' | 'about') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const compressed = await compressImage(file, 0.6, 1200);
+      if (field === 'wallpaper') {
+        setLocalSettings({...localSettings, appWallpaper: compressed});
+      } else {
+        setLocalSettings({...localSettings, aboutMeImages: [...localSettings.aboutMeImages, compressed]});
+      }
+    }
+  };
 
   return (
     <div className="animate-in slide-in-from-bottom-8 space-y-8 pb-10">
@@ -1395,9 +1407,27 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
         <div className="space-y-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard label="Forming" value={nodes.filter((n:any) => n.status === 'forming').length} icon="fa-users" color="text-amber-400" />
-            <StatCard label="Live Fleet" value={drivers.length} icon="fa-taxi" color="text-indigo-400" />
+            <StatCard label="Total Units" value={drivers.length} icon="fa-taxi" color="text-indigo-400" />
             <StatCard label="Qualified" value={nodes.filter((n:any) => n.status === 'qualified').length} icon="fa-bolt" color="text-emerald-400" />
-            <StatCard label="Hub Cash" value={hubRevenue.toFixed(0)} icon="fa-money-bill" color="text-slate-400" isCurrency />
+            <StatCard label="Net Profit" value={hubRevenue.toFixed(0)} icon="fa-money-bill" color="text-slate-400" isCurrency />
+          </div>
+          
+          <div className="glass rounded-[2rem] p-8 border border-white/5">
+             <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Active Node Traffic</h4>
+             <div className="space-y-3">
+               {nodes.slice(0, 10).map((n: RideNode) => (
+                 <div key={n.id} className="flex justify-between items-center bg-white/5 p-4 rounded-xl hover:bg-white/10 transition-all">
+                    <div className="flex-1">
+                      <p className="text-[11px] font-black text-white uppercase italic">{n.origin} to {n.destination}</p>
+                      <p className="text-[9px] text-slate-500 font-bold uppercase">{n.status} | {n.passengers.length} Users</p>
+                    </div>
+                    <div className="flex gap-2">
+                       {n.status !== 'completed' && <button onClick={() => onSettleRide(n.id)} className="px-3 py-1.5 bg-emerald-600/10 text-emerald-500 rounded-lg text-[8px] font-black uppercase border border-emerald-500/20">Settle</button>}
+                       <button onClick={() => onCancelRide(n.id)} className="px-3 py-1.5 bg-rose-600/10 text-rose-500 rounded-lg text-[8px] font-black uppercase border border-rose-500/20">Kill</button>
+                    </div>
+                 </div>
+               ))}
+             </div>
           </div>
         </div>
       )}
@@ -1475,6 +1505,92 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
         </div>
       )}
 
+      {activeTab === 'settings' && (
+        <div className="glass rounded-[2rem] p-8 border border-white/5 space-y-10 animate-in fade-in">
+           <div>
+              <h3 className="text-xl font-black uppercase italic text-white leading-none">Hub Settings</h3>
+              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-2">Core logic & appearance controller</p>
+           </div>
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <section className="space-y-6">
+                 <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pricing & Fares</h4>
+                 <div className="space-y-4">
+                    <AdminInput label="Commission (₵)" value={localSettings.commissionPerSeat} onChange={v => setLocalSettings({...localSettings, commissionPerSeat: Number(v)})} />
+                    <AdminInput label="Pragia Fare (₵)" value={localSettings.farePerPragia} onChange={v => setLocalSettings({...localSettings, farePerPragia: Number(v)})} />
+                    <AdminInput label="Taxi Fare (₵)" value={localSettings.farePerTaxi} onChange={v => setLocalSettings({...localSettings, farePerTaxi: Number(v)})} />
+                    <AdminInput label="Solo Multiplier (x)" value={localSettings.soloMultiplier} onChange={v => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
+                 </div>
+              </section>
+
+              <section className="space-y-6">
+                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Payment & Contact</h4>
+                 <div className="space-y-4">
+                    <AdminInput label="Admin MoMo" value={localSettings.adminMomo} onChange={v => setLocalSettings({...localSettings, adminMomo: v})} />
+                    <AdminInput label="Admin Name" value={localSettings.adminMomoName} onChange={v => setLocalSettings({...localSettings, adminMomoName: v})} />
+                    <AdminInput label="WhatsApp Line" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
+                    <AdminInput label="Master Key" type="password" value={localSettings.adminSecret || ''} onChange={v => setLocalSettings({...localSettings, adminSecret: v})} />
+                 </div>
+              </section>
+
+              <section className="md:col-span-2 space-y-6">
+                 <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Hub Content & Media</h4>
+                 <div className="space-y-4">
+                    <div className="space-y-2">
+                       <label className="text-[9px] font-black text-slate-600 uppercase">About Hub Text</label>
+                       <textarea className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-xs font-medium text-white h-32 outline-none focus:border-amber-500" value={localSettings.aboutMeText} onChange={e => setLocalSettings({...localSettings, aboutMeText: e.target.value})} />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                       <div className="space-y-4">
+                          <label className="text-[9px] font-black text-slate-600 uppercase">App Wallpaper</label>
+                          <input type="file" className="hidden" id="wallpaper-upload" onChange={e => handleSettingImage(e, 'wallpaper')} />
+                          <label htmlFor="wallpaper-upload" className="flex flex-col items-center justify-center aspect-video bg-white/5 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:bg-white/10 transition-all group overflow-hidden">
+                             {localSettings.appWallpaper ? <img src={localSettings.appWallpaper} className="w-full h-full object-cover" /> : <div className="text-center"><i className="fas fa-image text-2xl text-slate-700 mb-2"></i><p className="text-[8px] font-black uppercase text-slate-500">Upload Base Wallpaper</p></div>}
+                          </label>
+                       </div>
+                       <div className="space-y-4">
+                          <label className="text-[9px] font-black text-slate-600 uppercase">About Images</label>
+                          <input type="file" className="hidden" id="about-upload" onChange={e => handleSettingImage(e, 'about')} />
+                          <div className="grid grid-cols-3 gap-2">
+                             {localSettings.aboutMeImages.map((img, i) => (
+                               <div key={i} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
+                                  <img src={img} className="w-full h-full object-cover" />
+                                  <button onClick={() => setLocalSettings({...localSettings, aboutMeImages: localSettings.aboutMeImages.filter((_, idx)=>idx!==i)})} className="absolute inset-0 bg-rose-600/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-all"><i className="fas fa-trash"></i></button>
+                               </div>
+                             ))}
+                             <label htmlFor="about-upload" className="aspect-square flex flex-col items-center justify-center bg-white/5 border-2 border-dashed border-white/10 rounded-lg cursor-pointer hover:bg-white/10"><i className="fas fa-plus text-slate-600"></i></label>
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </section>
+           </div>
+
+           <div className="pt-8 border-t border-white/5 flex justify-end">
+              <button onClick={() => onUpdateSettings(localSettings)} className="px-12 py-4 bg-amber-500 text-[#020617] rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-105 transition-transform">Push Updates</button>
+           </div>
+        </div>
+      )}
+
+      {/* Driver Confirmation UI */}
+      {pendingDeletionId && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+           <div className="glass-bright w-full max-w-sm rounded-[2.5rem] p-10 space-y-8 animate-in zoom-in text-center">
+              <div className="w-16 h-16 bg-rose-600/10 border border-rose-500/20 rounded-full flex items-center justify-center text-rose-500 mx-auto">
+                 <i className="fas fa-user-slash text-2xl"></i>
+              </div>
+              <div className="space-y-2">
+                 <h3 className="text-xl font-black uppercase italic text-white leading-none">Unregister Unit?</h3>
+                 <p className="text-[10px] font-black text-slate-500 uppercase">This will remove the driver from all active terminals.</p>
+              </div>
+              <div className="flex gap-4">
+                 <button onClick={() => setPendingDeletionId(null)} className="flex-1 py-4 bg-white/5 rounded-xl font-black text-[10px] uppercase text-slate-400">Abort</button>
+                 <button onClick={() => { onDeleteDriver(pendingDeletionId); setPendingDeletionId(null); }} className="flex-1 py-4 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Confirm Delete</button>
+              </div>
+           </div>
+        </div>
+      )}
+
       {showMissionModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-w-lg rounded-[2.5rem] p-8 space-y-8 animate-in zoom-in text-slate-900">
@@ -1521,6 +1637,18 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
     </div>
   );
 };
+
+const AdminInput = ({ label, value, onChange, type = "text" }: { label: string, value: any, onChange: (v: string) => void, type?: string }) => (
+  <div className="space-y-1.5">
+     <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest">{label}</label>
+     <input 
+       type={type} 
+       className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs font-bold text-white outline-none focus:border-amber-500" 
+       value={value} 
+       onChange={e => onChange(e.target.value)} 
+     />
+  </div>
+);
 
 const TabBtn = ({ active, label, onClick, count }: any) => (
   <button onClick={onClick} className={`px-5 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap relative ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'text-slate-500 hover:text-slate-300'}`}>
