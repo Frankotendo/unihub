@@ -2,11 +2,17 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App';
+import '../index.css'; // optional, only if you created index.css
 
-// If you don't have global CSS yet, remove the import.
-// import '../index.css';
+const root = createRoot(document.getElementById('root'));
+root.render(
+  <div style={{ padding: 24 }}>
+    <h1>UniHub</h1>
+    <p>App running — replace this with your application.</p>
+  </div>
+);
 
 const root = createRoot(document.getElementById('root'));
 root.render(<App />);
