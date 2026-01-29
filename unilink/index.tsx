@@ -1,6 +1,5 @@
 // src/index.tsx
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import ReactDOM from 'react-dom/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createRoot } from 'react-dom/client';
 import '/index.css'; // optional, only if you created index.css
