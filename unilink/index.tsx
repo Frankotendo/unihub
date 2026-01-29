@@ -4,11 +4,12 @@ import ReactDOM from 'react-dom/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import '../index.css'; // <-- ensures index.css is bundled (adjust path if needed)
+
+// If you don't have global CSS yet, remove the import.
+// import '../index.css';
 
 const root = createRoot(document.getElementById('root'));
 root.render(<App />);
-
 /**
  * Supabase client setup
  */
