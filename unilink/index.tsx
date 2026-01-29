@@ -1,8 +1,7 @@
-// src/index.tsx
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createRoot } from 'react-dom/client';
-import './index.css'; // optional, only if you created index.css
+import '/index.css'; // optional, only if you created index.css
 
 /**
  * Supabase client setup
@@ -572,14 +571,18 @@ function App() {
 }
 
 /**
- * Render
+ * Render (fixed)
  */
-const root = document.getElementById('root') ?? document.getElementById('app');
-if (!root) {
+const rootEl = document.getElementById('root') ?? document.getElementById('app');
+if (!rootEl) {
   const el = document.createElement('div');
   el.id = 'root';
   document.body.appendChild(el);
 }
-ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
 
 export default App;
