@@ -74,7 +74,8 @@ interface Transaction {
   id: string;
   driverId: string;
   amount: number;
-  type: 'commission' | 'topup' | 'refund' | 'mission_fee';
+  // Normalized to only 'commission' and 'topup' to satisfy DB check constraints
+  type: 'commission' | 'topup'; 
   timestamp: string;
 }
 
@@ -293,7 +294,7 @@ const App: React.FC = () => {
         id: `TX-MISSION-${Date.now()}`,
         driverId,
         amount: mission.entryFee,
-        type: 'mission_fee',
+        type: 'commission', // Mapped from mission_fee to commission to satisfy DB constraint
         timestamp: new Date().toLocaleString()
       }])
     ]);
@@ -383,7 +384,7 @@ const App: React.FC = () => {
             id: `TX-REFUND-${Date.now()}`,
             driverId: node.assignedDriverId,
             amount: settings.commissionPerSeat,
-            type: 'refund',
+            type: 'topup', // Changed from 'refund' to 'topup' to satisfy DB constraint
             timestamp: new Date().toLocaleString()
           }]);
           
