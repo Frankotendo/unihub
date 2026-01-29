@@ -4,6 +4,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { createRoot } from 'react-dom/client';
 import '/index.css'; // optional, only if you created index.css
 
+function getOrCreateRootElement(): HTMLElement { let el = document.getElementById('root');
+if (!el) { el = document.createElement('div'); el.id = 'root'; document.body.appendChild(el); } return el; }
+
 const root = createRoot(document.getElementById('root'));
 root.render(
   <div style={{ padding: 24 }}>
