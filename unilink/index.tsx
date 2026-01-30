@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -12,7 +11,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // --- TYPES & INTERFACES ---
 
 type VehicleType = 'Pragia' | 'Taxi' | 'Shuttle';
-type NodeStatus = 'forming' | 'qualified' | 'dispatched' | 'completed' | 'cancelled';
+type NodeStatus = 'forming' | 'qualified' | 'dispatched' | 'completed'; 
 type PortalMode = 'passenger' | 'driver' | 'admin';
 
 interface Passenger {
@@ -74,7 +73,6 @@ interface Transaction {
   id: string;
   driverId: string;
   amount: number;
-  // Normalized to only 'commission' and 'topup' to satisfy DB check constraints
   type: 'commission' | 'topup'; 
   timestamp: string;
 }
@@ -191,12 +189,10 @@ const App: React.FC = () => {
   const [isNewUser, setIsNewUser] = useState(() => !localStorage.getItem('unihub_seen_welcome_v12'));
   const [isSyncing, setIsSyncing] = useState(true);
 
-  // Stealth Mode Logic: Check if URL has ?access=vault
   const isVaultAccess = useMemo(() => {
     return new URLSearchParams(window.location.search).get('access') === 'vault';
   }, []);
 
-  // Core Data State
   const [settings, setSettings] = useState<AppSettings>({
     adminMomo: "024-123-4567",
     adminMomoName: "UniHub Admin",
@@ -216,8 +212,6 @@ const App: React.FC = () => {
   const [topupRequests, setTopupRequests] = useState<TopupRequest[]>([]);
 
   const [globalSearch, setGlobalSearch] = useState('');
-
-  // --- SUPABASE SYNC LOGIC ---
 
   const fetchData = async () => {
     setIsSyncing(true);
@@ -254,7 +248,6 @@ const App: React.FC = () => {
   useEffect(() => {
     fetchData();
 
-    // Set up Realtime Subscriptions
     const channels = [
       supabase.channel('public:unihub_settings').on('postgres_changes', { event: '*', schema: 'public', table: 'unihub_settings' }, () => fetchData()).subscribe(),
       supabase.channel('public:unihub_nodes').on('postgres_changes', { event: '*', schema: 'public', table: 'unihub_nodes' }, () => fetchData()).subscribe(),
@@ -268,8 +261,6 @@ const App: React.FC = () => {
   }, []);
 
   const activeDriver = useMemo(() => drivers.find(d => d.id === activeDriverId), [drivers, activeDriverId]);
-
-  // --- ACTIONS ---
 
   const joinMission = async (missionId: string, driverId: string) => {
     const mission = missions.find(m => m.id === missionId);
@@ -294,7 +285,7 @@ const App: React.FC = () => {
         id: `TX-MISSION-${Date.now()}`,
         driverId,
         amount: mission.entryFee,
-        type: 'commission', // Mapped from mission_fee to commission to satisfy DB constraint
+        type: 'commission', 
         timestamp: new Date().toLocaleString()
       }])
     ]);
@@ -384,7 +375,7 @@ const App: React.FC = () => {
             id: `TX-REFUND-${Date.now()}`,
             driverId: node.assignedDriverId,
             amount: settings.commissionPerSeat,
-            type: 'topup', // Changed from 'refund' to 'topup' to satisfy DB constraint
+            type: 'topup', 
             timestamp: new Date().toLocaleString()
           }]);
           
@@ -401,8 +392,8 @@ const App: React.FC = () => {
         if (resetErr) throw resetErr;
         alert("Assignment cancelled and driver commission refunded.");
       } else {
-        const { error: cancelErr } = await supabase.from('unihub_nodes').update({ status: 'cancelled' }).eq('id', nodeId);
-        if (cancelErr) throw cancelErr;
+        const { error: deleteErr } = await supabase.from('unihub_nodes').delete().eq('id', nodeId);
+        if (deleteErr) throw deleteErr;
         alert("Ride request removed from the Hub.");
       }
     } catch (err: any) {
@@ -597,7 +588,6 @@ const App: React.FC = () => {
         <div className="flex-1 space-y-1">
           <NavItem active={viewMode === 'passenger'} icon="fa-user-graduate" label="Passenger Hub" onClick={() => {safeSetViewMode('passenger'); setGlobalSearch('');}} />
           <NavItem active={viewMode === 'driver'} icon="fa-id-card-clip" label="Driver Terminal" onClick={() => {safeSetViewMode('driver'); setGlobalSearch('');}} />
-          {/* Stealth Admin Toggle */}
           {(isVaultAccess || isAdminAuthenticated) && (
             <NavItem 
               active={viewMode === 'admin'} 
@@ -917,7 +907,7 @@ const PassengerPortal = ({ nodes, onAddNode, onJoin, onForceQualify, onCancel, d
   const [joinPhone, setJoinPhone] = useState('');
 
   const filteredNodes = nodes.filter((n: any) => 
-    n.status !== 'completed' && n.status !== 'cancelled' &&
+    n.status !== 'completed' && 
     (n.destination.toLowerCase().includes(search.toLowerCase()) || 
      n.origin.toLowerCase().includes(search.toLowerCase()) ||
      n.leaderName.toLowerCase().includes(search.toLowerCase()))
@@ -1150,7 +1140,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
   const [isScanning, setIsScanning] = useState(false);
   const [activeMissionNodeId, setActiveMissionNodeId] = useState<string | null>(null);
 
-  // QR Scanning Logic
   useEffect(() => {
     let html5QrCode: any = null;
     
@@ -1573,7 +1562,6 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
         </div>
       )}
 
-      {/* Driver Confirmation UI */}
       {pendingDeletionId && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-w-sm rounded-[2.5rem] p-10 space-y-8 animate-in zoom-in text-center">
