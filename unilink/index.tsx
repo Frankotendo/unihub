@@ -59,6 +59,7 @@ interface Driver {
   rating: number;
   status: 'online' | 'busy' | 'offline';
   pin: string; 
+  avatarUrl?: string; // Driver's profile picture
 }
 
 interface TopupRequest {
@@ -81,6 +82,7 @@ interface RegistrationRequest {
   momoReference: string;
   status: 'pending' | 'approved' | 'rejected';
   timestamp: string;
+  avatarUrl?: string; // Captured during registration
 }
 
 interface Transaction {
@@ -354,7 +356,7 @@ const App: React.FC = () => {
       }).eq('id', driverId),
       supabase.from('unihub_transactions').insert([{
         id: `TX-${Date.now()}`,
-        driverId,
+        driverId: driverId,
         amount: settings.commissionPerSeat,
         type: 'commission',
         timestamp: new Date().toLocaleString()
@@ -465,9 +467,9 @@ const App: React.FC = () => {
     const { error } = await supabase.from('unihub_registrations').insert([req]);
     if (error) {
       console.error("Registration error:", error);
-      alert("Submission Error: " + error.message + ". Have you run the SQL commands for 'unihub_registrations'?");
+      alert("Submission Error: " + error.message);
     } else {
-      alert("Application submitted! An admin will review your MoMo payment reference shortly.");
+      alert("Application submitted! An admin will review your portrait and MoMo payment reference shortly.");
     }
   };
 
@@ -504,7 +506,8 @@ const App: React.FC = () => {
       pin: reg.pin,
       walletBalance: 0,
       rating: 5.0,
-      status: 'online'
+      status: 'online',
+      avatarUrl: reg.avatarUrl
     };
 
     try {
@@ -587,13 +590,12 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       console.error("Auth error:", err);
-      // Fallback for debugging
       if (password === settings.adminSecret || password === 'admin123') {
          setIsAdminAuthenticated(true);
          sessionStorage.setItem('unihub_admin_auth_v12', 'true');
-         alert("Connected via local fallback. Note: verify_admin_secret RPC is missing in Supabase.");
+         alert("Connected via local fallback.");
       } else {
-         alert("Authentication logic error. Ensure SQL commands are executed in Supabase.");
+         alert("Authentication logic error.");
       }
     }
   };
@@ -692,8 +694,19 @@ const App: React.FC = () => {
         <div className="pt-6 border-t border-white/5">
            {activeDriver ? (
              <div className="bg-indigo-500/10 p-6 rounded-[2.5rem] border border-indigo-500/20 relative overflow-hidden mb-4">
-                <p className="text-[9px] font-black uppercase text-indigo-400 mb-1">Active Driver</p>
-                <p className="text-lg font-black text-white truncate">{activeDriver.name}</p>
+                <div className="flex items-center gap-3">
+                  {activeDriver.avatarUrl ? (
+                     <img src={activeDriver.avatarUrl} className="w-10 h-10 rounded-full object-cover border border-indigo-500/40" alt="Avatar" />
+                  ) : (
+                    <div className="w-10 h-10 bg-indigo-500/20 rounded-full flex items-center justify-center text-indigo-400">
+                      <i className="fas fa-user text-xs"></i>
+                    </div>
+                  )}
+                  <div className="truncate">
+                    <p className="text-[9px] font-black uppercase text-indigo-400 leading-none">Driver</p>
+                    <p className="text-sm font-black text-white truncate">{activeDriver.name}</p>
+                  </div>
+                </div>
                 <button onClick={handleDriverLogout} className="mt-4 w-full py-2 bg-indigo-600 rounded-xl text-[8px] font-black uppercase tracking-widest">Logout</button>
              </div>
            ) : null}
@@ -1122,6 +1135,28 @@ const PassengerPortal = ({ nodes, onAddNode, onJoin, onForceQualify, onCancel, d
 
                 {node.status === 'dispatched' && driver && (
                   <div className="space-y-4 animate-in zoom-in">
+                    <div className="flex items-center justify-between gap-4 mb-2 bg-white/5 p-4 rounded-2xl border border-white/5">
+                       <div className="flex items-center gap-3">
+                          <div className="relative">
+                            {driver.avatarUrl ? (
+                              <img src={driver.avatarUrl} className="w-12 h-12 rounded-full object-cover border-2 border-amber-500" alt="Driver" />
+                            ) : (
+                              <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-amber-500 border-2 border-amber-500">
+                                <i className="fas fa-user"></i>
+                              </div>
+                            )}
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-[10px] text-white ring-2 ring-[#020617]">
+                              <i className="fas fa-check"></i>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-white font-black italic text-sm">{driver.name}</p>
+                            <p className="text-[9px] font-black text-amber-500 uppercase">{driver.licensePlate}</p>
+                          </div>
+                       </div>
+                       <a href={`tel:${driver.contact}`} className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-xs"><i className="fas fa-phone"></i></a>
+                    </div>
+
                     <div className="p-6 bg-amber-500 text-[#020617] rounded-[1.5rem] text-center shadow-xl flex flex-col items-center gap-4">
                        <div>
                           <p className="text-[8px] font-black uppercase mb-1">Move Code</p>
@@ -1135,10 +1170,7 @@ const PassengerPortal = ({ nodes, onAddNode, onJoin, onForceQualify, onCancel, d
                           />
                        </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <a href={`tel:${driver.contact}`} className="py-3 bg-indigo-600 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-white"><i className="fas fa-phone"></i> Call</a>
-                      <button onClick={() => { if(confirm("Cancel this ride assignment?")) onCancel(node.id); }} className="py-3 bg-rose-600 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-white"><i className="fas fa-xmark"></i> Cancel</button>
-                    </div>
+                    <button onClick={() => { if(confirm("Cancel this ride assignment?")) onCancel(node.id); }} className="w-full py-3 bg-rose-600/10 border border-rose-500/20 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-rose-500">Cancel Assignment</button>
                   </div>
                 )}
               </div>
@@ -1246,6 +1278,14 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
   const [isScanning, setIsScanning] = useState(false);
   const [activeMissionNodeId, setActiveMissionNodeId] = useState<string | null>(null);
 
+  const handlePortraitUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const compressed = await compressImage(file, 0.6, 400);
+      setRegData({ ...regData, avatarUrl: compressed });
+    }
+  };
+
   useEffect(() => {
     let html5QrCode: any = null;
     
@@ -1289,6 +1329,15 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
         
         {selectedDriverId ? (
             <div className="w-full max-md glass p-10 rounded-[3rem] border border-white/10 space-y-8 animate-in zoom-in text-center">
+                <div className="flex justify-center mb-4">
+                  {drivers.find((d:any)=>d.id===selectedDriverId)?.avatarUrl ? (
+                    <img src={drivers.find((d:any)=>d.id===selectedDriverId)?.avatarUrl} className="w-20 h-20 rounded-full object-cover border-4 border-amber-500/50" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center text-amber-500">
+                       <i className="fas fa-user text-2xl"></i>
+                    </div>
+                  )}
+                </div>
                 <input 
                   type="password" 
                   maxLength={4}
@@ -1307,9 +1356,18 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
             <div className="flex flex-col items-center gap-8 w-full">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl">
                 {drivers.map((d: any) => (
-                  <button key={d.id} onClick={() => setSelectedDriverId(d.id)} className="glass p-8 rounded-[2rem] border border-white/5 text-left transition-all hover:border-amber-500/50 group">
-                    <p className="font-black uppercase italic text-xl text-white mb-4 group-hover:text-amber-500 transition-colors">{d.name}</p>
-                    <p className="text-[9px] font-black text-slate-500 uppercase">WALLET: ₵{d.walletBalance.toFixed(1)}</p>
+                  <button key={d.id} onClick={() => setSelectedDriverId(d.id)} className="glass p-8 rounded-[2rem] border border-white/5 text-left transition-all hover:border-amber-500/50 group flex items-center gap-6">
+                    {d.avatarUrl ? (
+                      <img src={d.avatarUrl} className="w-12 h-12 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-500">
+                        <i className="fas fa-user"></i>
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-black uppercase italic text-xl text-white group-hover:text-amber-500 transition-colors">{d.name}</p>
+                      <p className="text-[9px] font-black text-slate-500 uppercase">WALLET: ₵{d.walletBalance.toFixed(1)}</p>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -1321,11 +1379,26 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
 
         {showRegModal && (
           <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-            <div className="glass-bright w-full max-sm:px-4 max-w-md rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in text-slate-900">
+            <div className="glass-bright w-full max-sm:px-4 max-w-md rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[90vh] no-scrollbar">
                <div className="text-center">
                   <h3 className="text-2xl font-black italic tracking-tighter uppercase text-white">Fleet Onboarding</h3>
                   <p className="text-indigo-400 text-[10px] font-black uppercase mt-1">Registration Fee: ₵{settings.registrationFee || '...'}</p>
                </div>
+               
+               <div className="flex justify-center">
+                  <input type="file" id="portrait-upload" className="hidden" accept="image/*" onChange={handlePortraitUpload} />
+                  <label htmlFor="portrait-upload" className="w-24 h-24 rounded-full bg-white/5 border-2 border-dashed border-white/10 flex flex-col items-center justify-center cursor-pointer hover:bg-white/10 transition-all overflow-hidden relative">
+                    {regData.avatarUrl ? (
+                      <img src={regData.avatarUrl} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="text-center">
+                        <i className="fas fa-camera text-slate-600 text-xl mb-1"></i>
+                        <p className="text-[7px] font-black text-slate-500 uppercase">Add Photo</p>
+                      </div>
+                    )}
+                  </label>
+               </div>
+
                <div className="bg-white/5 p-4 rounded-xl border border-white/10 text-center">
                   <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Hub MoMo Account</p>
                   <p className="text-lg font-black text-white italic leading-none">{settings.adminMomo}</p>
@@ -1347,7 +1420,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                <div className="flex gap-4">
                   <button onClick={() => setShowRegModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
                   <button onClick={() => { 
-                    if (!regData.name || !regData.momoReference || !regData.pin) { alert("Please complete all fields."); return; }
+                    if (!regData.name || !regData.momoReference || !regData.pin || !regData.avatarUrl) { alert("Please complete all fields including photo."); return; }
                     onRequestRegistration({ ...regData as RegistrationRequest, amount: settings.registrationFee }); 
                     setShowRegModal(false); 
                   }} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Apply & Pay</button>
@@ -1363,8 +1436,17 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
     <div className="animate-in slide-in-from-bottom-8 space-y-12 pb-20">
       <div className="flex flex-col sm:flex-row justify-between items-start gap-4 bg-indigo-500/5 p-6 rounded-[2rem] border border-indigo-500/10 relative overflow-hidden">
         <div className="flex items-center gap-6 relative z-10">
-          <div className="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center text-[#020617] shadow-xl">
-            <i className={`fas ${activeDriver.vehicleType === 'Pragia' ? 'fa-motorcycle' : 'fa-taxi'} text-2xl`}></i>
+          <div className="relative">
+            {activeDriver.avatarUrl ? (
+              <img src={activeDriver.avatarUrl} className="w-16 h-16 rounded-2xl object-cover border border-amber-500 shadow-xl" />
+            ) : (
+              <div className="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center text-[#020617] shadow-xl">
+                <i className={`fas ${activeDriver.vehicleType === 'Pragia' ? 'fa-motorcycle' : 'fa-taxi'} text-2xl`}></i>
+              </div>
+            )}
+            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-[10px] text-white ring-2 ring-[#020617]">
+               <i className="fas fa-check"></i>
+            </div>
           </div>
           <div>
             <h2 className="text-2xl font-black tracking-tighter uppercase italic text-white leading-none">{activeDriver.name}</h2>
@@ -1580,11 +1662,18 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
            <div className="glass rounded-[2rem] overflow-hidden border border-white/5">
               <table className="w-full text-left text-[11px]">
                  <thead className="bg-white/5 text-slate-500 uppercase font-black tracking-widest border-b border-white/5">
-                    <tr><th className="px-8 py-5">Driver Name</th><th className="px-8 py-5 text-center">Wallet</th><th className="px-8 py-5 text-right">Action</th></tr>
+                    <tr><th className="px-8 py-5">Unit Portrait</th><th className="px-8 py-5">Driver Details</th><th className="px-8 py-5 text-center">Wallet</th><th className="px-8 py-5 text-right">Action</th></tr>
                  </thead>
                  <tbody className="divide-y divide-white/5">
                     {filteredDrivers.map((d: any) => (
                        <tr key={d.id} className="text-slate-300 font-bold hover:bg-white/5">
+                          <td className="px-8 py-5">
+                            {d.avatarUrl ? (
+                              <img src={d.avatarUrl} className="w-10 h-10 rounded-full object-cover border border-amber-500/30" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-600"><i className="fas fa-user"></i></div>
+                            )}
+                          </td>
                           <td className="px-8 py-5"><div>{d.name}</div><div className="text-[8px] text-slate-500 uppercase tracking-tighter">{d.contact} | {d.licensePlate}</div></td>
                           <td className="px-8 py-5 text-center text-emerald-400 italic font-black">₵{d.walletBalance.toFixed(1)}</td>
                           <td className="px-8 py-5 text-right"><button onClick={() => setPendingDeletionId(d.id)} className="px-4 py-2 bg-rose-600/10 text-rose-500 rounded-xl text-[8px] font-black uppercase">Unregister</button></td>
@@ -1601,11 +1690,20 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
            {registrationRequests.filter((r:any)=>r.status==='pending').map((reg: any) => (
              <div key={reg.id} className="glass p-8 rounded-3xl border border-indigo-500/20 space-y-6 flex flex-col justify-between">
                 <div>
-                  <div className="flex justify-between items-start">
-                    <h4 className="text-white font-black uppercase italic text-sm">{reg.name}</h4>
-                    <span className="text-[8px] font-black text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded-md">{reg.vehicleType}</span>
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-center gap-4">
+                       {reg.avatarUrl ? (
+                          <img src={reg.avatarUrl} className="w-16 h-16 rounded-2xl object-cover border border-white/10" />
+                       ) : (
+                          <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-slate-700"><i className="fas fa-user text-xl"></i></div>
+                       )}
+                       <div>
+                         <h4 className="text-white font-black uppercase italic text-sm">{reg.name}</h4>
+                         <span className="text-[8px] font-black text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded-md">{reg.vehicleType}</span>
+                       </div>
+                    </div>
                   </div>
-                  <div className="bg-white/5 p-4 rounded-xl mt-4 space-y-2">
+                  <div className="bg-white/5 p-4 rounded-xl space-y-2">
                      <p className="text-[8px] font-black uppercase text-slate-500">License Plate</p>
                      <p className="text-xs font-black text-white">{reg.licensePlate}</p>
                      <p className="text-[8px] font-black uppercase text-slate-500 mt-2">Momo Ref</p>
@@ -1744,7 +1842,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
 
       {pendingDeletionId && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-           <div className="glass-bright w-full max-w-sm rounded-[2.5rem] p-10 space-y-8 animate-in zoom-in text-center">
+           <div className="glass-bright w-full max-sm:px-4 max-w-sm rounded-[2.5rem] p-10 space-y-8 animate-in zoom-in text-center">
               <div className="w-16 h-16 bg-rose-600/10 border border-rose-500/20 rounded-full flex items-center justify-center text-rose-500 mx-auto">
                  <i className="fas fa-user-slash text-2xl"></i>
               </div>
@@ -1773,7 +1871,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                <button onClick={() => setShowMissionModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
                <button onClick={() => { 
                  if(!newMission.location || !newMission.description) { alert("Fields required."); return; }
-                 onCreateMission({ id: `MSN-${Date.now()}`, driversJoined: [], ...newMission } as HubMission); 
+                 onCreateMission({ id: `MSN-${Date.now()}`, driversJoined: [], ...newMission, status: 'open', createdAt: new Date().toISOString() } as HubMission); 
                  setShowMissionModal(false); 
                }} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Launch Station</button>
             </div>
