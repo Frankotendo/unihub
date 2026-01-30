@@ -337,43 +337,61 @@ const App: React.FC = () => {
   const acceptRide = async (nodeId: string, driverId: string, customFare?: number) => {
     const driver = drivers.find(d => d.id === driverId);
     const node = nodes.find(n => n.id === nodeId);
-    if (!driver || driver.walletBalance < settings.commissionPerSeat) {
-      alert("Insufficient Balance! Top up first.");
+    if (!driver || !node) return;
+
+    // Check if balance covers total potential commission (per seat * number of passengers)
+    const totalPotentialCommission = settings.commissionPerSeat * node.passengers.length;
+    if (driver.walletBalance < totalPotentialCommission) {
+      alert(`Insufficient Balance! You need at least ₵${totalPotentialCommission.toFixed(2)} to accept this job.`);
       return;
     }
 
     const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
     
-    await Promise.all([
-      supabase.from('unihub_nodes').update({ 
-        status: 'dispatched', 
-        assignedDriverId: driverId, 
-        verificationCode,
-        negotiatedTotalFare: customFare || node?.negotiatedTotalFare
-      }).eq('id', nodeId),
-      supabase.from('unihub_drivers').update({ 
-        walletBalance: driver.walletBalance - settings.commissionPerSeat 
-      }).eq('id', driverId),
-      supabase.from('unihub_transactions').insert([{
-        id: `TX-${Date.now()}`,
-        driverId: driverId,
-        amount: settings.commissionPerSeat,
-        type: 'commission',
-        timestamp: new Date().toLocaleString()
-      }])
-    ]);
+    // Assign driver, but do NOT deduct credit yet. Credit deduction is moved to verifyRide (scan).
+    await supabase.from('unihub_nodes').update({ 
+      status: 'dispatched', 
+      assignedDriverId: driverId, 
+      verificationCode,
+      negotiatedTotalFare: customFare || node?.negotiatedTotalFare
+    }).eq('id', nodeId);
 
-    alert(customFare ? `Negotiated trip accepted at ₵${customFare}!` : "Job accepted! Route and code shared with you.");
+    alert(customFare ? `Negotiated trip accepted at ₵${customFare}! Money will be deducted after verification.` : "Job accepted! Verification code shared with you.");
   };
 
   const verifyRide = async (nodeId: string, code: string) => {
     const node = nodes.find(n => n.id === nodeId);
-    if (node?.verificationCode === code) {
-      const { error } = await supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId);
-      if (error) {
-        alert("Verification failed in database: " + error.message);
-      } else {
-        alert("Verification successful!");
+    if (!node) return;
+
+    if (node.verificationCode === code) {
+      const driver = drivers.find(d => d.id === node.assignedDriverId);
+      if (!driver) {
+        alert("Verification error: Driver record not found.");
+        return;
+      }
+
+      // Calculate final commission based on passengers in the node
+      const totalCommission = settings.commissionPerSeat * node.passengers.length;
+
+      try {
+        // DEDUCT CREDIT AFTER SCAN
+        await Promise.all([
+          supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId),
+          supabase.from('unihub_drivers').update({ 
+            walletBalance: driver.walletBalance - totalCommission 
+          }).eq('id', driver.id),
+          supabase.from('unihub_transactions').insert([{
+            id: `TX-VERIFY-${Date.now()}`,
+            driverId: driver.id,
+            amount: totalCommission,
+            type: 'commission',
+            timestamp: new Date().toLocaleString()
+          }])
+        ]);
+        alert(`Verification successful! Commission of ₵${totalCommission.toFixed(2)} deducted.`);
+      } catch (err: any) {
+        console.error("Verification deduction error:", err);
+        alert("Status updated but failed to deduct credit. Contact Admin.");
       }
     } else {
       alert("Wrong code! Ask the passenger for their code.");
@@ -386,25 +404,7 @@ const App: React.FC = () => {
 
     try {
       if (node.status === 'dispatched' && node.assignedDriverId) {
-        const driver = drivers.find(d => d.id === node.assignedDriverId);
-        if (driver) {
-          const { error: refundErr } = await supabase.from('unihub_drivers').update({ 
-            walletBalance: driver.walletBalance + settings.commissionPerSeat 
-          }).eq('id', node.assignedDriverId);
-          
-          if (refundErr) throw refundErr;
-
-          const { error: transErr } = await supabase.from('unihub_transactions').insert([{
-            id: `TX-REFUND-${Date.now()}`,
-            driverId: node.assignedDriverId,
-            amount: settings.commissionPerSeat,
-            type: 'topup', 
-            timestamp: new Date().toLocaleString()
-          }]);
-          
-          if (transErr) throw transErr;
-        }
-        
+        // No refund logic needed here since we moved deduction to verifyRide (scan phase)
         const resetStatus = (node.isSolo || node.isLongDistance) ? 'qualified' : (node.passengers.length >= 4 ? 'qualified' : 'forming');
         const { error: resetErr } = await supabase.from('unihub_nodes').update({ 
           status: resetStatus, 
@@ -413,7 +413,7 @@ const App: React.FC = () => {
         }).eq('id', nodeId);
         
         if (resetErr) throw resetErr;
-        alert("Assignment cancelled and driver commission refunded.");
+        alert("Assignment cancelled. No commission was charged.");
       } else {
         const { error: deleteErr } = await supabase.from('unihub_nodes').delete().eq('id', nodeId);
         if (deleteErr) throw deleteErr;
@@ -426,13 +426,30 @@ const App: React.FC = () => {
   };
 
   const settleNode = async (nodeId: string) => {
-    if (confirm("Force settle this ride as completed? No refunds will be issued.")) {
-      const { error } = await supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId);
-      if (error) {
-        alert("Force settle failed: " + error.message);
+    if (confirm("Force settle this ride as completed? Commission will be deducted.")) {
+      const node = nodes.find(n => n.id === nodeId);
+      if (node && node.assignedDriverId) {
+        const driver = drivers.find(d => d.id === node.assignedDriverId);
+        if (driver) {
+          const totalCommission = settings.commissionPerSeat * node.passengers.length;
+          await Promise.all([
+            supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId),
+            supabase.from('unihub_drivers').update({ 
+              walletBalance: driver.walletBalance - totalCommission 
+            }).eq('id', driver.id),
+            supabase.from('unihub_transactions').insert([{
+              id: `TX-FORCE-${Date.now()}`,
+              driverId: driver.id,
+              amount: totalCommission,
+              type: 'commission',
+              timestamp: new Date().toLocaleString()
+            }])
+          ]);
+        }
       } else {
-        alert("Node settled manually.");
+        await supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId);
       }
+      alert("Node settled manually.");
     }
   };
 
@@ -1493,7 +1510,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                         <p className="font-black text-sm uppercase italic text-white">{node.origin} → {node.destination}</p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Requested by {node.leaderName}</p>
                       </div>
-                      <button onClick={() => onAccept(node.id, activeDriver.id)} className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg">Accept Job (₵{settings.commissionPerSeat})</button>
+                      <button onClick={() => onAccept(node.id, activeDriver.id)} className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg">Accept Job</button>
                   </div>
                 ))}
               </div>
