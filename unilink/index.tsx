@@ -1458,57 +1458,60 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
 
       {showModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
-          <div className="glass-bright w-full max-sm:px-4 max-w-lg rounded-[2.5rem] p-8 lg:p-10 space-y-8 animate-in zoom-in text-slate-900">
-            <div className="text-center">
-              <h3 className="text-2xl font-black italic tracking-tighter uppercase text-white">Create Ride Request</h3>
-              <p className="text-slate-400 text-[10px] font-black uppercase mt-1">Carpooling or Quick Drop</p>
+          <div className="glass-bright w-full max-sm:px-2 max-w-lg rounded-[2.5rem] p-5 sm:p-6 lg:p-8 space-y-4 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[90vh] no-scrollbar">
+            <div className="text-center mb-2">
+              <h3 className="text-xl font-black italic tracking-tighter uppercase text-white leading-none">Create Ride Request</h3>
+              <p className="text-slate-400 text-[8px] font-black uppercase mt-1">Carpooling or Quick Drop</p>
             </div>
 
-            {/* AI Assistant Field */}
-            <div className="p-4 bg-indigo-600/10 border border-indigo-500/20 rounded-2xl space-y-3">
-               <div className="flex items-center gap-2 text-indigo-400 font-black text-[9px] uppercase tracking-widest">
-                  <i className="fas fa-sparkles"></i> AI Quick Dispatch
+            {/* AI Assistant Field - COMPACT */}
+            <div className="p-3 bg-indigo-600/10 border border-indigo-500/20 rounded-xl space-y-2">
+               <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-indigo-400 font-black text-[8px] uppercase tracking-widest">
+                     <i className="fas fa-sparkles"></i> AI Quick Dispatch
+                  </div>
+                  <button 
+                    onClick={handleAiFill} 
+                    disabled={aiProcessing || !aiInput.trim()}
+                    className="px-3 py-1 bg-indigo-600 text-white rounded-lg font-black text-[7px] uppercase tracking-widest disabled:opacity-30"
+                  >
+                    {aiProcessing ? <i className="fas fa-spinner fa-spin"></i> : 'Auto-Fill'}
+                  </button>
                </div>
                <textarea 
-                 className="w-full bg-[#020617] text-white text-xs border border-white/10 rounded-xl p-3 outline-none focus:border-indigo-500 transition-all placeholder:text-slate-700 h-16"
-                 placeholder="e.g. I need a solo taxi from Limann to Business School"
+                 className="w-full bg-[#020617] text-white text-[10px] border border-white/10 rounded-lg p-2 outline-none focus:border-indigo-500 transition-all placeholder:text-slate-700 h-10 resize-none"
+                 placeholder="e.g. Solo taxi Limann to Business School"
                  value={aiInput}
                  onChange={e => setAiInput(e.target.value)}
                />
-               <button 
-                 onClick={handleAiFill} 
-                 disabled={aiProcessing}
-                 className="w-full py-2 bg-indigo-600 text-white rounded-xl font-black text-[8px] uppercase tracking-widest disabled:opacity-50"
-               >
-                 {aiProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : '✨ Auto-Fill Form'}
-               </button>
             </div>
 
-            <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">
-              <button onClick={() => {setIsSolo(false); setIsLongDistance(false);}} className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${!isSolo && !isLongDistance ? 'bg-amber-500 text-[#020617]' : 'text-slate-400'}`}>Form Group</button>
-              <button onClick={() => {setIsSolo(true); setIsLongDistance(false);}} className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${isSolo ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400'}`}>Solo Drop</button>
-              <button onClick={() => {setIsSolo(false); setIsLongDistance(true);}} className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${isLongDistance ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Long Dist.</button>
+            <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+              <button onClick={() => {setIsSolo(false); setIsLongDistance(false);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${!isSolo && !isLongDistance ? 'bg-amber-500 text-[#020617]' : 'text-slate-400'}`}>Group</button>
+              <button onClick={() => {setIsSolo(true); setIsLongDistance(false);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${isSolo ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400'}`}>Solo</button>
+              <button onClick={() => {setIsSolo(false); setIsLongDistance(true);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${isLongDistance ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Long</button>
             </div>
 
-            <div className="space-y-4">
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Departure Point" value={origin} onChange={e => setOrigin(e.target.value)} />
-                  <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Destination" value={dest} onChange={e => setDest(e.target.value)} />
+            <div className="space-y-3">
+               <div className="grid grid-cols-2 gap-3">
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="From" value={origin} onChange={e => setOrigin(e.target.value)} />
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="To" value={dest} onChange={e => setDest(e.target.value)} />
                </div>
-               <div className="grid grid-cols-2 gap-4">
-                  <select className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 outline-none font-bold" value={type} onChange={e => setType(e.target.value as VehicleType)}>
+               <div className="grid grid-cols-2 gap-3">
+                  <select className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none font-bold text-xs" value={type} onChange={e => setType(e.target.value as VehicleType)}>
                     <option value="Pragia">Pragia</option>
                     <option value="Taxi">Taxi</option>
                   </select>
-                  <input className="w-full bg-white/5 border border-slate-100 rounded-2xl px-4 py-4 outline-none font-bold opacity-60" placeholder="Your Name" value={leader} readOnly />
+                  <div className="flex items-center px-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-bold text-slate-500 truncate">
+                    {leader}
+                  </div>
                </div>
-               <input className="w-full bg-white/5 border border-slate-100 rounded-2xl px-6 py-4 outline-none font-bold opacity-60" placeholder="WhatsApp Number" value={phone} readOnly />
             </div>
             
-            <div className="flex gap-4">
-               <button onClick={() => setShowModal(false)} className="flex-1 py-4 bg-white/10 rounded-[1.5rem] font-black text-[10px] uppercase text-white">Cancel</button>
-               <button onClick={createNode} className={`flex-1 py-4 ${isLongDistance ? 'bg-indigo-600' : (isSolo ? 'bg-emerald-500' : 'bg-amber-500')} text-white rounded-[1.5rem] font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-transform`}>
-                 {isLongDistance ? 'Request Bid' : (isSolo ? 'Request Drop' : 'Form Node')}
+            <div className="flex gap-3 pt-2">
+               <button onClick={() => setShowModal(false)} className="flex-1 py-4 bg-white/10 rounded-2xl font-black text-[10px] uppercase text-white">Cancel</button>
+               <button onClick={createNode} className={`flex-[1.5] py-4 ${isLongDistance ? 'bg-indigo-600' : (isSolo ? 'bg-emerald-500' : 'bg-amber-500')} text-white rounded-2xl font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-transform`}>
+                 {isLongDistance ? 'Post Request' : (isSolo ? 'Request Drop' : 'Form Node')}
                </button>
             </div>
           </div>
@@ -1519,11 +1522,11 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[160] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-sm:px-4 max-w-sm rounded-[2rem] p-8 space-y-6 animate-in zoom-in text-slate-900">
               <h3 className="text-xl font-black italic uppercase text-center text-white">Join Ride</h3>
-              <div className="space-y-4">
-                 <input className="w-full bg-white/10 border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold text-white opacity-70" placeholder="Name" value={joinName} readOnly />
-                 <input className="w-full bg-white/10 border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold text-white opacity-70" placeholder="Phone" value={joinPhone} readOnly />
+              <div className="space-y-4 text-center">
+                 <p className="text-white font-black text-lg">{currentUser.username}</p>
+                 <p className="text-slate-500 font-bold">{currentUser.phone}</p>
               </div>
-              <p className="text-[9px] text-slate-500 text-center font-black uppercase italic">Joining using your profile identity</p>
+              <p className="text-[9px] text-slate-500 text-center font-black uppercase italic">Joining with your Hub identity</p>
               <div className="flex gap-3">
                  <button onClick={() => setJoinModalNodeId(null)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
                  <button onClick={() => { 
@@ -1816,53 +1819,60 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
 
         {showRegModal && (
           <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-            <div className="glass-bright w-full max-sm:px-4 max-w-md rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[90vh] no-scrollbar">
+            <div className="glass-bright w-full max-sm:px-2 max-w-md rounded-[2.5rem] p-4 sm:p-6 space-y-4 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[95vh] no-scrollbar">
                <div className="text-center">
-                  <h3 className="text-2xl font-black italic tracking-tighter uppercase text-white">Fleet Onboarding</h3>
-                  <p className="text-indigo-400 text-[10px] font-black uppercase mt-1">Registration Fee: ₵{settings.registrationFee || '...'}</p>
+                  <h3 className="text-xl font-black italic tracking-tighter uppercase text-white leading-none">Fleet Onboarding</h3>
+                  <p className="text-indigo-400 text-[8px] font-black uppercase mt-1">Registration Fee: ₵{settings.registrationFee || '...'}</p>
                </div>
                
-               <div className="flex justify-center flex-col items-center gap-2">
+               <div className="flex justify-center flex-col items-center gap-1">
                   <input type="file" id="portrait-upload" className="hidden" accept="image/*" onChange={handlePortraitUpload} />
-                  <label htmlFor="portrait-upload" className={`w-24 h-24 rounded-full bg-white/5 border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-white/10 transition-all overflow-hidden relative ${portraitScanning ? 'border-indigo-500' : 'border-white/10'}`}>
+                  <label htmlFor="portrait-upload" className={`w-16 h-16 rounded-full bg-white/5 border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-white/10 transition-all overflow-hidden relative ${portraitScanning ? 'border-indigo-500' : 'border-white/10'}`}>
                     {regData.avatarUrl ? (
                       <img src={regData.avatarUrl} className="w-full h-full object-cover" />
                     ) : (
                       <div className="text-center">
-                        <i className="fas fa-camera text-slate-600 text-xl mb-1"></i>
-                        <p className="text-[7px] font-black text-slate-500 uppercase">Add Photo</p>
+                        <i className="fas fa-camera text-slate-600 text-lg mb-0.5"></i>
+                        <p className="text-[6px] font-black text-slate-500 uppercase">Portrait</p>
                       </div>
                     )}
                     {portraitScanning && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><i className="fas fa-spinner fa-spin text-white"></i></div>}
                   </label>
-                  {portraitScanning && <p className="text-[8px] font-black text-indigo-400 uppercase animate-pulse">AI scanning portrait...</p>}
+                  {portraitScanning && <p className="text-[7px] font-black text-indigo-400 uppercase animate-pulse">AI Scanning...</p>}
                </div>
 
-               <div className="bg-white/5 p-4 rounded-xl border border-white/10 text-center">
-                  <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Hub MoMo Account</p>
-                  <p className="text-lg font-black text-white italic leading-none">{settings.adminMomo}</p>
-                  <p className="text-[10px] font-black text-slate-400 uppercase mt-1">{settings.adminMomoName}</p>
+               <div className="bg-indigo-600/10 p-3 rounded-xl border border-indigo-500/20 flex items-center justify-between">
+                  <div className="text-left">
+                    <p className="text-[7px] font-black text-slate-500 uppercase">Hub MoMo Account</p>
+                    <p className="text-sm font-black text-white italic leading-none">{settings.adminMomo}</p>
+                    <p className="text-[8px] font-black text-slate-400 uppercase mt-1">{settings.adminMomoName}</p>
+                  </div>
+                  <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white"><i className="fas fa-wallet text-sm"></i></div>
                </div>
-               <div className="space-y-3">
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-bold text-sm" placeholder="Full Name" value={regData.name || ''} onChange={e => setRegData({...regData, name: e.target.value})} />
-                  <div className="grid grid-cols-2 gap-3">
-                    <select className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-sm" value={regData.vehicleType || 'Pragia'} onChange={e => setRegData({...regData, vehicleType: e.target.value as VehicleType})}>
+
+               <div className="space-y-2.5">
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Full Name" value={regData.name || ''} onChange={e => setRegData({...regData, name: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <select className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none font-bold text-xs" value={regData.vehicleType || 'Pragia'} onChange={e => setRegData({...regData, vehicleType: e.target.value as VehicleType})}>
                        <option value="Pragia">Pragia</option>
                        <option value="Taxi">Taxi</option>
                     </select>
-                    <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-sm" placeholder="Plate Number" value={regData.licensePlate || ''} onChange={e => setRegData({...regData, licensePlate: e.target.value})} />
+                    <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Plate No." value={regData.licensePlate || ''} onChange={e => setRegData({...regData, licensePlate: e.target.value})} />
                   </div>
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-bold text-sm" placeholder="WhatsApp Number" value={regData.contact || ''} onChange={e => setRegData({...regData, contact: e.target.value})} />
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-black text-center text-sm" placeholder="Set 4-Digit Login PIN" maxLength={4} value={regData.pin || ''} onChange={e => setRegData({...regData, pin: e.target.value})} />
-                  <input className="w-full bg-white border border-emerald-500/30 rounded-xl px-5 py-3 outline-none font-black text-center text-emerald-600 text-sm" placeholder="MoMo Reference" value={regData.momoReference || ''} onChange={e => setRegData({...regData, momoReference: e.target.value})} />
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="WhatsApp Line" value={regData.contact || ''} onChange={e => setRegData({...regData, contact: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-black text-center text-xs" placeholder="Login PIN" maxLength={4} value={regData.pin || ''} onChange={e => setRegData({...regData, pin: e.target.value})} />
+                    <input className="w-full bg-white border border-emerald-500/30 rounded-xl px-4 py-3 outline-none font-black text-center text-emerald-600 text-xs" placeholder="MoMo Ref" value={regData.momoReference || ''} onChange={e => setRegData({...regData, momoReference: e.target.value})} />
+                  </div>
                </div>
-               <div className="flex gap-4">
-                  <button onClick={() => setShowRegModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
+
+               <div className="flex gap-3 pt-2">
+                  <button onClick={() => setShowRegModal(false)} className="flex-1 py-4 bg-white/10 rounded-2xl font-black text-[10px] uppercase text-white">Cancel</button>
                   <button onClick={() => { 
                     if (!regData.name || !regData.momoReference || !regData.pin || !regData.avatarUrl) { alert("Please complete all fields including photo."); return; }
                     onRequestRegistration({ ...regData as RegistrationRequest, amount: settings.registrationFee }); 
                     setShowRegModal(false); 
-                  }} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Apply & Pay</button>
+                  }} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl">Apply & Join</button>
                </div>
             </div>
           </div>
@@ -2231,7 +2241,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                   <p className="text-3xl font-black text-white italic mt-4">₵ {req.amount}</p>
                   <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2">Ref: {req.momoReference}</p>
                 </div>
-                <button onClick={() => onApproveTopup(req.id)} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg">Approve Credit</button>
+                <button onClick={() => onApproveTopup(req.id)} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Approve Credit</button>
              </div>
            ))}
         </div>
