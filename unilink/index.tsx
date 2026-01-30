@@ -116,6 +116,7 @@ interface AppSettings {
   aboutMeImages: string[];
   appWallpaper?: string;
   registrationFee: number;
+  hubAnnouncement?: string; // NEW: Global announcement text
 }
 
 // --- UTILS ---
@@ -225,9 +226,11 @@ const App: React.FC = () => {
 
   const [showQrModal, setShowQrModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
   const [showAiHelp, setShowAiHelp] = useState(false);
   const [isNewUser, setIsNewUser] = useState(() => !localStorage.getItem('unihub_seen_welcome_v12'));
   const [isSyncing, setIsSyncing] = useState(true);
+  const [dismissedAnnouncement, setDismissedAnnouncement] = useState(() => sessionStorage.getItem('unihub_dismissed_announcement'));
 
   const [settings, setSettings] = useState<AppSettings>({
     adminMomo: "024-123-4567",
@@ -240,7 +243,8 @@ const App: React.FC = () => {
     aboutMeText: "Welcome to UniHub Dispatch.",
     aboutMeImages: [],
     appWallpaper: "",
-    registrationFee: 20.00
+    registrationFee: 20.00,
+    hubAnnouncement: ""
   });
   const [nodes, setNodes] = useState<RideNode[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -276,7 +280,15 @@ const App: React.FC = () => {
         supabase.from('unihub_registrations').select('*').order('timestamp', { ascending: false })
       ]);
 
-      if (sData) setSettings(sData as AppSettings);
+      if (sData) {
+        setSettings(sData as AppSettings);
+        // If announcement changed, reset dismissal
+        if (sData.hubAnnouncement !== sessionStorage.getItem('unihub_last_announcement')) {
+          setDismissedAnnouncement(null);
+          sessionStorage.removeItem('unihub_dismissed_announcement');
+          sessionStorage.setItem('unihub_last_announcement', sData.hubAnnouncement || '');
+        }
+      }
       if (nData) setNodes(nData);
       if (dData) setDrivers(dData);
       if (mData) setMissions(mData);
@@ -333,7 +345,6 @@ const App: React.FC = () => {
     
     setIsSyncing(true);
     try {
-      // Check if user exists
       const { data, error } = await supabase
         .from('unihub_users')
         .select('*')
@@ -344,7 +355,6 @@ const App: React.FC = () => {
       if (data) {
         user = data as UniUser;
       } else {
-        // Create new user
         const newUser = { id: `USER-${Date.now()}`, username, phone };
         const { error: insertErr } = await supabase.from('unihub_users').insert([newUser]);
         if (insertErr) throw insertErr;
@@ -729,6 +739,11 @@ const App: React.FC = () => {
     localStorage.setItem('unihub_seen_welcome_v12', 'true');
   };
 
+  const handleDismissAnnouncement = () => {
+    setDismissedAnnouncement('true');
+    sessionStorage.setItem('unihub_dismissed_announcement', 'true');
+  };
+
   const safeSetViewMode = (mode: PortalMode) => {
     if (activeDriverId && mode !== 'driver') {
       if (confirm("Logout from Driver Terminal?")) {
@@ -758,9 +773,22 @@ const App: React.FC = () => {
       {settings.appWallpaper && (
         <div className="absolute inset-0 bg-[#020617]/70 pointer-events-none z-0"></div>
       )}
+
+      {/* Hub Announcement Bar */}
+      {settings.hubAnnouncement && !dismissedAnnouncement && (
+        <div className="fixed top-0 left-0 right-0 z-[400] bg-gradient-to-r from-amber-600 to-rose-600 px-4 py-3 flex items-center justify-between shadow-2xl animate-in slide-in-from-top duration-500">
+           <div className="flex items-center gap-3 overflow-hidden">
+              <i className="fas fa-bullhorn text-white animate-pulse"></i>
+              <p className="text-[10px] sm:text-xs font-black uppercase italic text-white truncate">{settings.hubAnnouncement}</p>
+           </div>
+           <button onClick={handleDismissAnnouncement} className="ml-4 w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white text-[10px] hover:bg-white/30 transition-all shrink-0">
+             <i className="fas fa-times"></i>
+           </button>
+        </div>
+      )}
       
       {isSyncing && (
-        <div className="fixed top-4 right-4 z-[300] bg-amber-500/20 text-amber-500 px-4 py-2 rounded-full border border-amber-500/30 text-[10px] font-black uppercase flex items-center gap-2">
+        <div className="fixed top-20 lg:top-4 right-4 z-[300] bg-amber-500/20 text-amber-500 px-4 py-2 rounded-full border border-amber-500/30 text-[10px] font-black uppercase flex items-center gap-2">
            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
            Syncing...
         </div>
@@ -784,6 +812,9 @@ const App: React.FC = () => {
             </button>
             <button onClick={() => setShowHelpModal(true)} title="Help Center" className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-white/10 transition-all">
               <i className="fas fa-circle-question text-xs"></i>
+            </button>
+            <button onClick={() => setShowAboutModal(true)} title="Hub Info" className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-500 hover:text-emerald-400 hover:bg-white/10 transition-all">
+              <i className="fas fa-info-circle text-xs"></i>
             </button>
           </div>
         </div>
@@ -864,11 +895,11 @@ const App: React.FC = () => {
             badge={isAdminAuthenticated && pendingRequestsCount > 0 ? pendingRequestsCount : undefined}
           />
         )}
-        <MobileNavItem active={false} icon="fa-message-bot" label="AI" onClick={() => setShowAiHelp(true)} />
+        <MobileNavItem active={false} icon="fa-info-circle" label="About" onClick={() => setShowAboutModal(true)} />
       </nav>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-4 lg:p-12 pb-24 lg:pb-12 no-scrollbar z-10 relative">
+      <main className={`flex-1 overflow-y-auto p-4 lg:p-12 pb-24 lg:pb-12 no-scrollbar z-10 relative ${settings.hubAnnouncement && !dismissedAnnouncement ? 'pt-20' : ''}`}>
         <div className="max-w-6xl mx-auto space-y-6 lg:space-y-8">
           
           {isNewUser && (
@@ -925,6 +956,7 @@ const App: React.FC = () => {
               search={globalSearch} 
               settings={settings} 
               onShowQr={() => setShowQrModal(true)} 
+              onShowAbout={() => setShowAboutModal(true)}
             />
           )}
           {viewMode === 'driver' && (
@@ -1012,6 +1044,60 @@ const App: React.FC = () => {
               <div className="flex gap-4">
                  <button onClick={() => setShowQrModal(false)} className="flex-1 py-4 bg-white/5 rounded-[1.5rem] font-black text-[10px] uppercase text-slate-400">Close</button>
                  <button onClick={shareHub} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-[1.5rem] font-black text-[10px] uppercase shadow-xl">Share Link</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* About Modal (Hub Portfolio) */}
+      {showAboutModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+           <div className="glass-bright w-full max-w-2xl rounded-[3rem] p-8 lg:p-12 space-y-8 animate-in zoom-in border border-white/10 overflow-y-auto max-h-[90vh] no-scrollbar">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                   <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-xl">
+                      <i className="fas fa-info-circle text-xl"></i>
+                   </div>
+                   <div>
+                      <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white leading-none">Hub Manifesto</h3>
+                      <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-1">Our Mission & Identity</p>
+                   </div>
+                </div>
+                <button onClick={() => setShowAboutModal(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-slate-500 hover:text-white transition-all">
+                   <i className="fas fa-times"></i>
+                </button>
+              </div>
+
+              {settings.aboutMeImages.length > 0 && (
+                <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+                   {settings.aboutMeImages.map((img, i) => (
+                     <div key={i} className="min-w-[280px] h-[180px] rounded-[2rem] overflow-hidden border border-white/10 shadow-xl shrink-0">
+                        <img src={img} className="w-full h-full object-cover" alt="Hub Portfolio" />
+                     </div>
+                   ))}
+                </div>
+              )}
+
+              <div className="space-y-6">
+                 <div className="p-8 bg-white/5 rounded-[2.5rem] border border-white/10 relative overflow-hidden">
+                    <i className="fas fa-quote-left absolute top-4 left-4 text-4xl text-emerald-500/10"></i>
+                    <p className="text-sm lg:text-base font-medium italic text-slate-300 leading-relaxed relative z-10 whitespace-pre-wrap">{settings.aboutMeText}</p>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <a href={`https://wa.me/${settings.whatsappNumber}`} target="_blank" className="flex flex-col items-center gap-3 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-emerald-600/10 hover:border-emerald-500/30 transition-all group">
+                       <i className="fab fa-whatsapp text-emerald-500 text-2xl group-hover:scale-110 transition-transform"></i>
+                       <span className="text-[9px] font-black uppercase text-slate-500">Official Line</span>
+                    </a>
+                    <button onClick={shareHub} className="flex flex-col items-center gap-3 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-amber-600/10 hover:border-amber-500/30 transition-all group">
+                       <i className="fas fa-share-nodes text-amber-500 text-2xl group-hover:scale-110 transition-transform"></i>
+                       <span className="text-[9px] font-black uppercase text-slate-500">Share Hub</span>
+                    </button>
+                 </div>
+              </div>
+
+              <div className="pt-6 border-t border-white/5 text-center">
+                 <button onClick={() => setShowAboutModal(false)} className="px-12 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Close Portfolio</button>
               </div>
            </div>
         </div>
@@ -1316,7 +1402,7 @@ const AdminLogin = ({ onLogin }: any) => {
   );
 };
 
-const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onForceQualify, onCancel, drivers, search, settings, onShowQr }: any) => {
+const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onForceQualify, onCancel, drivers, search, settings, onShowQr, onShowAbout }: any) => {
   const [showModal, setShowModal] = useState(false);
   const [joinModalNodeId, setJoinModalNodeId] = useState<string | null>(null);
   const [origin, setOrigin] = useState('');
@@ -1330,7 +1416,6 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
   const [joinName, setJoinName] = useState(currentUser?.username || '');
   const [joinPhone, setJoinPhone] = useState(currentUser?.phone || '');
 
-  // AI Form States
   const [aiInput, setAiInput] = useState('');
   const [aiProcessing, setAiProcessing] = useState(false);
 
@@ -1414,9 +1499,14 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
   return (
     <div className="animate-in fade-in space-y-12 pb-24">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Passenger Hub</h2>
-          <p className="text-slate-500 text-[10px] font-black uppercase mt-1">Request drops or form nodes</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Passenger Hub</h2>
+            <p className="text-slate-500 text-[10px] font-black uppercase mt-1">Request drops or form nodes</p>
+          </div>
+          <button onClick={onShowAbout} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-500 lg:hidden">
+            <i className="fas fa-info-circle"></i>
+          </button>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           <button onClick={onShowQr} className="w-12 h-12 lg:hidden bg-white/5 rounded-2xl flex items-center justify-center text-amber-500 border border-white/10 shadow-xl">
@@ -1464,7 +1554,6 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
               <p className="text-slate-400 text-[8px] font-black uppercase mt-1">Carpooling or Quick Drop</p>
             </div>
 
-            {/* AI Assistant Field - COMPACT */}
             <div className="p-3 bg-indigo-600/10 border border-indigo-500/20 rounded-xl space-y-2">
                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-indigo-400 font-black text-[8px] uppercase tracking-widest">
@@ -1663,7 +1752,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
   const [isScanning, setIsScanning] = useState(false);
   const [activeMissionNodeId, setActiveMissionNodeId] = useState<string | null>(null);
 
-  // AI Insights State
   const [hubInsight, setHubInsight] = useState<string | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [portraitScanning, setPortraitScanning] = useState(false);
@@ -1675,7 +1763,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
       const compressed = await compressImage(file, 0.6, 400);
       setRegData({ ...regData, avatarUrl: compressed });
 
-      // AI VISION VERIFICATION
       try {
         const base64 = compressed.split(',')[1];
         const response = await ai.models.generateContent({
@@ -2267,12 +2354,12 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
               </section>
 
               <section className="space-y-6">
-                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Payment & Contact</h4>
+                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Communications</h4>
                  <div className="space-y-4">
+                    <AdminInput label="Global Announcement" value={localSettings.hubAnnouncement || ''} onChange={v => setLocalSettings({...localSettings, hubAnnouncement: v})} />
+                    <AdminInput label="WhatsApp Line" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
                     <AdminInput label="Admin MoMo" value={localSettings.adminMomo} onChange={v => setLocalSettings({...localSettings, adminMomo: v})} />
                     <AdminInput label="Admin Name" value={localSettings.adminMomoName} onChange={v => setLocalSettings({...localSettings, adminMomoName: v})} />
-                    <AdminInput label="WhatsApp Line" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
-                    <AdminInput label="System Secret (Legacy)" type="password" value={localSettings.adminSecret || ''} onChange={v => setLocalSettings({...localSettings, adminSecret: v})} />
                  </div>
               </section>
 
@@ -2280,7 +2367,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                  <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Hub Content & Media</h4>
                  <div className="space-y-4">
                     <div className="space-y-2">
-                       <label className="text-[9px] font-black text-slate-600 uppercase">About Hub Text</label>
+                       <label className="text-[9px] font-black text-slate-600 uppercase">Hub Portfolio / About Me</label>
                        <textarea className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-xs font-medium text-white h-32 outline-none focus:border-amber-500" value={localSettings.aboutMeText} onChange={e => setLocalSettings({...localSettings, aboutMeText: e.target.value})} />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2292,7 +2379,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                           </label>
                        </div>
                        <div className="space-y-4">
-                          <label className="text-[9px] font-black text-slate-600 uppercase">About Images</label>
+                          <label className="text-[9px] font-black text-slate-600 uppercase">Gallery Images</label>
                           <input type="file" className="hidden" id="about-upload" onChange={e => handleSettingImage(e, 'about')} />
                           <div className="grid grid-cols-3 gap-2">
                              {localSettings.aboutMeImages.map((img, i) => (
@@ -2340,7 +2427,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
             <div className="space-y-4">
                <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Station Location" value={newMission.location} onChange={e => setNewMission({...newMission, location: e.target.value})} />
                <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Entry Fee (₵)" type="number" value={newMission.entryFee} onChange={e => setNewMission({...newMission, entryFee: Number(e.target.value)})} />
-               <textarea className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-medium h-32" placeholder="Mission Description (Shift times, rules, etc.)" value={newMission.description} onChange={e => setNewMission({...newMission, description: e.target.value})} />
+               <textarea className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-medium h-32" placeholder="Mission Description" value={newMission.description} onChange={e => setNewMission({...newMission, description: e.target.value})} />
             </div>
             <div className="flex gap-4">
                <button onClick={() => setShowMissionModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
