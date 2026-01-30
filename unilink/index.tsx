@@ -176,7 +176,6 @@ const AuthPortal: React.FC<{ onSession: (s: Session | null) => void }> = ({ onSe
 
   return (
     <div className="fixed inset-0 bg-[#020617] flex items-center justify-center p-6 z-[300] overflow-hidden">
-      {/* Background patterns */}
       <div className="absolute inset-0 opacity-10 pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500 rounded-full blur-[120px]"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-500 rounded-full blur-[120px]"></div>
@@ -239,11 +238,50 @@ const AuthPortal: React.FC<{ onSession: (s: Session | null) => void }> = ({ onSe
         </div>
       </div>
       
-      {/* Security notice bottom */}
       <div className="absolute bottom-10 text-center w-full px-6">
         <p className="text-[8px] font-black text-slate-800 uppercase tracking-[0.4em]">
           End-to-End Encrypted Communication • Hub Global Ver. 12.0.4
         </p>
+      </div>
+    </div>
+  );
+};
+
+// --- VAULT ACCESS MODAL ---
+
+const VaultAuthModal: React.FC<{ isOpen: boolean, onAuth: (secret: string) => Promise<void>, onClose: () => void }> = ({ isOpen, onAuth, onClose }) => {
+  const [secret, setSecret] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  if (!isOpen) return null;
+
+  const handleVerify = async () => {
+    setIsVerifying(true);
+    await onAuth(secret);
+    setIsVerifying(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl z-[500] flex items-center justify-center p-6 animate-in fade-in">
+      <div className="w-full max-w-sm glass p-10 rounded-[3.5rem] border border-amber-500/20 space-y-8 animate-in zoom-in text-center">
+        <div className="w-20 h-20 bg-amber-500/10 rounded-[2rem] flex items-center justify-center text-amber-500 text-3xl shadow-2xl mx-auto border border-amber-500/20">
+          <i className={`fas ${isVerifying ? 'fa-circle-notch fa-spin' : 'fa-vault'}`}></i>
+        </div>
+        <div>
+          <h2 className="text-2xl font-black italic uppercase text-white tracking-tighter">Vault Encryption</h2>
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-2">Enter Command Secret Key</p>
+        </div>
+        <input 
+          type="password" 
+          placeholder="SEC-KEY-••••" 
+          className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-center text-lg font-black tracking-widest text-white outline-none focus:border-amber-500 transition-all shadow-inner"
+          value={secret} onChange={e => setSecret(e.target.value)}
+          autoFocus
+        />
+        <div className="flex gap-4">
+           <button onClick={onClose} className="flex-1 py-4 bg-white/5 rounded-2xl text-[10px] font-black uppercase text-slate-500 tracking-widest">Abort</button>
+           <button onClick={handleVerify} disabled={isVerifying} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl">Authorize</button>
+        </div>
       </div>
     </div>
   );
@@ -257,6 +295,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'monitor' | 'fleet' | 'requests' | 'settings' | 'missions' | 'onboarding'>('monitor');
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => sessionStorage.getItem('unihub_admin_auth_v12') === 'true');
   const [activeDriverId, setActiveDriverId] = useState<string | null>(() => sessionStorage.getItem('unihub_driver_session_v12'));
+  const [showVaultModal, setShowVaultModal] = useState(false);
 
   const [isSyncing, setIsSyncing] = useState(true);
   const [settings, setSettings] = useState<AppSettings>({
@@ -275,6 +314,14 @@ const App: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
     return () => subscription.unsubscribe();
   }, []);
+
+  // Check for ?access=vault in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('access') === 'vault' && !isAdminAuthenticated) {
+      setShowVaultModal(true);
+    }
+  }, [isAdminAuthenticated]);
 
   const fetchData = async () => {
     setIsSyncing(true);
@@ -305,10 +352,38 @@ const App: React.FC = () => {
 
   const pendingRegCount = useMemo(() => registrationRequests.filter(r => r.status === 'pending').length, [registrationRequests]);
 
+  const handleAdminAuth = async (secret: string) => {
+    const { data, error } = await supabase.rpc('verify_admin_secret', { candidate_secret: secret });
+    if (data === true) {
+      setIsAdminAuthenticated(true);
+      sessionStorage.setItem('unihub_admin_auth_v12', 'true');
+      setShowVaultModal(false);
+      // Clean URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete('access');
+      window.history.replaceState({}, '', url.toString());
+    } else {
+      alert("Invalid Command Secret. Access Refused.");
+    }
+  };
+
   if (!session) return <AuthPortal onSession={setSession} />;
 
   return (
     <div className="flex flex-col lg:flex-row h-screen overflow-hidden bg-[#020617] text-slate-100 font-sans relative">
+      
+      <VaultAuthModal 
+        isOpen={showVaultModal} 
+        onAuth={handleAdminAuth} 
+        onClose={() => {
+          setShowVaultModal(false);
+          const url = new URL(window.location.href);
+          url.searchParams.delete('access');
+          window.history.replaceState({}, '', url.toString());
+        }} 
+      />
+
+      {/* Dynamic Impact Sidebar */}
       <nav className="hidden lg:flex w-72 glass border-r border-white/5 flex-col p-8 space-y-10 z-50">
         <div className="flex items-center space-x-4">
           <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center shadow-xl ring-4 ring-amber-500/10">
@@ -342,6 +417,22 @@ const App: React.FC = () => {
            </div>
         </div>
       </nav>
+
+      {/* Mobile Nav */}
+      <div className="lg:hidden flex justify-around p-4 glass border-b border-white/5 z-50">
+          <button onClick={() => setViewMode('passenger')} className={`p-4 rounded-2xl ${viewMode === 'passenger' ? 'bg-amber-500 text-[#020617]' : 'text-slate-500'}`}>
+            <i className="fas fa-people-group"></i>
+          </button>
+          <button onClick={() => setViewMode('driver')} className={`p-4 rounded-2xl ${viewMode === 'driver' ? 'bg-amber-500 text-[#020617]' : 'text-slate-500'}`}>
+            <i className="fas fa-truck-fast"></i>
+          </button>
+          {isAdminAuthenticated && (
+            <button onClick={() => setViewMode('admin')} className={`p-4 rounded-2xl relative ${viewMode === 'admin' ? 'bg-amber-500 text-[#020617]' : 'text-slate-500'}`}>
+               <i className="fas fa-fingerprint"></i>
+               {pendingRegCount > 0 && <span className="absolute top-2 right-2 bg-rose-500 w-2 h-2 rounded-full"></span>}
+            </button>
+          )}
+      </div>
 
       <main className="flex-1 overflow-y-auto p-4 lg:p-12 pb-24 lg:pb-12 no-scrollbar z-10 relative">
         <div className="max-w-6xl mx-auto space-y-8">
@@ -384,6 +475,26 @@ const App: React.FC = () => {
               activeTab={activeTab} setActiveTab={setActiveTab} 
               registrationRequests={registrationRequests}
               drivers={drivers}
+              onApprove={async (reg: RegistrationRequest) => {
+                 const newDriver = {
+                   id: `DRV-${Date.now()}`,
+                   name: reg.name,
+                   vehicleType: reg.vehicleType,
+                   licensePlate: reg.licensePlate,
+                   contact: reg.contact,
+                   walletBalance: 0,
+                   rating: 5,
+                   status: 'offline',
+                   pin: reg.pin,
+                   photoUrl: reg.photoUrl
+                 };
+                 await Promise.all([
+                   supabase.from('unihub_drivers').insert([newDriver]),
+                   supabase.from('unihub_registrations').update({ status: 'approved' }).eq('id', reg.id)
+                 ]);
+                 fetchData();
+                 alert(`Driver ${reg.name} successfully deployed to fleet.`);
+              }}
               settings={settings}
             />
           )}
@@ -587,7 +698,7 @@ const PassengerPortal = ({ nodes, drivers, settings, search }: any) => {
   );
 };
 
-const AdminPortal = ({ activeTab, setActiveTab, registrationRequests }: any) => {
+const AdminPortal = ({ activeTab, setActiveTab, registrationRequests, onApprove }: any) => {
   return (
     <div className="space-y-10">
        <div className="flex bg-white/5 p-2 rounded-3xl border border-white/10 w-fit shadow-inner">
@@ -621,7 +732,7 @@ const AdminPortal = ({ activeTab, setActiveTab, registrationRequests }: any) => 
                  </div>
                  <div className="flex gap-4">
                     <button className="flex-1 py-5 bg-white/5 rounded-2xl text-[9px] font-black uppercase text-slate-500 hover:text-rose-500 transition-colors">Reject</button>
-                    <button onClick={() => alert("Identity approved. Verified credentials pushed to database.")} className="flex-1 py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[9px] shadow-xl hover:bg-indigo-500 transition-colors tracking-widest">Verify ID</button>
+                    <button onClick={() => onApprove(reg)} className="flex-1 py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[9px] shadow-xl hover:bg-indigo-500 transition-colors tracking-widest">Verify ID</button>
                  </div>
               </div>
             ))}
