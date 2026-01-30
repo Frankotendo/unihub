@@ -116,7 +116,7 @@ interface AppSettings {
   aboutMeImages: string[];
   appWallpaper?: string;
   registrationFee: number;
-  hubAnnouncement?: string; // NEW: Global announcement text
+  hub_announcement?: string; // Standardized snake_case for Supabase
 }
 
 // --- UTILS ---
@@ -244,7 +244,7 @@ const App: React.FC = () => {
     aboutMeImages: [],
     appWallpaper: "",
     registrationFee: 20.00,
-    hubAnnouncement: ""
+    hub_announcement: ""
   });
   const [nodes, setNodes] = useState<RideNode[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -283,10 +283,11 @@ const App: React.FC = () => {
       if (sData) {
         setSettings(sData as AppSettings);
         // If announcement changed, reset dismissal
-        if (sData.hubAnnouncement !== sessionStorage.getItem('unihub_last_announcement')) {
+        const currentMsg = sData.hub_announcement || '';
+        if (currentMsg !== sessionStorage.getItem('unihub_last_announcement')) {
           setDismissedAnnouncement(null);
           sessionStorage.removeItem('unihub_dismissed_announcement');
-          sessionStorage.setItem('unihub_last_announcement', sData.hubAnnouncement || '');
+          sessionStorage.setItem('unihub_last_announcement', currentMsg);
         }
       }
       if (nData) setNodes(nData);
@@ -775,20 +776,22 @@ const App: React.FC = () => {
       )}
 
       {/* Hub Announcement Bar */}
-      {settings.hubAnnouncement && !dismissedAnnouncement && (
-        <div className="fixed top-0 left-0 right-0 z-[400] bg-gradient-to-r from-amber-600 to-rose-600 px-4 py-3 flex items-center justify-between shadow-2xl animate-in slide-in-from-top duration-500">
+      {settings.hub_announcement && !dismissedAnnouncement && (
+        <div className="fixed top-0 left-0 right-0 z-[400] bg-gradient-to-r from-amber-600 to-rose-600 px-4 py-3 flex items-center justify-between shadow-2xl animate-in slide-in-from-top duration-500 border-b border-white/10">
            <div className="flex items-center gap-3 overflow-hidden">
-              <i className="fas fa-bullhorn text-white animate-pulse"></i>
-              <p className="text-[10px] sm:text-xs font-black uppercase italic text-white truncate">{settings.hubAnnouncement}</p>
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
+                <i className="fas fa-bullhorn text-white text-xs"></i>
+              </div>
+              <p className="text-[10px] sm:text-xs font-black uppercase italic text-white truncate tracking-tight">{settings.hub_announcement}</p>
            </div>
-           <button onClick={handleDismissAnnouncement} className="ml-4 w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white text-[10px] hover:bg-white/30 transition-all shrink-0">
+           <button onClick={handleDismissAnnouncement} className="ml-4 w-7 h-7 rounded-full bg-black/20 flex items-center justify-center text-white text-[10px] hover:bg-white/30 transition-all shrink-0">
              <i className="fas fa-times"></i>
            </button>
         </div>
       )}
       
       {isSyncing && (
-        <div className="fixed top-20 lg:top-4 right-4 z-[300] bg-amber-500/20 text-amber-500 px-4 py-2 rounded-full border border-amber-500/30 text-[10px] font-black uppercase flex items-center gap-2">
+        <div className={`fixed ${settings.hub_announcement && !dismissedAnnouncement ? 'top-20' : 'top-4'} right-4 z-[300] bg-amber-500/20 text-amber-500 px-4 py-2 rounded-full border border-amber-500/30 text-[10px] font-black uppercase flex items-center gap-2 transition-all`}>
            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
            Syncing...
         </div>
@@ -899,7 +902,7 @@ const App: React.FC = () => {
       </nav>
 
       {/* Main Content */}
-      <main className={`flex-1 overflow-y-auto p-4 lg:p-12 pb-24 lg:pb-12 no-scrollbar z-10 relative ${settings.hubAnnouncement && !dismissedAnnouncement ? 'pt-20' : ''}`}>
+      <main className={`flex-1 overflow-y-auto p-4 lg:p-12 pb-24 lg:pb-12 no-scrollbar z-10 relative transition-all duration-500 ${settings.hub_announcement && !dismissedAnnouncement ? 'pt-24 lg:pt-28' : 'pt-4 lg:pt-12'}`}>
         <div className="max-w-6xl mx-auto space-y-6 lg:space-y-8">
           
           {isNewUser && (
@@ -909,8 +912,8 @@ const App: React.FC = () => {
                    <i className="fas fa-sparkles"></i>
                 </div>
                 <div>
-                   <h2 className="text-xl font-black uppercase italic leading-none">Welcome to the Hub</h2>
-                   <p className="text-xs font-bold opacity-80 mt-1 uppercase tracking-tight">First time here? Check out our quick start guide.</p>
+                   <h2 className="text-xl font-black uppercase italic leading-none text-white">Welcome to the Hub</h2>
+                   <p className="text-xs font-bold opacity-80 mt-1 uppercase tracking-tight text-indigo-100">First time here? Check out our quick start guide.</p>
                 </div>
               </div>
               <div className="relative z-10 flex gap-3 w-full sm:w-auto">
@@ -1230,7 +1233,7 @@ const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string) => void
             {loading ? <i className="fas fa-spinner fa-spin mr-2"></i> : 'Establish Connection'}
           </button>
           
-          <p className="text-[9px] font-medium text-slate-500 leading-relaxed max-w-[200px] mx-auto">
+          <p className="text-[9px] font-medium text-slate-500 leading-relaxed max-w-[200px] mx-auto text-center">
             By connecting, you agree to the Hub's operational safety protocols.
           </p>
         </div>
@@ -1288,8 +1291,8 @@ const AiHelpDesk = ({ onClose, settings }: { onClose: () => void, settings: AppS
            <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white"><i className="fas fa-robot"></i></div>
               <div>
-                <h3 className="font-black uppercase italic text-white text-sm">AI Help Desk</h3>
-                <p className="text-[9px] font-black text-indigo-200 uppercase">UniHub Assistant</p>
+                <h3 className="font-black uppercase italic text-white text-sm leading-none">AI Help Desk</h3>
+                <p className="text-[9px] font-black text-indigo-200 uppercase mt-1">UniHub Assistant</p>
               </div>
            </div>
            <button onClick={onClose} className="text-white/50 hover:text-white"><i className="fas fa-times"></i></button>
@@ -1497,7 +1500,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
   };
 
   return (
-    <div className="animate-in fade-in space-y-12 pb-24">
+    <div className="animate-in fade-in space-y-8 pb-24">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div className="flex items-center gap-4">
           <div>
@@ -1513,6 +1516,29 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
              <i className="fas fa-qrcode"></i>
           </button>
           <button onClick={() => setShowModal(true)} className="flex-1 sm:flex-none px-8 py-4 bg-amber-500 text-[#020617] rounded-[1.5rem] font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-transform">Form Ride</button>
+        </div>
+      </div>
+
+      {/* Spotlight Card - Prominent About Me Link */}
+      <div 
+        onClick={onShowAbout}
+        className="relative w-full h-44 rounded-[2.5rem] overflow-hidden border border-white/10 group cursor-pointer shadow-2xl"
+      >
+        {settings.aboutMeImages && settings.aboutMeImages[0] ? (
+          <img src={settings.aboutMeImages[0]} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-[2s]" />
+        ) : (
+          <div className="w-full h-full bg-indigo-600/20 flex items-center justify-center">
+             <i className="fas fa-sparkles text-4xl text-indigo-500 opacity-20"></i>
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/50 to-transparent"></div>
+        <div className="absolute bottom-6 left-8 sm:left-10">
+           <p className="text-[9px] font-black text-emerald-400 uppercase tracking-[0.3em] mb-1">Hub Spotlight</p>
+           <h3 className="text-2xl font-black italic uppercase text-white leading-none">Discover our Mission</h3>
+           <p className="text-[10px] font-bold text-slate-400 uppercase mt-2 opacity-80">Click to read our Manifesto</p>
+        </div>
+        <div className="absolute bottom-6 right-8 w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 group-hover:bg-amber-500 group-hover:text-[#020617] transition-all">
+           <i className="fas fa-arrow-right"></i>
         </div>
       </div>
 
@@ -2009,7 +2035,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
               </div>
 
               {hubInsight && (
-                <div className="mb-6 p-4 bg-indigo-600 rounded-[1.5rem] border border-white/20 animate-in zoom-in text-white text-[11px] font-medium italic relative overflow-hidden">
+                <div className="mb-6 p-4 bg-indigo-600 rounded-[1.5rem] border border-white/20 animate-in zoom-in text-white text-[11px] font-medium italic relative overflow-hidden text-center">
                   <i className="fas fa-lightbulb absolute right-4 top-1/2 -translate-y-1/2 text-4xl opacity-10"></i>
                   <p className="relative z-10">{hubInsight}</p>
                 </div>
@@ -2112,7 +2138,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-sm:px-4 max-w-md rounded-[2.5rem] p-8 space-y-8 animate-in zoom-in text-slate-900">
             <div className="text-center">
-              <h3 className="text-2xl font-black italic tracking-tighter uppercase text-white">Credit Request</h3>
+              <h3 className="text-2xl font-black italic tracking-tighter uppercase text-white leading-none">Credit Request</h3>
               <p className="text-slate-400 text-[10px] font-black uppercase mt-1">Manual MoMo Verification</p>
             </div>
             
@@ -2356,7 +2382,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
               <section className="space-y-6">
                  <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Communications</h4>
                  <div className="space-y-4">
-                    <AdminInput label="Global Announcement" value={localSettings.hubAnnouncement || ''} onChange={v => setLocalSettings({...localSettings, hubAnnouncement: v})} />
+                    <AdminInput label="Global Announcement" value={localSettings.hub_announcement || ''} onChange={v => setLocalSettings({...localSettings, hub_announcement: v})} />
                     <AdminInput label="WhatsApp Line" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
                     <AdminInput label="Admin MoMo" value={localSettings.adminMomo} onChange={v => setLocalSettings({...localSettings, adminMomo: v})} />
                     <AdminInput label="Admin Name" value={localSettings.adminMomoName} onChange={v => setLocalSettings({...localSettings, adminMomoName: v})} />
