@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -390,7 +389,6 @@ const AiHelpDesk = ({ onClose, settings }: any) => {
     setLoading(true);
 
     try {
-      // Corrected extracting text output from GenerateContentResponse
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: userMsg,
@@ -1697,6 +1695,18 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   useEffect(() => { setLocalSettings(settings); }, [settings]);
 
+  const handleSettingImage = async (e: React.ChangeEvent<HTMLInputElement>, field: 'wallpaper' | 'about') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const compressed = await compressImage(file, 0.6, 1200);
+      if (field === 'wallpaper') {
+        setLocalSettings({...localSettings, appWallpaper: compressed});
+      } else {
+        setLocalSettings({...localSettings, aboutMeImages: [...(localSettings.aboutMeImages || []), compressed]});
+      }
+    }
+  };
+
   return (
     <div className="animate-in slide-in-from-bottom-8 space-y-8 pb-10">
       <div className="flex items-center justify-between mb-4 overflow-x-auto no-scrollbar">
@@ -1800,7 +1810,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                 <div>
                   <h4 className="text-white font-black uppercase italic text-sm">{drivers.find((d:any)=>d.id===req.driverId)?.name}</h4>
                   <p className="text-3xl font-black text-white italic mt-4">₵ {req.amount}</p>
-                  <p className="text-[9px] font-bold text-slate-500 uppercase mt-2">Ref: {req.momoReference}</p>
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2">Ref: {req.momoReference}</p>
                 </div>
                 <button onClick={() => onApproveTopup(req.id)} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Approve Credit</button>
              </div>
@@ -1811,7 +1821,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
       {activeTab === 'settings' && (
         <div className="glass rounded-[2rem] p-8 border border-white/5 space-y-10 animate-in fade-in">
            <h3 className="text-xl font-black uppercase text-white leading-none">Hub Setup</h3>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <section className="space-y-6">
                  <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Fares</h4>
                  <div className="space-y-4">
@@ -1821,11 +1831,50 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                     <AdminInput label="Taxi (₵)" value={localSettings.farePerTaxi} onChange={v => setLocalSettings({...localSettings, farePerTaxi: Number(v)})} />
                  </div>
               </section>
+
               <section className="space-y-6">
-                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Payment</h4>
+                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Payment & Logic</h4>
                  <div className="space-y-4">
                     <AdminInput label="MoMo" value={localSettings.adminMomo} onChange={v => setLocalSettings({...localSettings, adminMomo: v})} />
                     <AdminInput label="WhatsApp" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
+                    <AdminInput label="Solo Multi (x)" value={localSettings.soloMultiplier} onChange={v => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
+                 </div>
+              </section>
+
+              {/* RESTORED VISUAL SETTINGS */}
+              <section className="space-y-6">
+                 <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Visuals & Info</h4>
+                 <div className="space-y-4">
+                    <div className="space-y-1.5">
+                       <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Hub Background</label>
+                       <input type="file" className="hidden" id="wallpaper-up" accept="image/*" onChange={e => handleSettingImage(e, 'wallpaper')} />
+                       <label htmlFor="wallpaper-up" className="w-full h-12 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center cursor-pointer overflow-hidden">
+                          {localSettings.appWallpaper ? <img src={localSettings.appWallpaper} className="w-full h-full object-cover" /> : <span className="text-[8px] font-black text-slate-500 uppercase">Upload Image</span>}
+                       </label>
+                    </div>
+
+                    <div className="space-y-1.5">
+                       <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest">About the Hub</label>
+                       <textarea 
+                          className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs font-bold text-white outline-none focus:border-amber-500 h-24 resize-none" 
+                          value={localSettings.aboutMeText} 
+                          onChange={e => setLocalSettings({...localSettings, aboutMeText: e.target.value})} 
+                       />
+                    </div>
+
+                    <div className="space-y-1.5">
+                       <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Gallery Images</label>
+                       <div className="flex flex-wrap gap-2">
+                          {localSettings.aboutMeImages?.map((img, idx) => (
+                             <div key={idx} className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 relative group">
+                                <img src={img} className="w-full h-full object-cover" />
+                                <button onClick={() => setLocalSettings({...localSettings, aboutMeImages: localSettings.aboutMeImages.filter((_, i) => i !== idx)})} className="absolute inset-0 bg-rose-500/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><i className="fas fa-times text-[8px]"></i></button>
+                             </div>
+                          ))}
+                          <input type="file" className="hidden" id="gallery-up" accept="image/*" onChange={e => handleSettingImage(e, 'about')} />
+                          <label htmlFor="gallery-up" className="w-10 h-10 rounded-lg bg-white/5 border-2 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:bg-white/10"><i className="fas fa-plus text-slate-500 text-[8px]"></i></label>
+                       </div>
+                    </div>
                  </div>
               </section>
            </div>
