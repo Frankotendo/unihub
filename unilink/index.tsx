@@ -18,6 +18,12 @@ type VehicleType = 'Pragia' | 'Taxi' | 'Shuttle';
 type NodeStatus = 'forming' | 'qualified' | 'dispatched' | 'completed'; 
 type PortalMode = 'passenger' | 'driver' | 'admin';
 
+interface UniUser {
+  id: string;
+  username: string;
+  phone: string;
+}
+
 interface Passenger {
   id: string;
   name: string;
@@ -201,6 +207,10 @@ const App: React.FC = () => {
   // Auth states
   const [session, setSession] = useState<any>(null);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UniUser | null>(() => {
+    const saved = localStorage.getItem('unihub_user_v12');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [activeDriverId, setActiveDriverId] = useState<string | null>(() => {
     return sessionStorage.getItem('unihub_driver_session_v12');
   });
@@ -314,6 +324,48 @@ const App: React.FC = () => {
   }, []);
 
   const activeDriver = useMemo(() => drivers.find(d => d.id === activeDriverId), [drivers, activeDriverId]);
+
+  const handleGlobalUserAuth = async (username: string, phone: string) => {
+    if (!username || !phone) {
+      alert("Identification details required.");
+      return;
+    }
+    
+    setIsSyncing(true);
+    try {
+      // Check if user exists
+      const { data, error } = await supabase
+        .from('unihub_users')
+        .select('*')
+        .eq('phone', phone)
+        .maybeSingle();
+
+      let user: UniUser;
+      if (data) {
+        user = data as UniUser;
+      } else {
+        // Create new user
+        const newUser = { id: `USER-${Date.now()}`, username, phone };
+        const { error: insertErr } = await supabase.from('unihub_users').insert([newUser]);
+        if (insertErr) throw insertErr;
+        user = newUser;
+      }
+
+      setCurrentUser(user);
+      localStorage.setItem('unihub_user_v12', JSON.stringify(user));
+    } catch (err: any) {
+      alert("Access Error: " + err.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleLogout = () => {
+    if (confirm("Disconnect your Hub identity?")) {
+      localStorage.removeItem('unihub_user_v12');
+      setCurrentUser(null);
+    }
+  };
 
   const joinMission = async (missionId: string, driverId: string) => {
     const mission = missions.find(m => m.id === missionId);
@@ -688,6 +740,11 @@ const App: React.FC = () => {
     setViewMode(mode);
   };
 
+  // --- GATEWAY CHECK ---
+  if (!currentUser) {
+    return <HubGateway onIdentify={handleGlobalUserAuth} />;
+  }
+
   return (
     <div 
       className="flex flex-col lg:flex-row h-screen overflow-hidden bg-[#020617] text-slate-100 font-sans relative"
@@ -744,9 +801,9 @@ const App: React.FC = () => {
             />
           )}
           <NavItem active={false} icon="fa-share-nodes" label="Invite Friends" onClick={shareHub} />
-          <button onClick={() => { if(confirm("Clear your personal mission tracking?")) setMyRideIds([]); }} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl text-slate-500 hover:bg-white/5 transition-all mt-4">
-             <i className="fas fa-trash-can text-lg w-6"></i>
-             <span className="text-sm font-bold">Reset History</span>
+          <button onClick={handleLogout} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl text-slate-500 hover:bg-white/5 transition-all mt-4">
+             <i className="fas fa-power-off text-lg w-6"></i>
+             <span className="text-sm font-bold">Logout Profile</span>
           </button>
         </div>
 
@@ -766,9 +823,15 @@ const App: React.FC = () => {
                     <p className="text-sm font-black text-white truncate">{activeDriver.name}</p>
                   </div>
                 </div>
-                <button onClick={handleDriverLogout} className="mt-4 w-full py-2 bg-indigo-600 rounded-xl text-[8px] font-black uppercase tracking-widest">Logout</button>
+                <button onClick={handleDriverLogout} className="mt-4 w-full py-2 bg-indigo-600 rounded-xl text-[8px] font-black uppercase tracking-widest">Logout Terminal</button>
              </div>
-           ) : null}
+           ) : (
+             <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 mb-4">
+                <p className="text-[9px] font-black uppercase text-slate-500 leading-none">Profile</p>
+                <p className="text-sm font-black text-white truncate mt-1">{currentUser.username}</p>
+                <p className="text-[10px] text-slate-500 mt-1">{currentUser.phone}</p>
+             </div>
+           )}
           <div className="bg-emerald-500/10 p-6 rounded-[2.5rem] border border-emerald-500/20 relative overflow-hidden">
             <p className="text-[9px] font-black uppercase text-emerald-400 mb-2 flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
@@ -842,6 +905,7 @@ const App: React.FC = () => {
 
           {viewMode === 'passenger' && (
             <PassengerPortal 
+              currentUser={currentUser}
               nodes={nodes} 
               myRideIds={myRideIds}
               onAddNode={async (node: RideNode) => {
@@ -1018,6 +1082,77 @@ const App: React.FC = () => {
   );
 };
 
+// --- AUTH GATEWAY ---
+
+const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string) => void }) => {
+  const [username, setUsername] = useState('');
+  const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!username || !phone) return;
+    setLoading(true);
+    await onIdentify(username, phone);
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-[#020617] flex items-center justify-center p-6 z-[500]">
+      <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-amber-500/10 pointer-events-none"></div>
+      
+      <div className="w-full max-w-md space-y-12 text-center relative z-10 animate-in fade-in zoom-in duration-500">
+        <div className="space-y-6">
+          <div className="w-24 h-24 bg-amber-500 rounded-[2.5rem] flex items-center justify-center text-[#020617] text-4xl shadow-2xl mx-auto shadow-amber-500/20">
+            <i className="fas fa-fingerprint"></i>
+          </div>
+          <div>
+            <h1 className="text-4xl font-black tracking-tighter uppercase italic leading-none text-white">Hub Gateway</h1>
+            <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.4em] mt-3">Universal Dispatch Identification</p>
+          </div>
+        </div>
+
+        <div className="glass p-10 rounded-[3.5rem] border border-white/10 space-y-6 shadow-2xl">
+          <div className="space-y-4">
+            <div className="relative group">
+               <i className="fas fa-user absolute left-6 top-1/2 -translate-y-1/2 text-slate-500"></i>
+               <input 
+                 type="text" 
+                 placeholder="Username / Alias" 
+                 className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 pl-14 pr-6 text-white font-bold outline-none focus:border-amber-500 transition-all"
+                 value={username}
+                 onChange={e => setUsername(e.target.value)}
+               />
+            </div>
+            <div className="relative group">
+               <i className="fas fa-phone absolute left-6 top-1/2 -translate-y-1/2 text-slate-500"></i>
+               <input 
+                 type="tel" 
+                 placeholder="Phone Number" 
+                 className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 pl-14 pr-6 text-white font-bold outline-none focus:border-amber-500 transition-all"
+                 value={phone}
+                 onChange={e => setPhone(e.target.value)}
+                 onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+               />
+            </div>
+          </div>
+
+          <button 
+            onClick={handleSubmit}
+            disabled={loading || !username || !phone}
+            className="w-full py-5 bg-amber-500 text-[#020617] rounded-[2rem] font-black text-[11px] uppercase tracking-widest shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
+          >
+            {loading ? <i className="fas fa-spinner fa-spin mr-2"></i> : 'Establish Connection'}
+          </button>
+          
+          <p className="text-[9px] font-medium text-slate-500 leading-relaxed max-w-[200px] mx-auto">
+            By connecting, you agree to the Hub's operational safety protocols.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- AI COMPONENTS ---
 
 const AiHelpDesk = ({ onClose, settings }: { onClose: () => void, settings: AppSettings }) => {
@@ -1181,19 +1316,19 @@ const AdminLogin = ({ onLogin }: any) => {
   );
 };
 
-const PassengerPortal = ({ nodes, myRideIds, onAddNode, onJoin, onForceQualify, onCancel, drivers, search, settings, onShowQr }: any) => {
+const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onForceQualify, onCancel, drivers, search, settings, onShowQr }: any) => {
   const [showModal, setShowModal] = useState(false);
   const [joinModalNodeId, setJoinModalNodeId] = useState<string | null>(null);
   const [origin, setOrigin] = useState('');
   const [dest, setDest] = useState('');
-  const [leader, setLeader] = useState('');
-  const [phone, setPhone] = useState('');
+  const [leader, setLeader] = useState(currentUser?.username || '');
+  const [phone, setPhone] = useState(currentUser?.phone || '');
   const [type, setType] = useState<VehicleType>('Pragia');
   const [isSolo, setIsSolo] = useState(false);
   const [isLongDistance, setIsLongDistance] = useState(false);
   
-  const [joinName, setJoinName] = useState('');
-  const [joinPhone, setJoinPhone] = useState('');
+  const [joinName, setJoinName] = useState(currentUser?.username || '');
+  const [joinPhone, setJoinPhone] = useState(currentUser?.phone || '');
 
   // AI Form States
   const [aiInput, setAiInput] = useState('');
@@ -1272,7 +1407,7 @@ const PassengerPortal = ({ nodes, myRideIds, onAddNode, onJoin, onForceQualify, 
     try {
       await onAddNode(node);
       setShowModal(false);
-      setOrigin(''); setDest(''); setLeader(''); setPhone(''); setIsSolo(false); setIsLongDistance(false);
+      setOrigin(''); setDest(''); setIsSolo(false); setIsLongDistance(false);
     } catch (err) {}
   };
 
@@ -1365,9 +1500,9 @@ const PassengerPortal = ({ nodes, myRideIds, onAddNode, onJoin, onForceQualify, 
                     <option value="Pragia">Pragia</option>
                     <option value="Taxi">Taxi</option>
                   </select>
-                  <input className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 outline-none font-bold" placeholder="Your Name" value={leader} onChange={e => setLeader(e.target.value)} />
+                  <input className="w-full bg-white/5 border border-slate-100 rounded-2xl px-4 py-4 outline-none font-bold opacity-60" placeholder="Your Name" value={leader} readOnly />
                </div>
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="WhatsApp Number" value={phone} onChange={e => setPhone(e.target.value)} />
+               <input className="w-full bg-white/5 border border-slate-100 rounded-2xl px-6 py-4 outline-none font-bold opacity-60" placeholder="WhatsApp Number" value={phone} readOnly />
             </div>
             
             <div className="flex gap-4">
@@ -1385,21 +1520,20 @@ const PassengerPortal = ({ nodes, myRideIds, onAddNode, onJoin, onForceQualify, 
            <div className="glass-bright w-full max-sm:px-4 max-w-sm rounded-[2rem] p-8 space-y-6 animate-in zoom-in text-slate-900">
               <h3 className="text-xl font-black italic uppercase text-center text-white">Join Ride</h3>
               <div className="space-y-4">
-                 <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Name" value={joinName} onChange={e => setJoinName(e.target.value)} />
-                 <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Phone" value={joinPhone} onChange={e => setJoinPhone(e.target.value)} />
+                 <input className="w-full bg-white/10 border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold text-white opacity-70" placeholder="Name" value={joinName} readOnly />
+                 <input className="w-full bg-white/10 border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold text-white opacity-70" placeholder="Phone" value={joinPhone} readOnly />
               </div>
+              <p className="text-[9px] text-slate-500 text-center font-black uppercase italic">Joining using your profile identity</p>
               <div className="flex gap-3">
                  <button onClick={() => setJoinModalNodeId(null)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
                  <button onClick={() => { 
                    if (!joinName || !joinPhone) {
-                     alert("Please fill in both your name and phone number to join the ride.");
+                     alert("Profile incomplete. Logout and reconnect identity.");
                      return;
                    }
                    onJoin(joinModalNodeId, joinName, joinPhone); 
                    setJoinModalNodeId(null);
-                   setJoinName('');
-                   setJoinPhone('');
-                 }} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Join</button>
+                 }} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Join Hub Node</button>
               </div>
            </div>
         </div>
@@ -2266,4 +2400,5 @@ if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<App />);
 }
+
 
