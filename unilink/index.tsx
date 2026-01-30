@@ -138,18 +138,6 @@ const compressImage = (file: File, quality = 0.7, maxWidth = 800): Promise<strin
   });
 };
 
-const shareHub = async () => {
-  const shareData = {
-    title: 'UniHub Dispatch',
-    text: 'Join the smartest ride-sharing hub on campus! Form groups, save costs, and move fast.',
-    url: window.location.origin,
-  };
-  try {
-    if (navigator.share) { await navigator.share(shareData); } 
-    else { window.open(`https://wa.me/?text=${encodeURIComponent(shareData.text + ' ' + shareData.url)}`, '_blank'); }
-  } catch (err) { console.log('Share failed', err); }
-};
-
 // --- AUTH PORTAL ---
 
 const AuthPortal: React.FC<{ onSession: (s: Session | null) => void }> = ({ onSession }) => {
@@ -280,6 +268,22 @@ const App: React.FC = () => {
     if (error) alert("Creation failed: " + error.message);
   };
 
+  const joinNode = async (nodeId: string, name: string, phone: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    if (node.passengers.length >= node.capacityNeeded) { alert("Node is full."); return; }
+    
+    const newPassenger = { id: `P-${Date.now()}`, name, phone };
+    const updatedPassengers = [...node.passengers, newPassenger];
+    const newStatus = updatedPassengers.length >= node.capacityNeeded ? 'qualified' : 'forming';
+
+    const { error } = await supabase.from('unihub_nodes').update({ 
+      passengers: updatedPassengers, 
+      status: newStatus 
+    }).eq('id', nodeId);
+    if (error) alert("Failed to join node.");
+  };
+
   const acceptRide = async (nodeId: string, driverId: string, customFare?: number) => {
     const driver = drivers.find(d => d.id === driverId);
     if (!driver || driver.walletBalance < settings.commissionPerSeat) { alert("Low balance."); return; }
@@ -307,6 +311,34 @@ const App: React.FC = () => {
     } else { await supabase.from('unihub_nodes').delete().eq('id', nodeId); }
   };
 
+  const joinMission = async (missionId: string, driverId: string) => {
+    const mission = missions.find(m => m.id === missionId);
+    const driver = drivers.find(d => d.id === driverId);
+    if (!mission || !driver) return;
+    if (mission.driversJoined.includes(driverId)) return;
+    if (driver.walletBalance < mission.entryFee) { alert("Insufficient wallet funds."); return; }
+
+    const updatedDrivers = [...mission.driversJoined, driverId];
+    await Promise.all([
+      supabase.from('unihub_missions').update({ driversJoined: updatedDrivers }).eq('id', missionId),
+      supabase.from('unihub_drivers').update({ walletBalance: driver.walletBalance - mission.entryFee }).eq('id', driverId),
+      supabase.from('unihub_transactions').insert([{ id: `TX-MSN-${Date.now()}`, driverId, amount: mission.entryFee, type: 'commission', timestamp: new Date().toLocaleString() }])
+    ]);
+  };
+
+  const handleApproveTopup = async (reqId: string) => {
+    const req = topupRequests.find(r => r.id === reqId);
+    if (!req) return;
+    const driver = drivers.find(d => d.id === req.driverId);
+    if (!driver) return;
+
+    await Promise.all([
+      supabase.from('unihub_drivers').update({ walletBalance: driver.walletBalance + req.amount }).eq('id', req.driverId),
+      supabase.from('unihub_topups').update({ status: 'approved' }).eq('id', reqId),
+      supabase.from('unihub_transactions').insert([{ id: `TX-TOP-${Date.now()}`, driverId: req.driverId, amount: req.amount, type: 'topup', timestamp: new Date().toLocaleString() }])
+    ]);
+  };
+
   const requestRegistration = async (reg: RegistrationRequest) => {
     await supabase.from('unihub_registrations').insert([reg]);
     alert("Application sent.");
@@ -325,32 +357,11 @@ const App: React.FC = () => {
     ]);
   };
 
-  // Fix: Added missing joinNode function
-  const joinNode = async (nodeId: string, passenger: Passenger) => {
-    const node = nodes.find(n => n.id === nodeId);
-    if (!node) return;
-    if (node.passengers.length >= node.capacityNeeded) { alert("Node is full."); return; }
-    const updatedPassengers = [...node.passengers, passenger];
-    const status = updatedPassengers.length === node.capacityNeeded ? 'qualified' : 'forming';
-    const { error } = await supabase.from('unihub_nodes').update({ passengers: updatedPassengers, status }).eq('id', nodeId);
-    if (error) alert("Failed to join node.");
-  };
-
-  // Fix: Added missing joinMission function
-  const joinMission = async (missionId: string, driverId: string) => {
-    const mission = missions.find(m => m.id === missionId);
-    if (!mission) return;
-    if (mission.driversJoined.includes(driverId)) return;
-    const updatedDrivers = [...mission.driversJoined, driverId];
-    const { error } = await supabase.from('unihub_missions').update({ driversJoined: updatedDrivers }).eq('id', missionId);
-    if (error) alert("Failed to join mission.");
-  };
-
   if (!session) return <AuthPortal onSession={setSession} />;
 
   return (
     <div className="flex flex-col lg:flex-row h-screen overflow-hidden bg-[#020617] text-slate-100 font-sans relative"
-      style={settings.appWallpaper ? { backgroundImage: `url(${settings.appWallpaper})`, backgroundSize: 'cover' } : {}}>
+      style={settings.appWallpaper ? { backgroundImage: `url(${settings.appWallpaper})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
       {settings.appWallpaper && <div className="absolute inset-0 bg-[#020617]/85 pointer-events-none z-0"></div>}
       
       {/* Sidebar */}
@@ -393,7 +404,7 @@ const App: React.FC = () => {
 
           {viewMode === 'passenger' && <PassengerPortal nodes={nodes} search={globalSearch} drivers={drivers} onJoin={joinNode} onCancel={cancelRide} onAddNode={addNode} settings={settings} />}
           {viewMode === 'driver' && <DriverPortal drivers={drivers} activeDriver={activeDriver} search={globalSearch} onLogin={(id:string, pin:string) => { const d = drivers.find(d => d.id === id); if (d && d.pin === pin) { setActiveDriverId(id); sessionStorage.setItem('unihub_driver_session_v12', id); } else alert("Wrong PIN"); }} onAccept={acceptRide} onVerify={verifyRide} onRequestRegistration={requestRegistration} missions={missions} onJoinMission={joinMission} dispatchedNodes={nodes.filter(n=>n.status==='dispatched')} qualifiedNodes={nodes.filter(n=>n.status==='qualified')} settings={settings} />}
-          {viewMode === 'admin' && (!isAdminAuthenticated ? <AdminLogin onLogin={p => { if(p === settings.adminSecret || p === 'admin123') { setIsAdminAuthenticated(true); sessionStorage.setItem('unihub_admin_auth_v12', 'true'); } else alert("Access Denied"); }} /> : <AdminPortal activeTab={activeTab} setActiveTab={setActiveTab} registrationRequests={registrationRequests} onApprove={approveRegistration} drivers={drivers} transactions={transactions} settings={settings} missions={missions} nodes={nodes} topupRequests={topupRequests} onUpdateSettings={async v => { const {id, ...d} = v; await supabase.from('unihub_settings').upsert({id:1, ...d}); fetchData(); }} />)}
+          {viewMode === 'admin' && (!isAdminAuthenticated ? <AdminLogin onLogin={p => { if(p === settings.adminSecret || p === 'admin123') { setIsAdminAuthenticated(true); sessionStorage.setItem('unihub_admin_auth_v12', 'true'); } else alert("Access Denied"); }} /> : <AdminPortal activeTab={activeTab} setActiveTab={setActiveTab} registrationRequests={registrationRequests} onApprove={approveRegistration} drivers={drivers} transactions={transactions} settings={settings} missions={missions} nodes={nodes} topupRequests={topupRequests} onUpdateSettings={async v => { const {id, ...d} = v; await supabase.from('unihub_settings').upsert({id:1, ...d}); fetchData(); }} onApproveTopup={handleApproveTopup} />)}
         </div>
       </main>
 
@@ -423,8 +434,9 @@ const ImpactStat = ({ label, value, icon, color }: any) => (
   </div>
 );
 
-const PassengerPortal = ({ nodes, search, drivers, onAddNode, settings }: any) => {
+const PassengerPortal = ({ nodes, search, drivers, onJoin, onAddNode, settings }: any) => {
   const [showModal, setShowModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState<string | null>(null);
   const [origin, setOrigin] = useState('');
   const [dest, setDest] = useState('');
   const [leader, setLeader] = useState('');
@@ -441,23 +453,32 @@ const PassengerPortal = ({ nodes, search, drivers, onAddNode, settings }: any) =
        </div>
        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filtered.map((n: any) => (
-            <div key={n.id} className="glass p-10 rounded-[3.5rem] border border-white/5 space-y-10 group hover:border-amber-500/30 transition-all shadow-xl">
+            <div key={n.id} className="glass p-10 rounded-[3.5rem] border border-white/5 space-y-10 group hover:border-amber-500/30 transition-all shadow-xl relative overflow-hidden">
                <div className="flex justify-between items-start">
-                  <span className="px-5 py-2 bg-indigo-600/20 text-indigo-400 rounded-2xl text-[8px] font-black uppercase tracking-widest">{n.status}</span>
+                  <span className={`px-5 py-2 rounded-2xl text-[8px] font-black uppercase tracking-widest ${n.status === 'qualified' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-indigo-600/20 text-indigo-400'}`}>{n.status}</span>
                   <p className="text-xl font-black text-emerald-400 italic">₵{n.farePerPerson}/p</p>
                </div>
-               <p className="text-2xl font-black text-white uppercase italic group-hover:text-amber-500 transition-colors leading-tight">{n.origin} → {n.destination}</p>
-               <div className="flex gap-2">
-                  {Array.from({length: n.capacityNeeded}).map((_, i) => (
-                    <div key={i} className={`w-3 h-3 rounded-full ${i < n.passengers.length ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-white/5'}`}></div>
-                  ))}
+               <div>
+                  <p className="text-2xl font-black text-white uppercase italic group-hover:text-amber-500 transition-colors leading-tight">{n.origin} → {n.destination}</p>
+                  <p className="text-[10px] font-black text-slate-600 uppercase mt-2">Leader: {n.leaderName}</p>
+               </div>
+               <div className="flex justify-between items-end">
+                 <div className="flex gap-2">
+                    {Array.from({length: n.capacityNeeded}).map((_, i) => (
+                      <div key={i} className={`w-3 h-3 rounded-full ${i < n.passengers.length ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-white/5'}`}></div>
+                    ))}
+                 </div>
+                 {n.status === 'forming' && (
+                   <button onClick={() => setShowJoinModal(n.id)} className="bg-white/5 text-white border border-white/10 px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:bg-amber-500 hover:text-[#020617] transition-all">Join Grid</button>
+                 )}
                </div>
             </div>
           ))}
        </div>
+
        {showModal && (
          <div className="fixed inset-0 bg-[#020617]/95 z-[200] flex items-center justify-center p-6">
-           <div className="w-full max-w-md glass p-10 rounded-[3rem] border border-white/10 space-y-6">
+           <div className="w-full max-w-md glass p-10 rounded-[3rem] border border-white/10 space-y-6 animate-in zoom-in">
               <h3 className="text-2xl font-black italic uppercase text-white text-center">Form New Node</h3>
               <div className="space-y-4">
                  <div className="flex bg-white/5 p-1 rounded-2xl">
@@ -479,6 +500,22 @@ const PassengerPortal = ({ nodes, search, drivers, onAddNode, settings }: any) =
                   });
                   setShowModal(false);
                 }} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-2xl font-black uppercase text-xs shadow-xl">Launch Node</button>
+              </div>
+           </div>
+         </div>
+       )}
+
+       {showJoinModal && (
+         <div className="fixed inset-0 bg-[#020617]/95 z-[200] flex items-center justify-center p-6">
+           <div className="w-full max-w-sm glass p-10 rounded-[3rem] border border-white/10 space-y-6 animate-in zoom-in">
+              <h3 className="text-xl font-black italic uppercase text-white text-center">Join Ride Node</h3>
+              <div className="space-y-4">
+                <input placeholder="Your Name" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold" value={leader} onChange={e => setLeader(e.target.value)} />
+                <input placeholder="Phone Number" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold" value={phone} onChange={e => setPhone(e.target.value)} />
+              </div>
+              <div className="flex gap-4">
+                <button onClick={() => { setShowJoinModal(null); setLeader(''); setPhone(''); }} className="flex-1 py-4 bg-white/5 rounded-2xl font-black uppercase text-xs">Abort</button>
+                <button onClick={() => { onJoin(showJoinModal, leader, phone); setShowJoinModal(null); setLeader(''); setPhone(''); }} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl">Confirm Entry</button>
               </div>
            </div>
          </div>
@@ -512,7 +549,7 @@ const DriverPortal = ({ drivers, activeDriver, search, onLogin, onAccept, onVeri
              <input placeholder="Full Name" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold" value={regData.name} onChange={e => setRegData({...regData, name: e.target.value})} />
              <input placeholder="License Plate" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold" value={regData.plate} onChange={e => setRegData({...regData, plate: e.target.value})} />
              <input placeholder="PIN" type="password" maxLength={4} className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold text-center" value={regData.pin} onChange={e => setRegData({...regData, pin: e.target.value})} />
-             <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-[9px] font-black text-indigo-400 uppercase leading-relaxed italic text-center">
+             <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-[9px] font-black text-indigo-400 uppercase leading-relaxed italic text-center text-balance">
                 Send ₵{settings.registrationFee} to: {settings.adminMomo} ({settings.adminMomoName})
              </div>
              <input placeholder="Transaction ID" className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold" value={regData.momo} onChange={e => setRegData({...regData, momo: e.target.value})} />
@@ -526,7 +563,7 @@ const DriverPortal = ({ drivers, activeDriver, search, onLogin, onAccept, onVeri
 
   return (
     <div className="space-y-12">
-       <div className="flex justify-between items-center p-10 glass rounded-[3.5rem] border border-indigo-500/20 shadow-2xl relative overflow-hidden">
+       <div className="flex flex-col md:flex-row justify-between items-center p-10 glass rounded-[3.5rem] border border-indigo-500/20 shadow-2xl relative overflow-hidden gap-6">
           <div className="flex items-center gap-8">
              <img src={activeDriver.photoUrl} className="w-24 h-24 rounded-3xl object-cover border-4 border-[#020617] shadow-xl" alt="driver" />
              <div>
@@ -537,7 +574,7 @@ const DriverPortal = ({ drivers, activeDriver, search, onLogin, onAccept, onVeri
                 </div>
              </div>
           </div>
-          <button className="px-10 py-5 bg-white/5 rounded-3xl font-black uppercase text-[10px] text-slate-400 border border-white/5 shadow-xl italic">Topup Wallet</button>
+          <button onClick={() => alert(`Contact Admin at ${settings.adminMomo} to topup wallet.`)} className="px-10 py-5 bg-white/5 rounded-3xl font-black uppercase text-[10px] text-slate-400 border border-white/5 shadow-xl italic hover:text-white hover:bg-white/10 transition-all">Topup Wallet</button>
        </div>
 
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
@@ -595,7 +632,7 @@ const DriverPortal = ({ drivers, activeDriver, search, onLogin, onAccept, onVeri
   );
 };
 
-const AdminPortal = ({ activeTab, setActiveTab, registrationRequests, onApprove, drivers, transactions, settings, missions, nodes, topupRequests, onUpdateSettings }: any) => {
+const AdminPortal = ({ activeTab, setActiveTab, registrationRequests, onApprove, drivers, transactions, settings, missions, nodes, topupRequests, onUpdateSettings, onApproveTopup }: any) => {
   const profit = useMemo(() => transactions.reduce((a: number, b: any) => a + b.amount, 0), [transactions]);
   const [lSettings, setLSettings] = useState(settings);
 
@@ -656,6 +693,23 @@ const AdminPortal = ({ activeTab, setActiveTab, registrationRequests, onApprove,
          </div>
        )}
 
+       {activeTab === 'requests' && (
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {topupRequests.filter(r=>r.status==='pending').map((r: any) => (
+              <div key={r.id} className="glass p-8 rounded-[2.5rem] border border-white/5 space-y-4 shadow-xl">
+                 <p className="text-[10px] font-black text-slate-500 uppercase">Topup Hub</p>
+                 <div className="flex justify-between items-center">
+                    <p className="text-3xl font-black text-emerald-400 italic">₵ {r.amount}</p>
+                    <p className="text-[9px] font-black text-slate-600 uppercase">{r.timestamp}</p>
+                 </div>
+                 <p className="text-xs font-bold text-white bg-white/5 p-3 rounded-xl border border-white/5 truncate">{r.momoReference}</p>
+                 <button onClick={() => onApproveTopup(r.id)} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl italic">Release Credit</button>
+              </div>
+            ))}
+            {topupRequests.filter(r=>r.status==='pending').length === 0 && <p className="col-span-full text-center text-[10px] font-black uppercase text-slate-600 py-10">No pending credit releases</p>}
+         </div>
+       )}
+
        {activeTab === 'settings' && (
           <div className="glass p-10 rounded-[3rem] border border-white/5 space-y-12">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
@@ -666,8 +720,9 @@ const AdminPortal = ({ activeTab, setActiveTab, registrationRequests, onApprove,
                   <AdminInput label="Entry Fee (₵)" value={lSettings.registrationFee} onChange={(v: string) => setLSettings({...lSettings, registrationFee: Number(v)})} />
                 </div>
                 <div className="space-y-6">
-                  <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest italic">Vault Security</h4>
+                  <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest italic">Hub Experience</h4>
                   <AdminInput label="Admin MoMo" value={lSettings.adminMomo} onChange={(v: string) => setLSettings({...lSettings, adminMomo: v})} />
+                  <AdminInput label="Wallpaper URL" value={lSettings.appWallpaper} onChange={(v: string) => setLSettings({...lSettings, appWallpaper: v})} />
                   <AdminInput label="Admin Secret Key" value={lSettings.adminSecret} onChange={(v: string) => setLSettings({...lSettings, adminSecret: v})} />
                 </div>
              </div>
@@ -727,14 +782,16 @@ const HelpModal = ({ onClose }: any) => (
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-10 text-slate-400 text-sm">
         <div className="space-y-4">
-          <h4 className="font-black text-amber-500 uppercase italic tracking-widest">Passenger Manual</h4>
-          <p>• Start a Node for group travel or request Solo for immediate dispatch.</p>
-          <p>• Only share your verification code with the driver once you reach the final destination.</p>
+          <h4 className="font-black text-amber-500 uppercase italic tracking-widest underline underline-offset-4">Passenger Manual</h4>
+          <p>• <span className="text-white">Form a Node</span>: Create a new ride node with a destination. You are the leader.</p>
+          <p>• <span className="text-white">Join a Grid</span>: Browse available nodes and join one with seats left.</p>
+          <p>• <span className="text-white">Verify Trip</span>: Once the driver arrives and you reach your destination, give them your <span className="text-amber-500">Verification PIN</span> shown on your node details.</p>
         </div>
         <div className="space-y-4">
-          <h4 className="font-black text-indigo-400 uppercase italic tracking-widest">Driver Manual</h4>
-          <p>• Keep wallet credit above ₵5.0 to accept marketplace jobs.</p>
-          <p>• Join Hub Missions to secure high-traffic station positions near campus gates.</p>
+          <h4 className="font-black text-indigo-400 uppercase italic tracking-widest underline underline-offset-4">Driver Manual</h4>
+          <p>• <span className="text-white">Wallet</span>: You need ₵{2.00} commission per seat to accept a job.</p>
+          <p>• <span className="text-white">Missions</span>: Station missions are premium spots on campus. Pay the station fee to occupy a spot and get priority dispatch.</p>
+          <p>• <span className="text-white">Verification</span>: You <span className="text-rose-400 italic">must</span> enter the passenger's PIN to complete the trip and clear your operational queue.</p>
         </div>
       </div>
       <button onClick={onClose} className="w-full py-5 bg-amber-500 text-[#020617] rounded-3xl font-black uppercase shadow-xl italic">Grid Understood</button>
@@ -747,3 +804,4 @@ if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<App />);
 }
+
