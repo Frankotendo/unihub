@@ -194,9 +194,10 @@ const compressImage = (file: File, quality = 0.7, maxWidth = 800): Promise<strin
 const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<PortalMode>('passenger');
   const [activeTab, setActiveTab] = useState<'monitor' | 'fleet' | 'requests' | 'settings' | 'missions' | 'onboarding'>('monitor');
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
-    return sessionStorage.getItem('unihub_admin_auth_v12') === 'true';
-  });
+  
+  // Auth states
+  const [session, setSession] = useState<any>(null);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [activeDriverId, setActiveDriverId] = useState<string | null>(() => {
     return sessionStorage.getItem('unihub_driver_session_v12');
   });
@@ -236,7 +237,7 @@ const App: React.FC = () => {
     setIsSyncing(true);
     try {
       const [
-        { data: sData, error: sError },
+        { data: sData },
         { data: nData },
         { data: dData },
         { data: mData },
@@ -268,6 +269,18 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    // Initial Session Check
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setIsAdminAuthenticated(!!session);
+    });
+
+    // Listen for Auth Changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setIsAdminAuthenticated(!!session);
+    });
+
     fetchData();
 
     const channels = [
@@ -280,7 +293,10 @@ const App: React.FC = () => {
       supabase.channel('public:unihub_registrations').on('postgres_changes', { event: '*', schema: 'public', table: 'unihub_registrations' }, () => fetchData()).subscribe()
     ];
 
-    return () => channels.forEach(ch => supabase.removeChannel(ch));
+    return () => {
+      channels.forEach(ch => supabase.removeChannel(ch));
+      subscription.unsubscribe();
+    };
   }, []);
 
   const activeDriver = useMemo(() => drivers.find(d => d.id === activeDriverId), [drivers, activeDriverId]);
@@ -592,29 +608,30 @@ const App: React.FC = () => {
     registrationRequests.filter(r => r.status === 'pending').length, 
   [topupRequests, registrationRequests]);
 
-  const handleAdminAuth = async (password: string) => {
-    if (!password) return;
+  const handleAdminAuth = async (email: string, pass: string) => {
+    if (!email || !pass) return;
     try {
-      const { data: isVerified, error } = await supabase.rpc('verify_admin_secret', { candidate_secret: password });
-      
-      if (error) throw error;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: pass
+      });
 
-      if (isVerified) {
+      if (error) throw error;
+      
+      if (data.session) {
+        setSession(data.session);
         setIsAdminAuthenticated(true);
-        sessionStorage.setItem('unihub_admin_auth_v12', 'true');
-      } else {
-        alert("Verification Failed: Master Key Invalid.");
       }
     } catch (err: any) {
       console.error("Auth error:", err);
-      if (password === settings.adminSecret || password === 'admin123') {
-         setIsAdminAuthenticated(true);
-         sessionStorage.setItem('unihub_admin_auth_v12', 'true');
-         alert("Connected via local fallback.");
-      } else {
-         alert("Authentication logic error.");
-      }
+      alert("Authentication Failed: " + err.message);
     }
+  };
+
+  const handleAdminLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAdminAuthenticated(false);
+    setSession(null);
   };
 
   const handleDriverAuth = (driverId: string, pin: string) => {
@@ -850,11 +867,12 @@ const App: React.FC = () => {
                 registrationRequests={registrationRequests}
                 onApproveTopup={approveTopup}
                 onApproveRegistration={approveRegistration}
-                onLock={() => {setIsAdminAuthenticated(false); sessionStorage.removeItem('unihub_admin_auth_v12');}}
+                onLock={handleAdminLogout}
                 search={globalSearch}
                 settings={settings}
                 onUpdateSettings={updateGlobalSettings}
                 hubRevenue={hubRevenue}
+                adminEmail={session?.user?.email}
               />
             )
           )}
@@ -936,7 +954,7 @@ const App: React.FC = () => {
                       "Pricing: Fares are determined by vehicle type and solo multipliers.",
                       "Cancellation: Use the WhatsApp chat to resolve trip issues.",
                       "Security: PINs are mandatory for all driver logins.",
-                      "Stealth: Admin access is only visible via secret hub links."
+                      "Stealth: Admin access is only via Auth credentials."
                    ]}
                 />
              </div>
@@ -989,12 +1007,13 @@ const MobileNavItem = ({ active, icon, label, onClick, badge }: any) => (
 );
 
 const AdminLogin = ({ onLogin }: any) => {
+  const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
 
   const handleAuth = async () => {
     setIsVerifying(true);
-    await onLogin(pass);
+    await onLogin(email, pass);
     setIsVerifying(false);
   };
 
@@ -1004,11 +1023,18 @@ const AdminLogin = ({ onLogin }: any) => {
         <i className="fas fa-shield-halved text-3xl"></i>
       </div>
       <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-8 text-white">Admin Vault</h2>
-      <div className="w-full max-sm:px-4 max-w-sm glass p-8 lg:p-10 rounded-[2.5rem] border border-white/10 space-y-6">
+      <div className="w-full max-sm:px-4 max-w-sm glass p-8 lg:p-10 rounded-[2.5rem] border border-white/10 space-y-4">
+          <input 
+            type="email" 
+            placeholder="Admin Email" 
+            className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-amber-500 font-bold text-white"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+          />
           <input 
             type="password" 
-            placeholder="Master Key" 
-            className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-amber-500 font-bold text-center text-white"
+            placeholder="Secure Password" 
+            className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-amber-500 font-bold text-white"
             value={pass}
             onChange={e => setPass(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAuth()}
@@ -1016,10 +1042,10 @@ const AdminLogin = ({ onLogin }: any) => {
           />
         <button 
           onClick={handleAuth} 
-          className="w-full py-4 bg-amber-500 text-[#020617] rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl disabled:opacity-50"
+          className="w-full py-4 bg-amber-500 text-[#020617] rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl disabled:opacity-50 mt-4"
           disabled={isVerifying}
         >
-          {isVerifying ? 'Verifying...' : 'Enter Vault'}
+          {isVerifying ? 'Authenticating...' : 'Unlock Vault'}
         </button>
       </div>
     </div>
@@ -1605,7 +1631,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
   );
 };
 
-const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onDeleteDriver, onCancelRide, onSettleRide, missions, onCreateMission, onDeleteMission, transactions, topupRequests, registrationRequests, onApproveTopup, onApproveRegistration, onLock, search, settings, onUpdateSettings, hubRevenue }: any) => {
+const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onDeleteDriver, onCancelRide, onSettleRide, missions, onCreateMission, onDeleteMission, transactions, topupRequests, registrationRequests, onApproveTopup, onApproveRegistration, onLock, search, settings, onUpdateSettings, hubRevenue, adminEmail }: any) => {
   const [showDriverModal, setShowDriverModal] = useState(false);
   const [showMissionModal, setShowMissionModal] = useState(false);
   const [newDriver, setNewDriver] = useState<Partial<Driver>>({ vehicleType: 'Pragia', pin: '0000' });
@@ -1631,14 +1657,24 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
 
   return (
     <div className="animate-in slide-in-from-bottom-8 space-y-8 pb-10">
-      <div className="flex bg-white/5 p-1 rounded-[1.5rem] border border-white/10 overflow-x-auto no-scrollbar max-w-full">
-        <TabBtn active={activeTab === 'monitor'} label="Stats" onClick={() => setActiveTab('monitor')} />
-        <TabBtn active={activeTab === 'fleet'} label="Fleet" onClick={() => setActiveTab('fleet')} />
-        <TabBtn active={activeTab === 'onboarding'} label="Applications" onClick={() => setActiveTab('onboarding')} count={registrationRequests.filter((r:any)=>r.status==='pending').length} />
-        <TabBtn active={activeTab === 'missions'} label="Hub Missions" onClick={() => setActiveTab('missions')} />
-        <TabBtn active={activeTab === 'requests'} label="Credit" onClick={() => setActiveTab('requests')} count={topupRequests.filter((r:any)=>r.status==='pending').length} />
-        <TabBtn active={activeTab === 'settings'} label="Setup" onClick={() => setActiveTab('settings')} />
-        <button onClick={onLock} className="px-6 py-3 text-[9px] font-black uppercase text-rose-500 border-l border-white/5">Lock</button>
+      <div className="flex items-center justify-between mb-4">
+         <div className="flex bg-white/5 p-1 rounded-[1.5rem] border border-white/10 overflow-x-auto no-scrollbar max-w-full">
+            <TabBtn active={activeTab === 'monitor'} label="Stats" onClick={() => setActiveTab('monitor')} />
+            <TabBtn active={activeTab === 'fleet'} label="Fleet" onClick={() => setActiveTab('fleet')} />
+            <TabBtn active={activeTab === 'onboarding'} label="Applications" onClick={() => setActiveTab('onboarding')} count={registrationRequests.filter((r:any)=>r.status==='pending').length} />
+            <TabBtn active={activeTab === 'missions'} label="Hub Missions" onClick={() => setActiveTab('missions')} />
+            <TabBtn active={activeTab === 'requests'} label="Credit" onClick={() => setActiveTab('requests')} count={topupRequests.filter((r:any)=>r.status==='pending').length} />
+            <TabBtn active={activeTab === 'settings'} label="Setup" onClick={() => setActiveTab('settings')} />
+         </div>
+         <div className="flex items-center gap-4 bg-rose-600/10 px-4 py-2 rounded-xl border border-rose-500/20">
+            <div className="hidden sm:block text-right">
+               <p className="text-[7px] font-black text-rose-500 uppercase leading-none">Admin Active</p>
+               <p className="text-[9px] font-bold text-white truncate max-w-[120px]">{adminEmail}</p>
+            </div>
+            <button onClick={onLock} className="text-rose-500 hover:text-rose-400 transition-colors">
+               <i className="fas fa-power-off text-sm"></i>
+            </button>
+         </div>
       </div>
 
       {activeTab === 'monitor' && (
@@ -1814,7 +1850,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                     <AdminInput label="Admin MoMo" value={localSettings.adminMomo} onChange={v => setLocalSettings({...localSettings, adminMomo: v})} />
                     <AdminInput label="Admin Name" value={localSettings.adminMomoName} onChange={v => setLocalSettings({...localSettings, adminMomoName: v})} />
                     <AdminInput label="WhatsApp Line" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
-                    <AdminInput label="Master Key" type="password" value={localSettings.adminSecret || ''} onChange={v => setLocalSettings({...localSettings, adminSecret: v})} />
+                    <AdminInput label="System Secret (Legacy)" type="password" value={localSettings.adminSecret || ''} onChange={v => setLocalSettings({...localSettings, adminSecret: v})} />
                  </div>
               </section>
 
