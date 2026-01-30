@@ -9,6 +9,9 @@ const SUPABASE_URL = "https://kzjgihwxiaeqzopeuzhm.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6amdpaHd4aWFlcXpvcGV1emhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2OTU4MDMsImV4cCI6MjA4NTI3MTgwM30.G_6hWSgPstbOi9GgnGprZW9IQVFZSGPQnyC80RROmuw";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// --- GEMINI INITIALIZATION ---
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
 // --- TYPES & INTERFACES ---
 
 type VehicleType = 'Pragia' | 'Taxi' | 'Shuttle';
@@ -212,12 +215,9 @@ const App: React.FC = () => {
 
   const [showQrModal, setShowQrModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showAiHelp, setShowAiHelp] = useState(false);
   const [isNewUser, setIsNewUser] = useState(() => !localStorage.getItem('unihub_seen_welcome_v12'));
   const [isSyncing, setIsSyncing] = useState(true);
-
-  const isVaultAccess = useMemo(() => {
-    return new URLSearchParams(window.location.search).get('access') === 'vault';
-  }, []);
 
   const [settings, setSettings] = useState<AppSettings>({
     adminMomo: "024-123-4567",
@@ -240,6 +240,10 @@ const App: React.FC = () => {
   const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>([]);
 
   const [globalSearch, setGlobalSearch] = useState('');
+
+  const isVaultAccess = useMemo(() => {
+    return new URLSearchParams(window.location.search).get('access') === 'vault';
+  }, []);
 
   const fetchData = async () => {
     setIsSyncing(true);
@@ -277,18 +281,15 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // Sync myRideIds to localStorage
     localStorage.setItem('unihub_my_rides_v12', JSON.stringify(myRideIds));
   }, [myRideIds]);
 
   useEffect(() => {
-    // Initial Session Check
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsAdminAuthenticated(!!session);
     });
 
-    // Listen for Auth Changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setIsAdminAuthenticated(!!session);
@@ -378,7 +379,6 @@ const App: React.FC = () => {
     const node = nodes.find(n => n.id === nodeId);
     if (!driver || !node) return;
 
-    // Check if balance covers total potential commission (per seat * number of passengers)
     const totalPotentialCommission = settings.commissionPerSeat * node.passengers.length;
     if (driver.walletBalance < totalPotentialCommission) {
       alert(`Insufficient Balance! You need at least ₵${totalPotentialCommission.toFixed(2)} to accept this job.`);
@@ -387,7 +387,6 @@ const App: React.FC = () => {
 
     const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
     
-    // Assign driver, but do NOT deduct credit yet. Credit deduction is moved to verifyRide (scan).
     await supabase.from('unihub_nodes').update({ 
       status: 'dispatched', 
       assignedDriverId: driverId, 
@@ -409,11 +408,9 @@ const App: React.FC = () => {
         return;
       }
 
-      // Calculate final commission based on passengers in the node
       const totalCommission = settings.commissionPerSeat * node.passengers.length;
 
       try {
-        // DEDUCT CREDIT AFTER SCAN
         await Promise.all([
           supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId),
           supabase.from('unihub_drivers').update({ 
@@ -427,7 +424,6 @@ const App: React.FC = () => {
             timestamp: new Date().toLocaleString()
           }])
         ]);
-        // Also remove from local tracking once completed
         removeRideFromMyList(nodeId);
         alert(`Verification successful! Commission of ₵${totalCommission.toFixed(2)} deducted.`);
       } catch (err: any) {
@@ -445,7 +441,6 @@ const App: React.FC = () => {
 
     try {
       if (node.status === 'dispatched' && node.assignedDriverId) {
-        // No refund logic needed here since we moved deduction to verifyRide (scan phase)
         const resetStatus = (node.isSolo || node.isLongDistance) ? 'qualified' : (node.passengers.length >= 4 ? 'qualified' : 'forming');
         const { error: resetErr } = await supabase.from('unihub_nodes').update({ 
           status: resetStatus, 
@@ -458,7 +453,6 @@ const App: React.FC = () => {
       } else {
         const { error: deleteErr } = await supabase.from('unihub_nodes').delete().eq('id', nodeId);
         if (deleteErr) throw deleteErr;
-        // Remove from local tracking list
         removeRideFromMyList(nodeId);
         alert("Ride request removed from the Hub.");
       }
@@ -807,7 +801,7 @@ const App: React.FC = () => {
             badge={isAdminAuthenticated && pendingRequestsCount > 0 ? pendingRequestsCount : undefined}
           />
         )}
-        <MobileNavItem active={false} icon="fa-circle-question" label="Help" onClick={() => setShowHelpModal(true)} />
+        <MobileNavItem active={false} icon="fa-message-bot" label="AI" onClick={() => setShowAiHelp(true)} />
       </nav>
 
       {/* Main Content */}
@@ -878,6 +872,7 @@ const App: React.FC = () => {
               qualifiedNodes={nodes.filter(n => n.status === 'qualified')} 
               dispatchedNodes={nodes.filter(n => n.status === 'dispatched')}
               missions={missions}
+              allNodes={nodes}
               onJoinMission={joinMission}
               onAccept={acceptRide}
               onVerify={verifyRide}
@@ -921,6 +916,17 @@ const App: React.FC = () => {
           )}
         </div>
       </main>
+
+      {/* AI Help Assistant FAB (Passenger) */}
+      <button 
+        onClick={() => setShowAiHelp(true)}
+        className="fixed bottom-24 right-6 lg:bottom-12 lg:right-12 w-16 h-16 bg-gradient-to-tr from-indigo-600 to-purple-500 rounded-full shadow-2xl flex items-center justify-center text-white text-2xl z-[100] hover:scale-110 transition-transform animate-bounce-slow"
+      >
+        <i className="fas fa-sparkles"></i>
+      </button>
+
+      {/* AI Help Modal */}
+      {showAiHelp && <AiHelpDesk onClose={() => setShowAiHelp(false)} settings={settings} />}
 
       {/* QR Code Modal */}
       {showQrModal && (
@@ -1008,6 +1014,86 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+// --- AI COMPONENTS ---
+
+const AiHelpDesk = ({ onClose, settings }: { onClose: () => void, settings: AppSettings }) => {
+  const [messages, setMessages] = useState<{ role: 'user' | 'bot', text: string }[]>([
+    { role: 'bot', text: "Hello! I'm the UniHub AI Assistant. How can I help you move today?" }
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+    const userMsg = input;
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setInput('');
+    setLoading(true);
+
+    try {
+      const prompt = `You are the UniHub Dispatch Support AI. 
+      App Info:
+      - Admin MoMo: ${settings.adminMomo} (${settings.adminMomoName})
+      - WhatsApp: ${settings.whatsappNumber}
+      - Pragia Fare: ₵${settings.farePerPragia}
+      - Taxi Fare: ₵${settings.farePerTaxi}
+      - Move Codes: Passengers must share these ONLY at destination.
+      - Drivers: Pay mission fees to station.
+      
+      User Question: ${userMsg}
+      Keep it brief, friendly, and helpful. Use emojis.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt
+      });
+
+      setMessages(prev => [...prev, { role: 'bot', text: response.text || "Sorry, I'm having trouble thinking." }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'bot', text: "Service error. Please try again." }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[300] flex items-end sm:items-center justify-center p-4">
+      <div className="w-full max-w-lg bg-[#020617] rounded-[2.5rem] border border-white/10 flex flex-col h-[80vh] overflow-hidden animate-in slide-in-from-bottom-12 shadow-2xl">
+        <div className="p-6 border-b border-white/5 flex justify-between items-center bg-indigo-600">
+           <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white"><i className="fas fa-robot"></i></div>
+              <div>
+                <h3 className="font-black uppercase italic text-white text-sm">AI Help Desk</h3>
+                <p className="text-[9px] font-black text-indigo-200 uppercase">UniHub Assistant</p>
+              </div>
+           </div>
+           <button onClick={onClose} className="text-white/50 hover:text-white"><i className="fas fa-times"></i></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 no-scrollbar">
+           {messages.map((m, i) => (
+             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] p-4 rounded-3xl text-xs font-medium leading-relaxed ${m.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white/5 text-slate-300 rounded-tl-none'}`}>
+                   {m.text}
+                </div>
+             </div>
+           ))}
+           {loading && <div className="text-slate-500 text-[10px] font-black uppercase flex items-center gap-2 px-2 animate-pulse"><i className="fas fa-spinner fa-spin"></i> AI is thinking...</div>}
+        </div>
+        <div className="p-6 bg-white/5 border-t border-white/5 flex gap-2">
+           <input 
+             className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-xs outline-none focus:border-indigo-500 text-white" 
+             placeholder="Type your question..." 
+             value={input}
+             onChange={e => setInput(e.target.value)}
+             onKeyDown={e => e.key === 'Enter' && handleSend()}
+           />
+           <button onClick={handleSend} className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white"><i className="fas fa-paper-plane"></i></button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -1109,12 +1195,14 @@ const PassengerPortal = ({ nodes, myRideIds, onAddNode, onJoin, onForceQualify, 
   const [joinName, setJoinName] = useState('');
   const [joinPhone, setJoinPhone] = useState('');
 
-  // Sift through nodes to find the user's specific active missions
+  // AI Form States
+  const [aiInput, setAiInput] = useState('');
+  const [aiProcessing, setAiProcessing] = useState(false);
+
   const myActiveNodes = useMemo(() => nodes.filter((n: any) => 
     myRideIds.includes(n.id) && n.status !== 'completed'
   ), [nodes, myRideIds]);
 
-  // General Hub Feed, filtered and excluding the "My Rides" that are already shown above
   const filteredNodes = nodes.filter((n: any) => 
     n.status !== 'completed' && 
     !myRideIds.includes(n.id) &&
@@ -1122,6 +1210,40 @@ const PassengerPortal = ({ nodes, myRideIds, onAddNode, onJoin, onForceQualify, 
      n.origin.toLowerCase().includes(search.toLowerCase()) ||
      n.leaderName.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const handleAiFill = async () => {
+    if (!aiInput.trim()) return;
+    setAiProcessing(true);
+    try {
+      const prompt = `Parse this campus ride request into JSON: "${aiInput}".
+      Available VehicleTypes: "Pragia", "Taxi". 
+      Schema: {
+        "origin": string,
+        "destination": string,
+        "isSolo": boolean,
+        "vehicleType": VehicleType
+      }`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+        config: { responseMimeType: "application/json" }
+      });
+
+      const data = JSON.parse(response.text || '{}');
+      if (data.origin) setOrigin(data.origin);
+      if (data.destination) setDest(data.destination);
+      if (data.isSolo !== undefined) setIsSolo(data.isSolo);
+      if (data.vehicleType) setType(data.vehicleType);
+      
+      setAiInput('');
+    } catch (err) {
+      console.error(err);
+      alert("AI couldn't parse that. Try typing Departure and Destination.");
+    } finally {
+      setAiProcessing(false);
+    }
+  };
 
   const createNode = async () => {
     if (!origin) { alert("Please enter a Departure Point."); return; }
@@ -1169,7 +1291,6 @@ const PassengerPortal = ({ nodes, myRideIds, onAddNode, onJoin, onForceQualify, 
         </div>
       </div>
 
-      {/* PRIORITIZED: MY MISSIONS (Solving the 'Code Search' problem) */}
       {myActiveNodes.length > 0 && (
         <section className="space-y-6">
            <div className="flex items-center gap-4">
@@ -1184,7 +1305,6 @@ const PassengerPortal = ({ nodes, myRideIds, onAddNode, onJoin, onForceQualify, 
         </section>
       )}
 
-      {/* HUB TRAFFIC */}
       <section className="space-y-6">
         <div className="flex items-center gap-4">
            <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Global Hub Traffic</h3>
@@ -1201,32 +1321,32 @@ const PassengerPortal = ({ nodes, myRideIds, onAddNode, onJoin, onForceQualify, 
         </div>
       </section>
 
-      {/* About Section */}
-      <section className="pt-12 border-t border-white/5">
-        <div className="max-w-4xl mx-auto space-y-10">
-          <div className="text-center space-y-4">
-            <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white">About UniHub</h3>
-            <p className="text-slate-400 text-sm leading-relaxed max-w-2xl mx-auto italic">{settings.aboutMeText}</p>
-          </div>
-          
-          {settings.aboutMeImages && settings.aboutMeImages.length > 0 && (
-            <div className="flex gap-6 overflow-x-auto pb-6 no-scrollbar snap-x">
-               {settings.aboutMeImages.map((img, idx) => (
-                 <div key={idx} className="flex-shrink-0 w-72 h-48 rounded-[2rem] overflow-hidden border border-white/10 snap-center shadow-2xl">
-                    <img src={img} className="w-full h-full object-cover" alt={`Hub preview ${idx}`} />
-                 </div>
-               ))}
-            </div>
-          )}
-        </div>
-      </section>
-
       {showModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-sm:px-4 max-w-lg rounded-[2.5rem] p-8 lg:p-10 space-y-8 animate-in zoom-in text-slate-900">
             <div className="text-center">
               <h3 className="text-2xl font-black italic tracking-tighter uppercase text-white">Create Ride Request</h3>
               <p className="text-slate-400 text-[10px] font-black uppercase mt-1">Carpooling or Quick Drop</p>
+            </div>
+
+            {/* AI Assistant Field */}
+            <div className="p-4 bg-indigo-600/10 border border-indigo-500/20 rounded-2xl space-y-3">
+               <div className="flex items-center gap-2 text-indigo-400 font-black text-[9px] uppercase tracking-widest">
+                  <i className="fas fa-sparkles"></i> AI Quick Dispatch
+               </div>
+               <textarea 
+                 className="w-full bg-[#020617] text-white text-xs border border-white/10 rounded-xl p-3 outline-none focus:border-indigo-500 transition-all placeholder:text-slate-700 h-16"
+                 placeholder="e.g. I need a solo taxi from Limann to Business School"
+                 value={aiInput}
+                 onChange={e => setAiInput(e.target.value)}
+               />
+               <button 
+                 onClick={handleAiFill} 
+                 disabled={aiProcessing}
+                 className="w-full py-2 bg-indigo-600 text-white rounded-xl font-black text-[8px] uppercase tracking-widest disabled:opacity-50"
+               >
+                 {aiProcessing ? <i className="fas fa-spinner fa-spin mr-2"></i> : '✨ Auto-Fill Form'}
+               </button>
             </div>
 
             <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10">
@@ -1288,7 +1408,6 @@ const PassengerPortal = ({ nodes, myRideIds, onAddNode, onJoin, onForceQualify, 
   );
 };
 
-// Reusable card component for Nodes to simplify the Portal code
 const RideCard = ({ node, drivers, onJoin, onCancel, setJoinModalNodeId, isPriority }: any) => {
   const driver = drivers.find((d: any) => d.id === node.assignedDriverId);
   return (
@@ -1395,7 +1514,7 @@ const RideCard = ({ node, drivers, onJoin, onCancel, setJoinModalNodeId, isPrior
   );
 };
 
-const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes, dispatchedNodes, missions, onJoinMission, onAccept, onVerify, onCancel, onRequestTopup, onRequestRegistration, search, settings }: any) => {
+const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes, dispatchedNodes, missions, allNodes, onJoinMission, onAccept, onVerify, onCancel, onRequestTopup, onRequestRegistration, search, settings }: any) => {
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [pin, setPin] = useState('');
   const [verifyCode, setVerifyCode] = useState('');
@@ -1407,11 +1526,66 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
   const [isScanning, setIsScanning] = useState(false);
   const [activeMissionNodeId, setActiveMissionNodeId] = useState<string | null>(null);
 
+  // AI Insights State
+  const [hubInsight, setHubInsight] = useState<string | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [portraitScanning, setPortraitScanning] = useState(false);
+
   const handlePortraitUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setPortraitScanning(true);
       const compressed = await compressImage(file, 0.6, 400);
       setRegData({ ...regData, avatarUrl: compressed });
+
+      // AI VISION VERIFICATION
+      try {
+        const base64 = compressed.split(',')[1];
+        const response = await ai.models.generateContent({
+          model: 'gemini-3-flash-preview',
+          contents: [
+            { text: "Verify if this image is a portrait of a person. If it contains a vehicle, try to extract the license plate. Return JSON: { \"isPortrait\": boolean, \"licensePlate\": string | null }" },
+            { inlineData: { mimeType: "image/jpeg", data: base64 } }
+          ],
+          config: { responseMimeType: "application/json" }
+        });
+
+        const visionData = JSON.parse(response.text || '{}');
+        if (visionData.licensePlate) setRegData(prev => ({ ...prev, licensePlate: visionData.licensePlate }));
+        if (!visionData.isPortrait) {
+          alert("Portrait check failed. Please upload a clear photo of yourself.");
+          setRegData(prev => ({ ...prev, avatarUrl: undefined }));
+        }
+      } catch (err) {
+        console.error("Vision scan failed", err);
+      } finally {
+        setPortraitScanning(false);
+      }
+    }
+  };
+
+  const generateHubInsight = async () => {
+    setInsightLoading(true);
+    try {
+      const activeTraffic = allNodes.filter((n:any) => n.status !== 'completed').map((n:any) => `${n.origin} -> ${n.destination}`).join(', ');
+      const missionLocs = missions.map((m:any) => m.location).join(', ');
+      
+      const prompt = `Act as a logistics analyst for UniHub Dispatch. 
+      Current Passenger Traffic: ${activeTraffic}
+      Available Mission Stations: ${missionLocs}
+      
+      Suggest the best station for a driver to go to right now. 
+      Keep it very short (max 2 sentences). Start with 'UniHub Strategy:'.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt
+      });
+      setHubInsight(response.text || "No insights found.");
+    } catch (err) {
+      setHubInsight("Strategy service offline. Station at Main Gate.");
+    } finally {
+      setInsightLoading(false);
     }
   };
 
@@ -1514,9 +1688,9 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                   <p className="text-indigo-400 text-[10px] font-black uppercase mt-1">Registration Fee: ₵{settings.registrationFee || '...'}</p>
                </div>
                
-               <div className="flex justify-center">
+               <div className="flex justify-center flex-col items-center gap-2">
                   <input type="file" id="portrait-upload" className="hidden" accept="image/*" onChange={handlePortraitUpload} />
-                  <label htmlFor="portrait-upload" className="w-24 h-24 rounded-full bg-white/5 border-2 border-dashed border-white/10 flex flex-col items-center justify-center cursor-pointer hover:bg-white/10 transition-all overflow-hidden relative">
+                  <label htmlFor="portrait-upload" className={`w-24 h-24 rounded-full bg-white/5 border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-white/10 transition-all overflow-hidden relative ${portraitScanning ? 'border-indigo-500' : 'border-white/10'}`}>
                     {regData.avatarUrl ? (
                       <img src={regData.avatarUrl} className="w-full h-full object-cover" />
                     ) : (
@@ -1525,7 +1699,9 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                         <p className="text-[7px] font-black text-slate-500 uppercase">Add Photo</p>
                       </div>
                     )}
+                    {portraitScanning && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><i className="fas fa-spinner fa-spin text-white"></i></div>}
                   </label>
+                  {portraitScanning && <p className="text-[8px] font-black text-indigo-400 uppercase animate-pulse">AI scanning portrait...</p>}
                </div>
 
                <div className="bg-white/5 p-4 rounded-xl border border-white/10 text-center">
@@ -1534,17 +1710,17 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                   <p className="text-[10px] font-black text-slate-400 uppercase mt-1">{settings.adminMomoName}</p>
                </div>
                <div className="space-y-3">
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-bold text-sm" placeholder="Full Name" onChange={e => setRegData({...regData, name: e.target.value})} />
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-bold text-sm" placeholder="Full Name" value={regData.name || ''} onChange={e => setRegData({...regData, name: e.target.value})} />
                   <div className="grid grid-cols-2 gap-3">
-                    <select className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-sm" onChange={e => setRegData({...regData, vehicleType: e.target.value as VehicleType})}>
+                    <select className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-sm" value={regData.vehicleType || 'Pragia'} onChange={e => setRegData({...regData, vehicleType: e.target.value as VehicleType})}>
                        <option value="Pragia">Pragia</option>
                        <option value="Taxi">Taxi</option>
                     </select>
-                    <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-sm" placeholder="Plate Number" onChange={e => setRegData({...regData, licensePlate: e.target.value})} />
+                    <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-sm" placeholder="Plate Number" value={regData.licensePlate || ''} onChange={e => setRegData({...regData, licensePlate: e.target.value})} />
                   </div>
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-bold text-sm" placeholder="WhatsApp Number" onChange={e => setRegData({...regData, contact: e.target.value})} />
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-black text-center text-sm" placeholder="Set 4-Digit Login PIN" maxLength={4} onChange={e => setRegData({...regData, pin: e.target.value})} />
-                  <input className="w-full bg-white border border-emerald-500/30 rounded-xl px-5 py-3 outline-none font-black text-center text-emerald-600 text-sm" placeholder="MoMo Reference" onChange={e => setRegData({...regData, momoReference: e.target.value})} />
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-bold text-sm" placeholder="WhatsApp Number" value={regData.contact || ''} onChange={e => setRegData({...regData, contact: e.target.value})} />
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-black text-center text-sm" placeholder="Set 4-Digit Login PIN" maxLength={4} value={regData.pin || ''} onChange={e => setRegData({...regData, pin: e.target.value})} />
+                  <input className="w-full bg-white border border-emerald-500/30 rounded-xl px-5 py-3 outline-none font-black text-center text-emerald-600 text-sm" placeholder="MoMo Reference" value={regData.momoReference || ''} onChange={e => setRegData({...regData, momoReference: e.target.value})} />
                </div>
                <div className="flex gap-4">
                   <button onClick={() => setShowRegModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
@@ -1591,7 +1767,23 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-12">
            <section>
-              <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic mb-6">Marketplace Missions</h3>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Marketplace Missions</h3>
+                <button 
+                   onClick={generateHubInsight} 
+                   className="flex items-center gap-2 text-indigo-400 font-black text-[9px] uppercase hover:scale-105 transition-transform bg-indigo-500/10 px-4 py-2 rounded-xl"
+                >
+                  <i className={`fas fa-sparkles ${insightLoading ? 'animate-spin' : ''}`}></i> Hub Insights
+                </button>
+              </div>
+
+              {hubInsight && (
+                <div className="mb-6 p-4 bg-indigo-600 rounded-[1.5rem] border border-white/20 animate-in zoom-in text-white text-[11px] font-medium italic relative overflow-hidden">
+                  <i className="fas fa-lightbulb absolute right-4 top-1/2 -translate-y-1/2 text-4xl opacity-10"></i>
+                  <p className="relative z-10">{hubInsight}</p>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  {missions.filter(m => m.status === 'open').map(m => (
                    <div key={m.id} className={`glass p-6 rounded-3xl border ${m.driversJoined.includes(activeDriver.id) ? 'border-emerald-500/30' : 'border-white/5'} space-y-4`}>
@@ -1663,7 +1855,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
 
       {isScanning && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl z-[200] flex items-center justify-center p-4">
-           <div className="w-full max-w-lg space-y-8 animate-in zoom-in duration-300">
+           <div className="w-full max-lg space-y-8 animate-in zoom-in duration-300">
               <div className="flex justify-between items-center text-white px-2">
                  <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-[#020617] shadow-xl shadow-emerald-500/20">
@@ -2074,3 +2266,4 @@ if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<App />);
 }
+
