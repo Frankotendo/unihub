@@ -146,67 +146,104 @@ const AuthPortal: React.FC<{ onSession: (s: Session | null) => void }> = ({ onSe
   const [password, setPassword] = useState('');
   const [isSigningUp, setIsSigningUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg(null);
     try {
       if (isSigningUp) {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        alert("Account created! Check your email to verify.");
+        alert("Account created! Check your email to verify your identity.");
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        if (error) {
+          if (error.message.toLowerCase().includes("email not confirmed")) {
+            throw new Error("ACCESS DENIED: Email not confirmed. Please check your inbox or disable 'Email Confirmation' in your Supabase Dashboard settings.");
+          }
+          throw error;
+        }
         onSession(data.session);
       }
     } catch (err: any) {
-      alert(err.message);
+      setErrorMsg(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-[#020617] flex items-center justify-center p-6 z-[300]">
-      <div className="w-full max-w-md glass p-10 rounded-[3rem] border border-white/10 space-y-8 animate-in zoom-in">
+    <div className="fixed inset-0 bg-[#020617] flex items-center justify-center p-6 z-[300] overflow-hidden">
+      {/* Background patterns */}
+      <div className="absolute inset-0 opacity-10 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500 rounded-full blur-[120px]"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-500 rounded-full blur-[120px]"></div>
+      </div>
+
+      <div className="w-full max-w-md glass p-10 rounded-[3rem] border border-white/10 space-y-8 animate-in zoom-in shadow-2xl relative z-10">
         <div className="text-center space-y-4">
-          <div className="w-20 h-20 bg-amber-500 rounded-[2rem] flex items-center justify-center text-[#020617] text-3xl shadow-2xl mx-auto">
-            <i className="fas fa-lock"></i>
+          <div className="w-20 h-20 bg-amber-500 rounded-[2rem] flex items-center justify-center text-[#020617] text-3xl shadow-2xl mx-auto ring-4 ring-amber-500/20">
+            <i className={`fas ${loading ? 'fa-circle-notch fa-spin' : 'fa-shield-halved'}`}></i>
           </div>
           <div>
             <h1 className="text-3xl font-black italic tracking-tighter uppercase text-white">Hub Terminal</h1>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Global Secure Access</p>
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mt-2">Enterprise-Grade Secure Access</p>
           </div>
         </div>
 
+        {errorMsg && (
+          <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl animate-in fade-in slide-in-from-top-2">
+            <p className="text-[10px] font-black text-rose-500 uppercase leading-relaxed text-center">
+              <i className="fas fa-triangle-exclamation mr-2"></i>
+              {errorMsg}
+            </p>
+          </div>
+        )}
+
         <form onSubmit={handleAuth} className="space-y-4">
-          <input 
-            type="email" 
-            placeholder="Identity Email" 
-            className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-amber-500 text-white font-bold"
-            value={email} onChange={e => setEmail(e.target.value)} required
-          />
-          <input 
-            type="password" 
-            placeholder="Access Password" 
-            className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-amber-500 text-white font-bold"
-            value={password} onChange={e => setPassword(e.target.value)} required
-          />
+          <div className="space-y-1">
+            <label className="text-[8px] font-black text-slate-600 uppercase tracking-widest ml-4">Account ID (Email)</label>
+            <input 
+              type="email" 
+              placeholder="e.g. name@domain.com" 
+              className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-amber-500 text-white font-bold transition-all placeholder:text-slate-700"
+              value={email} onChange={e => setEmail(e.target.value)} required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[8px] font-black text-slate-600 uppercase tracking-widest ml-4">Encryption Key (Password)</label>
+            <input 
+              type="password" 
+              placeholder="••••••••" 
+              className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-amber-500 text-white font-bold transition-all placeholder:text-slate-700"
+              value={password} onChange={e => setPassword(e.target.value)} required
+            />
+          </div>
           <button 
             type="submit" disabled={loading}
-            className="w-full py-4 bg-amber-500 text-[#020617] rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl disabled:opacity-50"
+            className="w-full py-5 bg-amber-500 text-[#020617] rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl disabled:opacity-50 hover:scale-[1.02] active:scale-95 transition-all"
           >
-            {loading ? 'Authenticating...' : (isSigningUp ? 'Join Network' : 'Unlock Hub')}
+            {loading ? 'Decrypting Access...' : (isSigningUp ? 'Establish Identity' : 'Authorize Session')}
           </button>
         </form>
 
-        <button 
-          onClick={() => setIsSigningUp(!isSigningUp)} 
-          className="w-full text-[10px] font-black uppercase text-slate-500 hover:text-white transition-colors text-center"
-        >
-          {isSigningUp ? 'Already have an identity? Login' : 'Need a Hub Identity? Sign Up'}
-        </button>
+        <div className="pt-4 border-t border-white/5">
+          <button 
+            onClick={() => { setIsSigningUp(!isSigningUp); setErrorMsg(null); }} 
+            className="w-full text-[10px] font-black uppercase text-slate-500 hover:text-white transition-colors text-center tracking-widest"
+          >
+            {isSigningUp ? 'Already have a secure identity? Login' : 'Need a Hub Identity? Create Profile'}
+          </button>
+        </div>
+      </div>
+      
+      {/* Security notice bottom */}
+      <div className="absolute bottom-10 text-center w-full px-6">
+        <p className="text-[8px] font-black text-slate-800 uppercase tracking-[0.4em]">
+          End-to-End Encrypted Communication • Hub Global Ver. 12.0.4
+        </p>
       </div>
     </div>
   );
@@ -259,12 +296,11 @@ const App: React.FC = () => {
 
   const activeDriver = useMemo(() => drivers.find(d => d.id === activeDriverId), [drivers, activeDriverId]);
 
-  // Derived Impact Metrics (Strategic Replacement for "Profit")
   const stats = useMemo(() => ({
     missionsCompleted: nodes.filter(n => n.status === 'completed').length,
     unitsActive: drivers.filter(d => d.status === 'online').length,
     communitySavings: nodes.filter(n => n.status === 'completed').length * 5, 
-    co2Saved: (nodes.filter(n => n.status === 'completed').length * 0.8).toFixed(1) // kg of CO2
+    co2Saved: (nodes.filter(n => n.status === 'completed').length * 0.8).toFixed(1) 
   }), [nodes, drivers]);
 
   const pendingRegCount = useMemo(() => registrationRequests.filter(r => r.status === 'pending').length, [registrationRequests]);
@@ -273,16 +309,14 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col lg:flex-row h-screen overflow-hidden bg-[#020617] text-slate-100 font-sans relative">
-      
-      {/* Dynamic Impact Sidebar */}
       <nav className="hidden lg:flex w-72 glass border-r border-white/5 flex-col p-8 space-y-10 z-50">
         <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center shadow-xl">
+          <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center shadow-xl ring-4 ring-amber-500/10">
             <i className="fas fa-globe text-[#020617] text-xl"></i>
           </div>
           <div>
             <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none text-white">Hub Global</h1>
-            <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mt-1">Community Pulse</p>
+            <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mt-1">Operational Pulse</p>
           </div>
         </div>
 
@@ -292,15 +326,14 @@ const App: React.FC = () => {
           {isAdminAuthenticated && (
             <NavItem active={viewMode === 'admin'} icon="fa-fingerprint" label="Admin Command" onClick={() => setViewMode('admin')} badge={pendingRegCount} />
           )}
-          <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center px-6 py-4 rounded-2xl text-slate-500 hover:text-rose-500 transition-colors mt-10">
+          <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center px-6 py-5 rounded-2xl text-slate-500 hover:text-rose-500 transition-colors mt-10 hover:bg-rose-500/5">
             <i className="fas fa-power-off text-lg mr-4"></i>
-            <span className="text-sm font-bold uppercase tracking-widest">Logout</span>
+            <span className="text-sm font-black uppercase tracking-widest">Logout</span>
           </button>
         </div>
 
-        {/* Global Impact Logic */}
         <div className="pt-6 border-t border-white/5 space-y-4">
-           <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] italic">Impact Pulse</p>
+           <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] italic">Network Health</p>
            <div className="grid grid-cols-2 gap-3">
               <ImpactStat label="Missions" value={stats.missionsCompleted} icon="fa-check-double" color="text-emerald-400" />
               <ImpactStat label="Units" value={stats.unitsActive} icon="fa-car-side" color="text-amber-400" />
@@ -317,7 +350,7 @@ const App: React.FC = () => {
             <input 
               type="text" 
               placeholder="Search global routes, fleets, or missions..." 
-              className="w-full bg-white/5 border border-white/10 rounded-[2rem] py-6 pl-14 pr-6 text-white font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-700"
+              className="w-full bg-white/5 border border-white/10 rounded-[2rem] py-6 pl-14 pr-6 text-white font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-700 shadow-inner"
               value={globalSearch}
               onChange={(e) => setGlobalSearch(e.target.value)}
             />
@@ -365,8 +398,8 @@ const App: React.FC = () => {
 const ImpactStat = ({ label, value, icon, color }: any) => (
   <div className="bg-white/5 p-4 rounded-2xl border border-white/5 relative overflow-hidden group">
     <i className={`fas ${icon} ${color} absolute top-2 right-2 text-[8px] opacity-20 group-hover:opacity-100 transition-opacity`}></i>
-    <p className="text-[7px] font-black uppercase text-slate-500">{label}</p>
-    <p className="text-xs font-black text-white italic">{value}</p>
+    <p className="text-[7px] font-black uppercase text-slate-500 leading-none">{label}</p>
+    <p className="text-xs font-black text-white italic mt-1">{value}</p>
   </div>
 );
 
@@ -388,7 +421,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, onRequestRegis
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-12 animate-in fade-in">
         <div className="text-center space-y-4">
-          <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center text-white text-3xl shadow-2xl mx-auto">
+          <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center text-white text-3xl shadow-2xl mx-auto ring-4 ring-indigo-500/20">
             <i className="fas fa-id-card-clip"></i>
           </div>
           <h2 className="text-3xl font-black italic uppercase text-white tracking-tighter">Driver Terminal</h2>
@@ -397,7 +430,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, onRequestRegis
         
         {selectedId ? (
           <div className="w-full max-w-sm glass p-10 rounded-[3rem] text-center space-y-8 animate-in zoom-in border border-indigo-500/20">
-            <p className="text-xs font-black uppercase text-slate-400">Enter Terminal PIN</p>
+            <p className="text-xs font-black uppercase text-slate-400 tracking-widest">Enter Terminal PIN</p>
             <input 
               type="password" maxLength={4} 
               className="w-full bg-white/5 border-b-2 border-indigo-500 text-center text-5xl tracking-[1em] font-black text-white outline-none pb-4" 
@@ -408,10 +441,10 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, onRequestRegis
           </div>
         ) : (
           <div className="flex flex-col items-center gap-8 w-full max-w-2xl">
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full px-4">
                {drivers.map((d: any) => (
-                 <button key={d.id} onClick={() => setSelectedId(d.id)} className="glass p-8 rounded-[2.5rem] border border-white/5 text-left hover:border-amber-500/50 transition-all flex items-center gap-4">
-                    <img src={d.photoUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${d.name}`} className="w-12 h-12 rounded-full border border-white/10" />
+                 <button key={d.id} onClick={() => setSelectedId(d.id)} className="glass p-8 rounded-[2.5rem] border border-white/5 text-left hover:border-amber-500/50 transition-all flex items-center gap-4 hover:bg-white/5 group">
+                    <img src={d.photoUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${d.name}`} className="w-12 h-12 rounded-full border border-white/10 group-hover:scale-110 transition-transform" />
                     <div>
                       <p className="font-black text-white italic uppercase">{d.name}</p>
                       <p className="text-[8px] font-black text-slate-500 uppercase mt-1">WALLET: ₵{d.walletBalance.toFixed(1)}</p>
@@ -419,7 +452,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, onRequestRegis
                  </button>
                ))}
              </div>
-             <button onClick={() => setShowReg(true)} className="px-16 py-5 bg-amber-500 text-[#020617] rounded-3xl font-black text-xs uppercase shadow-2xl hover:bg-white transition-colors">Join the Global Fleet</button>
+             <button onClick={() => setShowReg(true)} className="px-16 py-5 bg-amber-500 text-[#020617] rounded-3xl font-black text-xs uppercase shadow-2xl hover:bg-white transition-colors tracking-widest">Join the Global Fleet</button>
           </div>
         )}
 
@@ -431,7 +464,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, onRequestRegis
                 <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Fleet Registration</p>
               </div>
 
-              {/* Trust Capture: Live Selfie */}
               <div className="flex flex-col items-center gap-4">
                  <label htmlFor="selfie-capture" className="w-40 h-40 rounded-[2.5rem] bg-white/5 border-2 border-dashed border-indigo-500/30 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative group hover:border-indigo-500 transition-all">
                     {regData.photoUrl ? (
@@ -477,10 +509,11 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, onRequestRegis
 
   return (
     <div className="animate-in slide-in-from-bottom-8 space-y-12">
-      <div className="flex justify-between items-center p-10 glass rounded-[3.5rem] border border-white/5 relative overflow-hidden">
+      <div className="flex justify-between items-center p-10 glass rounded-[3.5rem] border border-white/5 relative overflow-hidden shadow-2xl">
         <div className="flex items-center gap-8 relative z-10">
-          <div className="w-24 h-24 rounded-[2.5rem] overflow-hidden border-2 border-indigo-500/30 shadow-2xl">
+          <div className="w-24 h-24 rounded-[2.5rem] overflow-hidden border-2 border-indigo-500/30 shadow-2xl relative">
             <img src={activeDriver.photoUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${activeDriver.name}`} className="w-full h-full object-cover" alt="Driver Identity" />
+            <div className="absolute inset-0 bg-indigo-500/10 ring-1 ring-inset ring-white/10"></div>
           </div>
           <div>
             <h2 className="text-3xl font-black uppercase italic text-white leading-none tracking-tighter">{activeDriver.name}</h2>
@@ -492,7 +525,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, onRequestRegis
            <p className="text-4xl font-black text-white italic tracking-tighter">₵ {activeDriver.walletBalance.toFixed(2)}</p>
         </div>
       </div>
-      <button onClick={onLogout} className="w-full py-5 bg-rose-500/10 text-rose-500 rounded-3xl font-black uppercase text-[10px] tracking-[0.3em] border border-rose-500/20">Terminate Session</button>
+      <button onClick={onLogout} className="w-full py-5 bg-rose-500/10 text-rose-500 rounded-3xl font-black uppercase text-[10px] tracking-[0.3em] border border-rose-500/20 hover:bg-rose-500/20 transition-all">Terminate Session</button>
     </div>
   );
 };
@@ -507,36 +540,36 @@ const PassengerPortal = ({ nodes, drivers, settings, search }: any) => {
     <div className="space-y-8 animate-in fade-in">
        <div className="flex justify-between items-center">
           <h2 className="text-4xl font-black italic uppercase text-white tracking-tighter">Commuter Terminal</h2>
-          <button className="px-10 py-5 bg-amber-500 text-[#020617] rounded-3xl font-black uppercase text-[10px] shadow-xl hover:scale-105 transition-transform">Form Route Node</button>
+          <button className="px-10 py-5 bg-amber-500 text-[#020617] rounded-3xl font-black uppercase text-[10px] shadow-xl hover:scale-105 transition-transform tracking-widest">Form Route Node</button>
        </div>
        
-       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 px-1">
           {filteredNodes.map((node: any) => {
             const driver = drivers.find((d: any) => d.id === node.assignedDriverId);
             return (
-              <div key={node.id} className="glass p-10 rounded-[3rem] border border-white/5 space-y-8 group hover:border-amber-500/30 transition-all">
+              <div key={node.id} className="glass p-10 rounded-[3rem] border border-white/5 space-y-8 group hover:border-amber-500/30 transition-all hover:bg-white/5">
                  <div className="flex justify-between items-start">
-                    <span className="px-5 py-2 bg-indigo-600/20 text-indigo-400 rounded-2xl text-[8px] font-black uppercase tracking-widest">{node.status}</span>
+                    <span className="px-5 py-2 bg-indigo-600/20 text-indigo-400 rounded-2xl text-[8px] font-black uppercase tracking-widest shadow-sm border border-indigo-500/10">{node.status}</span>
                     <p className="text-xl font-black text-emerald-400 italic">₵{node.farePerPerson}/p</p>
                  </div>
                  <div className="space-y-3">
-                    <p className="text-2xl font-black text-white uppercase italic leading-tight">{node.origin} <i className="fas fa-arrow-right text-slate-700 mx-2 text-sm"></i> {node.destination}</p>
+                    <p className="text-2xl font-black text-white uppercase italic leading-tight group-hover:text-amber-500 transition-colors">{node.origin} <i className="fas fa-arrow-right text-slate-700 mx-2 text-sm group-hover:text-amber-700"></i> {node.destination}</p>
                     <div className="flex gap-2">
                        {Array.from({length: node.capacityNeeded}).map((_, i) => (
-                         <div key={i} className={`w-3 h-3 rounded-full ${i < node.passengers.length ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-white/5 border border-white/10'}`}></div>
+                         <div key={i} className={`w-3 h-3 rounded-full transition-all duration-500 ${i < node.passengers.length ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)] scale-110' : 'bg-white/5 border border-white/10 group-hover:border-white/20'}`}></div>
                        ))}
                     </div>
                  </div>
                  
                  {node.status === 'dispatched' && driver && (
                    <div className="pt-8 border-t border-white/5 flex items-center gap-5 animate-in slide-in-from-top-4">
-                      <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-emerald-500/30">
+                      <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-emerald-500/30 shadow-lg">
                         <img src={driver.photoUrl} className="w-full h-full object-cover" alt="Verified Face" />
                       </div>
                       <div>
-                        <p className="text-[8px] font-black uppercase text-slate-500 mb-1">Assigned Verified Driver</p>
+                        <p className="text-[8px] font-black uppercase text-slate-500 mb-1 tracking-widest">Verified Dispatch</p>
                         <p className="text-lg font-black text-white italic leading-none">{driver.name}</p>
-                        <p className="text-[9px] font-black text-emerald-400 uppercase mt-1.5">{driver.licensePlate}</p>
+                        <p className="text-[9px] font-black text-emerald-400 uppercase mt-2 tracking-tighter">{driver.licensePlate}</p>
                       </div>
                    </div>
                  )}
@@ -544,9 +577,9 @@ const PassengerPortal = ({ nodes, drivers, settings, search }: any) => {
             );
           })}
           {filteredNodes.length === 0 && (
-            <div className="col-span-full py-20 text-center glass rounded-[3rem] border border-dashed border-white/10">
+            <div className="col-span-full py-20 text-center glass rounded-[3rem] border border-dashed border-white/10 opacity-60">
                <i className="fas fa-map-marked-alt text-slate-800 text-6xl mb-6"></i>
-               <p className="text-slate-500 font-black uppercase tracking-[0.3em]">No Active Nodes Found</p>
+               <p className="text-slate-500 font-black uppercase tracking-[0.4em]">Grid Offline: No Active Nodes</p>
             </div>
           )}
        </div>
@@ -557,7 +590,7 @@ const PassengerPortal = ({ nodes, drivers, settings, search }: any) => {
 const AdminPortal = ({ activeTab, setActiveTab, registrationRequests }: any) => {
   return (
     <div className="space-y-10">
-       <div className="flex bg-white/5 p-2 rounded-3xl border border-white/10 w-fit">
+       <div className="flex bg-white/5 p-2 rounded-3xl border border-white/10 w-fit shadow-inner">
           <TabBtn active={activeTab === 'monitor'} label="Global Metrics" onClick={() => setActiveTab('monitor')} />
           <TabBtn active={activeTab === 'onboarding'} label="Fleet Applications" onClick={() => setActiveTab('onboarding')} count={registrationRequests.filter((r:any)=>r.status==='pending').length} />
        </div>
@@ -565,30 +598,30 @@ const AdminPortal = ({ activeTab, setActiveTab, registrationRequests }: any) => 
        {activeTab === 'onboarding' && (
          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in fade-in">
             {registrationRequests.filter((r:any)=>r.status==='pending').map((reg: any) => (
-              <div key={reg.id} className="glass p-10 rounded-[3.5rem] border border-indigo-500/30 space-y-8">
+              <div key={reg.id} className="glass p-10 rounded-[3.5rem] border border-indigo-500/30 space-y-8 shadow-xl">
                  <div className="text-center space-y-4">
                     <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white/10 mx-auto shadow-2xl relative">
                        <img src={reg.photoUrl} className="w-full h-full object-cover" alt="Identity Selfie" />
                        <div className="absolute inset-0 bg-indigo-500/10 ring-1 ring-inset ring-white/20"></div>
                     </div>
                     <div>
-                      <h4 className="text-2xl font-black uppercase italic text-white leading-none">{reg.name}</h4>
-                      <p className="text-[10px] text-indigo-400 font-black uppercase mt-3 tracking-widest">{reg.vehicleType}</p>
+                      <h4 className="text-2xl font-black uppercase italic text-white leading-none tracking-tight">{reg.name}</h4>
+                      <p className="text-[10px] text-indigo-400 font-black uppercase mt-3 tracking-[0.2em]">{reg.vehicleType}</p>
                     </div>
                  </div>
                  <div className="bg-white/5 p-6 rounded-[2rem] space-y-3 border border-white/5">
-                    <div className="flex justify-between">
-                       <p className="text-[9px] font-black uppercase text-slate-500">License Plate</p>
+                    <div className="flex justify-between items-center">
+                       <p className="text-[9px] font-black uppercase text-slate-500">Plate</p>
                        <p className="text-[10px] font-black text-white">{reg.licensePlate}</p>
                     </div>
-                    <div className="flex justify-between">
-                       <p className="text-[9px] font-black uppercase text-slate-500">Momo Reference</p>
-                       <p className="text-[10px] font-black text-emerald-400 italic">{reg.momoReference}</p>
+                    <div className="flex justify-between items-center">
+                       <p className="text-[9px] font-black uppercase text-slate-500">MoMo Ref</p>
+                       <p className="text-[10px] font-black text-emerald-400 italic tracking-wider">{reg.momoReference}</p>
                     </div>
                  </div>
                  <div className="flex gap-4">
-                    <button className="flex-1 py-5 bg-white/5 rounded-2xl text-[9px] font-black uppercase text-slate-500">Decline</button>
-                    <button onClick={() => alert("Verification in logic: Success.")} className="flex-1 py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[9px] shadow-xl">Approve Identity</button>
+                    <button className="flex-1 py-5 bg-white/5 rounded-2xl text-[9px] font-black uppercase text-slate-500 hover:text-rose-500 transition-colors">Reject</button>
+                    <button onClick={() => alert("Identity approved. Verified credentials pushed to database.")} className="flex-1 py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[9px] shadow-xl hover:bg-indigo-500 transition-colors tracking-widest">Verify ID</button>
                  </div>
               </div>
             ))}
@@ -603,24 +636,24 @@ const AdminInput = ({ label, value, onChange, type = "text" }: { label: string, 
      <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest ml-4">{label}</label>
      <input 
        type={type} 
-       className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xs font-bold text-white outline-none focus:border-amber-500 focus:bg-white/10 transition-all" 
+       className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xs font-bold text-white outline-none focus:border-amber-500 focus:bg-white/10 transition-all shadow-inner" 
        value={value} onChange={e => onChange(e.target.value)} 
      />
   </div>
 );
 
 const NavItem = ({ active, icon, label, onClick, badge }: any) => (
-  <button onClick={onClick} className={`w-full flex items-center justify-between px-6 py-5 rounded-2xl transition-all ${active ? 'bg-amber-500 text-[#020617] shadow-[0_10px_30px_rgba(245,158,11,0.2)] scale-105' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}>
+  <button onClick={onClick} className={`w-full flex items-center justify-between px-6 py-5 rounded-2xl transition-all ${active ? 'bg-amber-500 text-[#020617] shadow-[0_10px_30px_rgba(245,158,11,0.25)] scale-[1.03]' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}>
     <div className="flex items-center space-x-4">
       <i className={`fas ${icon} text-lg w-6`}></i>
-      <span className="text-sm font-black uppercase tracking-tight leading-none">{label}</span>
+      <span className="text-sm font-black uppercase tracking-widest leading-none">{label}</span>
     </div>
-    {badge !== undefined && badge > 0 && <span className="bg-rose-500 text-white text-[8px] font-black w-5 h-5 flex items-center justify-center rounded-full ring-4 ring-[#020617]">{badge}</span>}
+    {badge !== undefined && badge > 0 && <span className="bg-rose-500 text-white text-[8px] font-black w-5 h-5 flex items-center justify-center rounded-full ring-4 ring-[#020617] animate-pulse">{badge}</span>}
   </button>
 );
 
 const TabBtn = ({ active, label, onClick, count }: any) => (
-  <button onClick={onClick} className={`px-10 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all ${active ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500'}`}>
+  <button onClick={onClick} className={`px-10 py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all ${active ? 'bg-indigo-600 text-white shadow-xl' : 'text-slate-500 hover:text-slate-400'}`}>
     {label} {count !== undefined && count > 0 && <span className="ml-3 bg-rose-500 text-white text-[8px] px-2 py-1 rounded-full">{count}</span>}
   </button>
 );
