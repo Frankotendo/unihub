@@ -564,6 +564,9 @@ const App: React.FC = () => {
   };
 
   const hubRevenue = useMemo(() => transactions.reduce((a, b) => a + b.amount, 0), [transactions]);
+  const activeNodeCount = useMemo(() => nodes.filter(n => n.status !== 'completed').length, [nodes]);
+  const onlineDriverCount = useMemo(() => drivers.filter(d => d.status === 'online').length, [drivers]);
+
   const pendingRequestsCount = useMemo(() => 
     topupRequests.filter(r => r.status === 'pending').length + 
     registrationRequests.filter(r => r.status === 'pending').length, 
@@ -695,8 +698,20 @@ const App: React.FC = () => {
              </div>
            ) : null}
           <div className="bg-emerald-500/10 p-6 rounded-[2.5rem] border border-emerald-500/20 relative overflow-hidden">
-            <p className="text-[9px] font-black uppercase text-emerald-400 mb-1">Total Hub Profit</p>
-            <p className="text-3xl font-black text-white">₵ {hubRevenue.toFixed(2)}</p>
+            <p className="text-[9px] font-black uppercase text-emerald-400 mb-2 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+              Live Hub Pulse
+            </p>
+            <div className="space-y-1">
+               <div className="flex justify-between items-center">
+                  <p className="text-[10px] font-black text-white uppercase opacity-60 tracking-tight">Units Online</p>
+                  <p className="text-lg font-black text-white italic">{onlineDriverCount}</p>
+               </div>
+               <div className="flex justify-between items-center">
+                  <p className="text-[10px] font-black text-white uppercase opacity-60 tracking-tight">Active Nodes</p>
+                  <p className="text-lg font-black text-white italic">{activeNodeCount}</p>
+               </div>
+            </div>
           </div>
         </div>
       </nav>
