@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -69,11 +70,24 @@ interface TopupRequest {
   timestamp: string;
 }
 
+interface RegistrationRequest {
+  id: string;
+  name: string;
+  vehicleType: VehicleType;
+  licensePlate: string;
+  contact: string;
+  pin: string;
+  amount: number;
+  momoReference: string;
+  status: 'pending' | 'approved' | 'rejected';
+  timestamp: string;
+}
+
 interface Transaction {
   id: string;
   driverId: string;
   amount: number;
-  type: 'commission' | 'topup'; 
+  type: 'commission' | 'topup' | 'registration'; 
   timestamp: string;
 }
 
@@ -90,6 +104,7 @@ interface AppSettings {
   aboutMeText: string;
   aboutMeImages: string[];
   appWallpaper?: string;
+  registrationFee: number;
 }
 
 // --- UTILS ---
@@ -176,7 +191,7 @@ const compressImage = (file: File, quality = 0.7, maxWidth = 800): Promise<strin
 
 const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<PortalMode>('passenger');
-  const [activeTab, setActiveTab] = useState<'monitor' | 'fleet' | 'requests' | 'settings' | 'missions'>('monitor');
+  const [activeTab, setActiveTab] = useState<'monitor' | 'fleet' | 'requests' | 'settings' | 'missions' | 'onboarding'>('monitor');
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
     return sessionStorage.getItem('unihub_admin_auth_v12') === 'true';
   });
@@ -203,13 +218,15 @@ const App: React.FC = () => {
     soloMultiplier: 2.5,
     aboutMeText: "Welcome to UniHub Dispatch.",
     aboutMeImages: [],
-    appWallpaper: ""
+    appWallpaper: "",
+    registrationFee: 20.00
   });
   const [nodes, setNodes] = useState<RideNode[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [missions, setMissions] = useState<HubMission[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [topupRequests, setTopupRequests] = useState<TopupRequest[]>([]);
+  const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>([]);
 
   const [globalSearch, setGlobalSearch] = useState('');
 
@@ -222,14 +239,16 @@ const App: React.FC = () => {
         { data: dData },
         { data: mData },
         { data: tData },
-        { data: trData }
+        { data: trData },
+        { data: regData }
       ] = await Promise.all([
         supabase.from('unihub_settings').select('*').single(),
         supabase.from('unihub_nodes').select('*').order('createdAt', { ascending: false }),
         supabase.from('unihub_drivers').select('*'),
         supabase.from('unihub_missions').select('*').order('createdAt', { ascending: false }),
         supabase.from('unihub_topups').select('*').order('timestamp', { ascending: false }),
-        supabase.from('unihub_transactions').select('*').order('timestamp', { ascending: false })
+        supabase.from('unihub_transactions').select('*').order('timestamp', { ascending: false }),
+        supabase.from('unihub_registrations').select('*').order('timestamp', { ascending: false })
       ]);
 
       if (sData) setSettings(sData as AppSettings);
@@ -238,6 +257,7 @@ const App: React.FC = () => {
       if (mData) setMissions(mData);
       if (trData) setTransactions(trData);
       if (tData) setTopupRequests(tData);
+      if (regData) setRegistrationRequests(regData);
     } catch (err) {
       console.error("Fetch error:", err);
     } finally {
@@ -254,7 +274,8 @@ const App: React.FC = () => {
       supabase.channel('public:unihub_drivers').on('postgres_changes', { event: '*', schema: 'public', table: 'unihub_drivers' }, () => fetchData()).subscribe(),
       supabase.channel('public:unihub_missions').on('postgres_changes', { event: '*', schema: 'public', table: 'unihub_missions' }, () => fetchData()).subscribe(),
       supabase.channel('public:unihub_transactions').on('postgres_changes', { event: '*', schema: 'public', table: 'unihub_transactions' }, () => fetchData()).subscribe(),
-      supabase.channel('public:unihub_topups').on('postgres_changes', { event: '*', schema: 'public', table: 'unihub_topups' }, () => fetchData()).subscribe()
+      supabase.channel('public:unihub_topups').on('postgres_changes', { event: '*', schema: 'public', table: 'unihub_topups' }, () => fetchData()).subscribe(),
+      supabase.channel('public:unihub_registrations').on('postgres_changes', { event: '*', schema: 'public', table: 'unihub_registrations' }, () => fetchData()).subscribe()
     ];
 
     return () => channels.forEach(ch => supabase.removeChannel(ch));
@@ -430,6 +451,17 @@ const App: React.FC = () => {
     alert("Request logged.");
   };
 
+  const requestRegistration = async (reg: Omit<RegistrationRequest, 'id' | 'status' | 'timestamp'>) => {
+    const req: RegistrationRequest = {
+      ...reg,
+      id: `REG-${Date.now()}`,
+      status: 'pending',
+      timestamp: new Date().toLocaleString()
+    };
+    await supabase.from('unihub_registrations').insert([req]);
+    alert("Application submitted! An admin will review your MoMo payment reference shortly.");
+  };
+
   const approveTopup = async (reqId: string) => {
     const req = topupRequests.find(r => r.id === reqId);
     if (!req || req.status !== 'pending') return;
@@ -448,6 +480,41 @@ const App: React.FC = () => {
         timestamp: new Date().toLocaleString()
       }])
     ]);
+  };
+
+  const approveRegistration = async (regId: string) => {
+    const reg = registrationRequests.find(r => r.id === regId);
+    if (!reg || reg.status !== 'pending') return;
+
+    const newDriver: Driver = {
+      id: `DRV-${Date.now()}`,
+      name: reg.name,
+      vehicleType: reg.vehicleType,
+      licensePlate: reg.licensePlate,
+      contact: reg.contact,
+      pin: reg.pin,
+      walletBalance: 0,
+      rating: 5.0,
+      status: 'online'
+    };
+
+    try {
+      await Promise.all([
+        supabase.from('unihub_drivers').insert([newDriver]),
+        supabase.from('unihub_registrations').update({ status: 'approved' }).eq('id', regId),
+        supabase.from('unihub_transactions').insert([{
+          id: `TX-REG-${Date.now()}`,
+          driverId: newDriver.id,
+          amount: reg.amount,
+          type: 'registration',
+          timestamp: new Date().toLocaleString()
+        }])
+      ]);
+      alert("Driver approved and registered successfully!");
+    } catch (err: any) {
+      console.error("Approval error:", err);
+      alert("Failed to approve driver: " + err.message);
+    }
   };
 
   const registerDriver = async (d: Omit<Driver, 'id' | 'walletBalance' | 'rating' | 'status'>) => {
@@ -488,7 +555,10 @@ const App: React.FC = () => {
   };
 
   const hubRevenue = useMemo(() => transactions.reduce((a, b) => a + b.amount, 0), [transactions]);
-  const pendingRequestsCount = useMemo(() => topupRequests.filter(r => r.status === 'pending').length, [topupRequests]);
+  const pendingRequestsCount = useMemo(() => 
+    topupRequests.filter(r => r.status === 'pending').length + 
+    registrationRequests.filter(r => r.status === 'pending').length, 
+  [topupRequests, registrationRequests]);
 
   const handleAdminAuth = async (password: string) => {
     if (!password) return;
@@ -692,6 +762,7 @@ const App: React.FC = () => {
               onVerify={verifyRide}
               onCancel={cancelRide}
               onRequestTopup={requestTopup}
+              onRequestRegistration={requestRegistration}
               search={globalSearch}
               settings={settings}
             />
@@ -715,7 +786,9 @@ const App: React.FC = () => {
                 onDeleteMission={async (id: string) => await supabase.from('unihub_missions').delete().eq('id', id)}
                 transactions={transactions} 
                 topupRequests={topupRequests}
+                registrationRequests={registrationRequests}
                 onApproveTopup={approveTopup}
+                onApproveRegistration={approveRegistration}
                 onLock={() => {setIsAdminAuthenticated(false); sessionStorage.removeItem('unihub_admin_auth_v12');}}
                 search={globalSearch}
                 settings={settings}
@@ -1130,13 +1203,15 @@ const PassengerPortal = ({ nodes, onAddNode, onJoin, onForceQualify, onCancel, d
   );
 };
 
-const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes, dispatchedNodes, missions, onJoinMission, onAccept, onVerify, onCancel, onRequestTopup, search, settings }: any) => {
+const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes, dispatchedNodes, missions, onJoinMission, onAccept, onVerify, onCancel, onRequestTopup, onRequestRegistration, search, settings }: any) => {
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [pin, setPin] = useState('');
   const [verifyCode, setVerifyCode] = useState('');
   const [showTopupModal, setShowTopupModal] = useState(false);
+  const [showRegModal, setShowRegModal] = useState(false);
   const [topupAmount, setTopupAmount] = useState('');
   const [momoRef, setMomoRef] = useState('');
+  const [regData, setRegData] = useState<Partial<RegistrationRequest>>({ vehicleType: 'Pragia' });
   const [isScanning, setIsScanning] = useState(false);
   const [activeMissionNodeId, setActiveMissionNodeId] = useState<string | null>(null);
 
@@ -1198,14 +1273,56 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                 </div>
             </div>
         ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl">
-              {drivers.map((d: any) => (
-                <button key={d.id} onClick={() => setSelectedDriverId(d.id)} className="glass p-8 rounded-[2rem] border border-white/5 text-left transition-all hover:border-amber-500/50 group">
-                  <p className="font-black uppercase italic text-xl text-white mb-4 group-hover:text-amber-500 transition-colors">{d.name}</p>
-                  <p className="text-[9px] font-black text-slate-500 uppercase">WALLET: ₵{d.walletBalance.toFixed(1)}</p>
-                </button>
-              ))}
+            <div className="flex flex-col items-center gap-8 w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl">
+                {drivers.map((d: any) => (
+                  <button key={d.id} onClick={() => setSelectedDriverId(d.id)} className="glass p-8 rounded-[2rem] border border-white/5 text-left transition-all hover:border-amber-500/50 group">
+                    <p className="font-black uppercase italic text-xl text-white mb-4 group-hover:text-amber-500 transition-colors">{d.name}</p>
+                    <p className="text-[9px] font-black text-slate-500 uppercase">WALLET: ₵{d.walletBalance.toFixed(1)}</p>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setShowRegModal(true)} className="px-12 py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-2xl hover:scale-105 transition-transform flex items-center gap-3">
+                 <i className="fas fa-plus-circle"></i> Join UniHub Fleet
+              </button>
             </div>
+        )}
+
+        {showRegModal && (
+          <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+            <div className="glass-bright w-full max-sm:px-4 max-w-md rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in text-slate-900">
+               <div className="text-center">
+                  <h3 className="text-2xl font-black italic tracking-tighter uppercase text-white">Fleet Onboarding</h3>
+                  <p className="text-indigo-400 text-[10px] font-black uppercase mt-1">Registration Fee: ₵{settings.registrationFee}</p>
+               </div>
+               <div className="bg-white/5 p-4 rounded-xl border border-white/10 text-center">
+                  <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Hub MoMo Account</p>
+                  <p className="text-lg font-black text-white italic leading-none">{settings.adminMomo}</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase mt-1">{settings.adminMomoName}</p>
+               </div>
+               <div className="space-y-3">
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-bold text-sm" placeholder="Full Name" onChange={e => setRegData({...regData, name: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <select className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-sm" onChange={e => setRegData({...regData, vehicleType: e.target.value as VehicleType})}>
+                       <option value="Pragia">Pragia</option>
+                       <option value="Taxi">Taxi</option>
+                    </select>
+                    <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-sm" placeholder="Plate Number" onChange={e => setRegData({...regData, licensePlate: e.target.value})} />
+                  </div>
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-bold text-sm" placeholder="WhatsApp Number" onChange={e => setRegData({...regData, contact: e.target.value})} />
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-5 py-3 outline-none font-black text-center text-sm" placeholder="Set 4-Digit Login PIN" maxLength={4} onChange={e => setRegData({...regData, pin: e.target.value})} />
+                  <input className="w-full bg-white border border-emerald-500/30 rounded-xl px-5 py-3 outline-none font-black text-center text-emerald-600 text-sm" placeholder="MoMo Reference" onChange={e => setRegData({...regData, momoReference: e.target.value})} />
+               </div>
+               <div className="flex gap-4">
+                  <button onClick={() => setShowRegModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
+                  <button onClick={() => { 
+                    if (!regData.name || !regData.momoReference || !regData.pin) { alert("Please complete all fields."); return; }
+                    onRequestRegistration({ ...regData, amount: settings.registrationFee }); 
+                    setShowRegModal(false); 
+                  }} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Apply & Pay</button>
+               </div>
+            </div>
+          </div>
         )}
       </div>
     );
@@ -1358,7 +1475,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
   );
 };
 
-const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onDeleteDriver, onCancelRide, onSettleRide, missions, onCreateMission, onDeleteMission, transactions, topupRequests, onApproveTopup, onLock, search, settings, onUpdateSettings, hubRevenue }: any) => {
+const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onDeleteDriver, onCancelRide, onSettleRide, missions, onCreateMission, onDeleteMission, transactions, topupRequests, registrationRequests, onApproveTopup, onApproveRegistration, onLock, search, settings, onUpdateSettings, hubRevenue }: any) => {
   const [showDriverModal, setShowDriverModal] = useState(false);
   const [showMissionModal, setShowMissionModal] = useState(false);
   const [newDriver, setNewDriver] = useState<Partial<Driver>>({ vehicleType: 'Pragia', pin: '0000' });
@@ -1387,6 +1504,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
       <div className="flex bg-white/5 p-1 rounded-[1.5rem] border border-white/10 overflow-x-auto no-scrollbar max-w-full">
         <TabBtn active={activeTab === 'monitor'} label="Stats" onClick={() => setActiveTab('monitor')} />
         <TabBtn active={activeTab === 'fleet'} label="Fleet" onClick={() => setActiveTab('fleet')} />
+        <TabBtn active={activeTab === 'onboarding'} label="Applications" onClick={() => setActiveTab('onboarding')} count={registrationRequests.filter((r:any)=>r.status==='pending').length} />
         <TabBtn active={activeTab === 'missions'} label="Hub Missions" onClick={() => setActiveTab('missions')} />
         <TabBtn active={activeTab === 'requests'} label="Credit" onClick={() => setActiveTab('requests')} count={topupRequests.filter((r:any)=>r.status==='pending').length} />
         <TabBtn active={activeTab === 'settings'} label="Setup" onClick={() => setActiveTab('settings')} />
@@ -1444,6 +1562,36 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                  </tbody>
               </table>
            </div>
+        </div>
+      )}
+
+      {activeTab === 'onboarding' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+           {registrationRequests.filter((r:any)=>r.status==='pending').map((reg: any) => (
+             <div key={reg.id} className="glass p-8 rounded-3xl border border-indigo-500/20 space-y-6 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <h4 className="text-white font-black uppercase italic text-sm">{reg.name}</h4>
+                    <span className="text-[8px] font-black text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded-md">{reg.vehicleType}</span>
+                  </div>
+                  <div className="bg-white/5 p-4 rounded-xl mt-4 space-y-2">
+                     <p className="text-[8px] font-black uppercase text-slate-500">License Plate</p>
+                     <p className="text-xs font-black text-white">{reg.licensePlate}</p>
+                     <p className="text-[8px] font-black uppercase text-slate-500 mt-2">Momo Ref</p>
+                     <p className="text-sm font-black text-emerald-400 italic">REF: {reg.momoReference}</p>
+                     <p className="text-[8px] font-black uppercase text-slate-500 mt-2">WhatsApp</p>
+                     <p className="text-xs font-black text-white">{reg.contact}</p>
+                  </div>
+                </div>
+                <button onClick={() => onApproveRegistration(reg.id)} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-indigo-500 mt-4 transition-all">Approve Driver</button>
+             </div>
+           ))}
+           {registrationRequests.filter((r:any)=>r.status==='pending').length === 0 && (
+             <div className="col-span-full py-20 text-center">
+                <i className="fas fa-id-card text-slate-800 text-4xl mb-4"></i>
+                <p className="text-slate-600 font-black uppercase text-[10px]">No pending fleet applications</p>
+             </div>
+           )}
         </div>
       )}
 
@@ -1507,6 +1655,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                  <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pricing & Fares</h4>
                  <div className="space-y-4">
                     <AdminInput label="Commission (₵)" value={localSettings.commissionPerSeat} onChange={v => setLocalSettings({...localSettings, commissionPerSeat: Number(v)})} />
+                    <AdminInput label="Registration Fee (₵)" value={localSettings.registrationFee} onChange={v => setLocalSettings({...localSettings, registrationFee: Number(v)})} />
                     <AdminInput label="Pragia Fare (₵)" value={localSettings.farePerPragia} onChange={v => setLocalSettings({...localSettings, farePerPragia: Number(v)})} />
                     <AdminInput label="Taxi Fare (₵)" value={localSettings.farePerTaxi} onChange={v => setLocalSettings({...localSettings, farePerTaxi: Number(v)})} />
                     <AdminInput label="Solo Multiplier (x)" value={localSettings.soloMultiplier} onChange={v => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
