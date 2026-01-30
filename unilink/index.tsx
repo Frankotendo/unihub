@@ -116,15 +116,15 @@ interface AppSettings {
   aboutMeImages: string[];
   appWallpaper?: string;
   registrationFee: number;
-  hub_announcement?: string; // Standardized snake_case for Supabase
+  hub_announcement?: string; 
 }
 
 // --- UTILS ---
 
 const shareHub = async () => {
   const shareData = {
-    title: 'UniHub Dispatch',
-    text: 'Join the smartest ride-sharing hub on campus! Form groups, save costs, and move fast.',
+    title: 'NexRyde Dispatch',
+    text: 'Join the smartest ride-sharing platform on campus! Form groups, save costs, and move fast.',
     url: window.location.origin,
   };
 
@@ -142,15 +142,15 @@ const shareHub = async () => {
 const shareNode = async (node: RideNode) => {
   const seatsLeft = node.capacityNeeded - node.passengers.length;
   const message = node.isLongDistance 
-    ? `🚀 *UniHub Long Distance!* \n📍 *From:* ${node.origin}\n📍 *To:* ${node.destination}\n🚕 *Bids open for Drivers!*`
+    ? `🚀 *NexRyde Premium Ride!* \n📍 *From:* ${node.origin}\n📍 *To:* ${node.destination}\n🚕 *Partners invited to bid!*`
     : node.isSolo 
-    ? `🚀 *UniHub Dropping!* \n📍 *Route:* ${node.origin} → ${node.destination}\n🚕 *Solo Request* needs a driver!`
-    : `🚀 *Ride Hub Alert!*\n📍 *Route:* ${node.origin} → ${node.destination}\n👥 *Seats Left:* ${seatsLeft}\n💰 *Price:* ₵${node.farePerPerson}/p\n\nJoin my ride node on UniHub! 👇\n${window.location.origin}`;
+    ? `🚀 *NexRyde Solo Drop!* \n📍 *Route:* ${node.origin} → ${node.destination}\n🚕 *Express Partner* needed!`
+    : `🚀 *NexRyde Group Alert!*\n📍 *Route:* ${node.origin} → ${node.destination}\n👥 *Seats Left:* ${seatsLeft}\n💰 *Price:* ₵${node.farePerPerson}/p\n\nJoin my trip on NexRyde! 👇\n${window.location.origin}`;
 
   try {
     if (navigator.share) {
       await navigator.share({
-        title: 'UniHub Ride Update',
+        title: 'NexRyde Update',
         text: message,
         url: window.location.origin
       });
@@ -158,7 +158,7 @@ const shareNode = async (node: RideNode) => {
       window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
     }
   } catch (err) {
-    console.log('Node share failed', err);
+    console.log('Trip share failed', err);
   }
 };
 
@@ -209,17 +209,17 @@ const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<UniUser | null>(() => {
-    const saved = localStorage.getItem('unihub_user_v12');
+    const saved = localStorage.getItem('nexryde_user_v1');
     return saved ? JSON.parse(saved) : null;
   });
   const [activeDriverId, setActiveDriverId] = useState<string | null>(() => {
-    return sessionStorage.getItem('unihub_driver_session_v12');
+    return sessionStorage.getItem('nexryde_driver_session_v1');
   });
 
-  // Track user's own rides locally to prioritize their Move Codes
+  // Track user's own rides locally
   const [myRideIds, setMyRideIds] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('unihub_my_rides_v12');
+      const saved = localStorage.getItem('nexryde_my_rides_v1');
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
@@ -228,19 +228,19 @@ const App: React.FC = () => {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showAiHelp, setShowAiHelp] = useState(false);
-  const [isNewUser, setIsNewUser] = useState(() => !localStorage.getItem('unihub_seen_welcome_v12'));
+  const [isNewUser, setIsNewUser] = useState(() => !localStorage.getItem('nexryde_seen_welcome_v1'));
   const [isSyncing, setIsSyncing] = useState(true);
-  const [dismissedAnnouncement, setDismissedAnnouncement] = useState(() => sessionStorage.getItem('unihub_dismissed_announcement'));
+  const [dismissedAnnouncement, setDismissedAnnouncement] = useState(() => sessionStorage.getItem('nexryde_dismissed_announcement'));
 
   const [settings, setSettings] = useState<AppSettings>({
     adminMomo: "024-123-4567",
-    adminMomoName: "UniHub Admin",
+    adminMomoName: "NexRyde Admin",
     whatsappNumber: "233241234567",
     commissionPerSeat: 2.00,
     farePerPragia: 5.00,
     farePerTaxi: 8.00,
     soloMultiplier: 2.5,
-    aboutMeText: "Welcome to UniHub Dispatch.",
+    aboutMeText: "Welcome to NexRyde Logistics.",
     aboutMeImages: [],
     appWallpaper: "",
     registrationFee: 20.00,
@@ -282,12 +282,11 @@ const App: React.FC = () => {
 
       if (sData) {
         setSettings(sData as AppSettings);
-        // If announcement changed, reset dismissal
         const currentMsg = sData.hub_announcement || '';
-        if (currentMsg !== sessionStorage.getItem('unihub_last_announcement')) {
+        if (currentMsg !== sessionStorage.getItem('nexryde_last_announcement')) {
           setDismissedAnnouncement(null);
-          sessionStorage.removeItem('unihub_dismissed_announcement');
-          sessionStorage.setItem('unihub_last_announcement', currentMsg);
+          sessionStorage.removeItem('nexryde_dismissed_announcement');
+          sessionStorage.setItem('nexryde_last_announcement', currentMsg);
         }
       }
       if (nData) setNodes(nData);
@@ -304,7 +303,7 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    localStorage.setItem('unihub_my_rides_v12', JSON.stringify(myRideIds));
+    localStorage.setItem('nexryde_my_rides_v1', JSON.stringify(myRideIds));
   }, [myRideIds]);
 
   useEffect(() => {
@@ -338,9 +337,9 @@ const App: React.FC = () => {
 
   const activeDriver = useMemo(() => drivers.find(d => d.id === activeDriverId), [drivers, activeDriverId]);
 
-  const handleGlobalUserAuth = async (username: string, phone: string) => {
-    if (!username || !phone) {
-      alert("Identification details required.");
+  const handleGlobalUserAuth = async (username: string, phone: string, mode: 'login' | 'signup') => {
+    if (!phone) {
+      alert("Verification details required.");
       return;
     }
     
@@ -352,28 +351,38 @@ const App: React.FC = () => {
         .eq('phone', phone)
         .maybeSingle();
 
-      let user: UniUser;
-      if (data) {
-        user = data as UniUser;
+      if (mode === 'login') {
+        if (!data) {
+          alert("Profile not found! Please create an account first.");
+          setIsSyncing(false);
+          return;
+        }
+        const user = data as UniUser;
+        setCurrentUser(user);
+        localStorage.setItem('nexryde_user_v1', JSON.stringify(user));
       } else {
+        if (data) {
+          alert("An account with this phone already exists! Please Sign In.");
+          setIsSyncing(false);
+          return;
+        }
+        if (!username) { alert("Please enter a username for your profile."); setIsSyncing(false); return; }
         const newUser = { id: `USER-${Date.now()}`, username, phone };
         const { error: insertErr } = await supabase.from('unihub_users').insert([newUser]);
         if (insertErr) throw insertErr;
-        user = newUser;
+        setCurrentUser(newUser);
+        localStorage.setItem('nexryde_user_v1', JSON.stringify(newUser));
       }
-
-      setCurrentUser(user);
-      localStorage.setItem('unihub_user_v12', JSON.stringify(user));
     } catch (err: any) {
-      alert("Access Error: " + err.message);
+      alert("Identity Error: " + err.message);
     } finally {
       setIsSyncing(false);
     }
   };
 
   const handleLogout = () => {
-    if (confirm("Disconnect your Hub identity?")) {
-      localStorage.removeItem('unihub_user_v12');
+    if (confirm("Sign out of NexRyde?")) {
+      localStorage.removeItem('nexryde_user_v1');
       setCurrentUser(null);
     }
   };
@@ -384,11 +393,11 @@ const App: React.FC = () => {
 
     if (!mission || !driver) return;
     if (mission.driversJoined.includes(driverId)) {
-      alert("You have already joined this mission station.");
+      alert("You are already stationed at this hotspot.");
       return;
     }
     if (driver.walletBalance < mission.entryFee) {
-      alert("Insufficient Balance for Station Entry Fee.");
+      alert("Insufficient Balance for Hotspot Entry Fee.");
       return;
     }
 
@@ -406,7 +415,7 @@ const App: React.FC = () => {
       }])
     ]);
 
-    alert(`Successfully stationing at ${mission.location}! ₵${mission.entryFee} deducted.`);
+    alert(`Successfully stationed at ${mission.location}! ₵${mission.entryFee} deducted.`);
   };
 
   const addRideToMyList = (nodeId: string) => {
@@ -444,7 +453,7 @@ const App: React.FC = () => {
 
     const totalPotentialCommission = settings.commissionPerSeat * node.passengers.length;
     if (driver.walletBalance < totalPotentialCommission) {
-      alert(`Insufficient Balance! You need at least ₵${totalPotentialCommission.toFixed(2)} to accept this job.`);
+      alert(`Insufficient Credits! You need at least ₵${totalPotentialCommission.toFixed(2)} to accept this ride.`);
       return;
     }
 
@@ -457,7 +466,7 @@ const App: React.FC = () => {
       negotiatedTotalFare: customFare || node?.negotiatedTotalFare
     }).eq('id', nodeId);
 
-    alert(customFare ? `Negotiated trip accepted at ₵${customFare}! Money will be deducted after verification.` : "Job accepted! Verification code shared with you.");
+    alert(customFare ? `Premium trip accepted at ₵${customFare}!` : "Ride accepted! Verification code synced.");
   };
 
   const verifyRide = async (nodeId: string, code: string) => {
@@ -467,7 +476,7 @@ const App: React.FC = () => {
     if (node.verificationCode === code) {
       const driver = drivers.find(d => d.id === node.assignedDriverId);
       if (!driver) {
-        alert("Verification error: Driver record not found.");
+        alert("Verification error: Partner record not found.");
         return;
       }
 
@@ -488,13 +497,13 @@ const App: React.FC = () => {
           }])
         ]);
         removeRideFromMyList(nodeId);
-        alert(`Verification successful! Commission of ₵${totalCommission.toFixed(2)} deducted.`);
+        alert(`Ride verified! Commission of ₵${totalCommission.toFixed(2)} deducted.`);
       } catch (err: any) {
         console.error("Verification deduction error:", err);
-        alert("Status updated but failed to deduct credit. Contact Admin.");
+        alert("Error deducting credits. Contact Admin.");
       }
     } else {
-      alert("Wrong code! Ask the passenger for their code.");
+      alert("Invalid Code! Ask the passenger for their Ride PIN.");
     }
   };
 
@@ -512,12 +521,12 @@ const App: React.FC = () => {
         }).eq('id', nodeId);
         
         if (resetErr) throw resetErr;
-        alert("Assignment cancelled. No commission was charged.");
+        alert("Trip assignment reset. No commission was charged.");
       } else {
         const { error: deleteErr } = await supabase.from('unihub_nodes').delete().eq('id', nodeId);
         if (deleteErr) throw deleteErr;
         removeRideFromMyList(nodeId);
-        alert("Ride request removed from the Hub.");
+        alert("Ride request removed.");
       }
     } catch (err: any) {
       console.error("Cancellation error:", err);
@@ -526,7 +535,7 @@ const App: React.FC = () => {
   };
 
   const settleNode = async (nodeId: string) => {
-    if (confirm("Force settle this ride as completed? Commission will be deducted.")) {
+    if (confirm("Force complete this trip? Partner commission will be charged.")) {
       const node = nodes.find(n => n.id === nodeId);
       if (node && node.assignedDriverId) {
         const driver = drivers.find(d => d.id === node.assignedDriverId);
@@ -549,7 +558,7 @@ const App: React.FC = () => {
       } else {
         await supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId);
       }
-      alert("Node settled manually.");
+      alert("Trip settled manually.");
     }
   };
 
@@ -570,11 +579,24 @@ const App: React.FC = () => {
     if (error) {
       alert("Topup Request Failed: " + error.message);
     } else {
-      alert("Request logged.");
+      alert("Credit request logged.");
     }
   };
 
   const requestRegistration = async (reg: Omit<RegistrationRequest, 'id' | 'status' | 'timestamp'>) => {
+    // Duplicate check
+    const existingDriver = drivers.find(d => d.contact === reg.contact || d.licensePlate === reg.licensePlate);
+    const existingReq = registrationRequests.find(r => (r.contact === reg.contact || r.licensePlate === reg.licensePlate) && r.status === 'pending');
+    
+    if (existingDriver) {
+      alert("Error: This Partner or Vehicle is already registered with NexRyde.");
+      return;
+    }
+    if (existingReq) {
+      alert("Application Pending: You already have an onboarding request under review.");
+      return;
+    }
+
     const req: RegistrationRequest = {
       ...reg,
       id: `REG-${Date.now()}`,
@@ -586,7 +608,7 @@ const App: React.FC = () => {
       console.error("Registration error:", error);
       alert("Submission Error: " + error.message);
     } else {
-      alert("Application submitted! An admin will review your portrait and MoMo payment reference shortly.");
+      alert("Application submitted! NexRyde Admin will review your details shortly.");
     }
   };
 
@@ -639,10 +661,10 @@ const App: React.FC = () => {
           timestamp: new Date().toLocaleString()
         }])
       ]);
-      alert("Driver approved and registered successfully!");
+      alert("Partner approved and activated!");
     } catch (err: any) {
       console.error("Approval error:", err);
-      alert("Failed to approve driver: " + err.message);
+      alert("Activation failed: " + err.message);
     }
   };
 
@@ -657,7 +679,7 @@ const App: React.FC = () => {
     try {
       const { error } = await supabase.from('unihub_drivers').insert([newDriver]);
       if (error) throw error;
-      alert(`Driver ${d.name} registered successfully!`);
+      alert(`Partner ${d.name} registered successfully!`);
     } catch (err: any) {
       console.error("Registration error:", err);
       alert(`Failed to register: ${err.message}.`);
@@ -667,7 +689,7 @@ const App: React.FC = () => {
   const deleteDriver = useCallback(async (id: string) => {
     const hasActiveMission = nodes.some(n => n.assignedDriverId === id && (n.status === 'qualified' || n.status === 'dispatched'));
     if (hasActiveMission) {
-      alert("Cannot unregister driver with an active mission.");
+      alert("Cannot unregister partner with an active trip.");
       return;
     }
 
@@ -680,7 +702,7 @@ const App: React.FC = () => {
   const updateGlobalSettings = async (newSettings: AppSettings) => {
     const { id, ...data } = newSettings;
     await supabase.from('unihub_settings').upsert({ id: 1, ...data });
-    alert("Hub Settings Updated Successfully!");
+    alert("Settings Updated Successfully!");
   };
 
   const hubRevenue = useMemo(() => transactions.reduce((a, b) => a + b.amount, 0), [transactions]);
@@ -708,7 +730,7 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       console.error("Auth error:", err);
-      alert("Authentication Failed: " + err.message);
+      alert("Access Denied: " + err.message);
     }
   };
 
@@ -722,32 +744,32 @@ const App: React.FC = () => {
     const driver = drivers.find(d => d.id === driverId);
     if (driver && driver.pin === pin) {
       setActiveDriverId(driverId);
-      sessionStorage.setItem('unihub_driver_session_v12', driverId);
+      sessionStorage.setItem('nexryde_driver_session_v1', driverId);
       setViewMode('driver');
     } else {
-      alert("Access Denied: Invalid Driver PIN");
+      alert("Access Denied: Invalid Partner Password");
     }
   };
 
   const handleDriverLogout = () => {
     setActiveDriverId(null);
-    sessionStorage.removeItem('unihub_driver_session_v12');
+    sessionStorage.removeItem('nexryde_driver_session_v1');
     setViewMode('passenger');
   };
 
   const dismissWelcome = () => {
     setIsNewUser(false);
-    localStorage.setItem('unihub_seen_welcome_v12', 'true');
+    localStorage.setItem('nexryde_seen_welcome_v1', 'true');
   };
 
   const handleDismissAnnouncement = () => {
     setDismissedAnnouncement('true');
-    sessionStorage.setItem('unihub_dismissed_announcement', 'true');
+    sessionStorage.setItem('nexryde_dismissed_announcement', 'true');
   };
 
   const safeSetViewMode = (mode: PortalMode) => {
     if (activeDriverId && mode !== 'driver') {
-      if (confirm("Logout from Driver Terminal?")) {
+      if (confirm("Sign out of Driver Terminal?")) {
         handleDriverLogout();
       } else {
         return;
@@ -775,7 +797,7 @@ const App: React.FC = () => {
         <div className="absolute inset-0 bg-[#020617]/70 pointer-events-none z-0"></div>
       )}
 
-      {/* Hub Announcement Bar */}
+      {/* NexRyde Announcement Bar */}
       {settings.hub_announcement && !dismissedAnnouncement && (
         <div className="fixed top-0 left-0 right-0 z-[400] bg-gradient-to-r from-amber-600 to-rose-600 px-4 py-3 flex items-center justify-between shadow-2xl animate-in slide-in-from-top duration-500 border-b border-white/10">
            <div className="flex items-center gap-3 overflow-hidden">
@@ -793,7 +815,7 @@ const App: React.FC = () => {
       {isSyncing && (
         <div className={`fixed ${settings.hub_announcement && !dismissedAnnouncement ? 'top-20' : 'top-4'} right-4 z-[300] bg-amber-500/20 text-amber-500 px-4 py-2 rounded-full border border-amber-500/30 text-[10px] font-black uppercase flex items-center gap-2 transition-all`}>
            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-           Syncing...
+           Live Syncing...
         </div>
       )}
 
@@ -805,39 +827,39 @@ const App: React.FC = () => {
               <i className="fas fa-route text-[#020617] text-xl"></i>
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none text-white">UniHub</h1>
-              <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mt-1">Logistics Engine</p>
+              <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none text-white">NexRyde</h1>
+              <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mt-1">Transit Excellence</p>
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            <button onClick={() => setShowQrModal(true)} title="Hub QR Code" className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-500 hover:text-amber-500 hover:bg-white/10 transition-all">
+            <button onClick={() => setShowQrModal(true)} title="NexRyde Code" className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-500 hover:text-amber-500 hover:bg-white/10 transition-all">
               <i className="fas fa-qrcode text-xs"></i>
             </button>
             <button onClick={() => setShowHelpModal(true)} title="Help Center" className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-500 hover:text-indigo-400 hover:bg-white/10 transition-all">
               <i className="fas fa-circle-question text-xs"></i>
             </button>
-            <button onClick={() => setShowAboutModal(true)} title="Hub Info" className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-500 hover:text-emerald-400 hover:bg-white/10 transition-all">
+            <button onClick={() => setShowAboutModal(true)} title="Platform Info" className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-500 hover:text-emerald-400 hover:bg-white/10 transition-all">
               <i className="fas fa-info-circle text-xs"></i>
             </button>
           </div>
         </div>
 
         <div className="flex-1 space-y-1">
-          <NavItem active={viewMode === 'passenger'} icon="fa-user-graduate" label="Passenger Hub" onClick={() => {safeSetViewMode('passenger'); setGlobalSearch('');}} />
-          <NavItem active={viewMode === 'driver'} icon="fa-id-card-clip" label="Driver Terminal" onClick={() => {safeSetViewMode('driver'); setGlobalSearch('');}} />
+          <NavItem active={viewMode === 'passenger'} icon="fa-user-graduate" label="Ride Center" onClick={() => {safeSetViewMode('passenger'); setGlobalSearch('');}} />
+          <NavItem active={viewMode === 'driver'} icon="fa-id-card-clip" label="Partner Terminal" onClick={() => {safeSetViewMode('driver'); setGlobalSearch('');}} />
           {(isVaultAccess || isAdminAuthenticated) && (
             <NavItem 
               active={viewMode === 'admin'} 
               icon="fa-shield-halved" 
-              label="Admin Command" 
+              label="Control Vault" 
               onClick={() => {safeSetViewMode('admin'); setGlobalSearch('');}} 
               badge={isAdminAuthenticated && pendingRequestsCount > 0 ? pendingRequestsCount : undefined}
             />
           )}
-          <NavItem active={false} icon="fa-share-nodes" label="Invite Friends" onClick={shareHub} />
+          <NavItem active={false} icon="fa-share-nodes" label="Invite Others" onClick={shareHub} />
           <button onClick={handleLogout} className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl text-slate-500 hover:bg-white/5 transition-all mt-4">
              <i className="fas fa-power-off text-lg w-6"></i>
-             <span className="text-sm font-bold">Logout Profile</span>
+             <span className="text-sm font-bold">Sign Out</span>
           </button>
         </div>
 
@@ -853,15 +875,15 @@ const App: React.FC = () => {
                     </div>
                   )}
                   <div className="truncate">
-                    <p className="text-[9px] font-black uppercase text-indigo-400 leading-none">Driver</p>
+                    <p className="text-[9px] font-black uppercase text-indigo-400 leading-none">Partner</p>
                     <p className="text-sm font-black text-white truncate">{activeDriver.name}</p>
                   </div>
                 </div>
-                <button onClick={handleDriverLogout} className="mt-4 w-full py-2 bg-indigo-600 rounded-xl text-[8px] font-black uppercase tracking-widest">Logout Terminal</button>
+                <button onClick={handleDriverLogout} className="mt-4 w-full py-2 bg-indigo-600 rounded-xl text-[8px] font-black uppercase tracking-widest">Sign Out Hub</button>
              </div>
            ) : (
              <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 mb-4">
-                <p className="text-[9px] font-black uppercase text-slate-500 leading-none">Profile</p>
+                <p className="text-[9px] font-black uppercase text-slate-500 leading-none">Identity</p>
                 <p className="text-sm font-black text-white truncate mt-1">{currentUser.username}</p>
                 <p className="text-[10px] text-slate-500 mt-1">{currentUser.phone}</p>
              </div>
@@ -869,15 +891,15 @@ const App: React.FC = () => {
           <div className="bg-emerald-500/10 p-6 rounded-[2.5rem] border border-emerald-500/20 relative overflow-hidden">
             <p className="text-[9px] font-black uppercase text-emerald-400 mb-2 flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-              Live Hub Pulse
+              Market Pulse
             </p>
             <div className="space-y-1">
                <div className="flex justify-between items-center">
-                  <p className="text-[10px] font-black text-white uppercase opacity-60 tracking-tight">Units Online</p>
+                  <p className="text-[10px] font-black text-white uppercase opacity-60 tracking-tight">Active Partners</p>
                   <p className="text-lg font-black text-white italic">{onlineDriverCount}</p>
                </div>
                <div className="flex justify-between items-center">
-                  <p className="text-[10px] font-black text-white uppercase opacity-60 tracking-tight">Active Nodes</p>
+                  <p className="text-[10px] font-black text-white uppercase opacity-60 tracking-tight">Open Trips</p>
                   <p className="text-lg font-black text-white italic">{activeNodeCount}</p>
                </div>
             </div>
@@ -887,7 +909,7 @@ const App: React.FC = () => {
 
       {/* Mobile Bottom Nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-20 bg-[#020617]/90 backdrop-blur-xl border-t border-white/5 z-[100] flex items-center justify-around px-4">
-        <MobileNavItem active={viewMode === 'passenger'} icon="fa-user-graduate" label="Hub" onClick={() => safeSetViewMode('passenger')} />
+        <MobileNavItem active={viewMode === 'passenger'} icon="fa-user-graduate" label="Ride" onClick={() => safeSetViewMode('passenger')} />
         <MobileNavItem active={viewMode === 'driver'} icon="fa-id-card-clip" label="Drive" onClick={() => safeSetViewMode('driver')} />
         {(isVaultAccess || isAdminAuthenticated) && (
           <MobileNavItem 
@@ -912,13 +934,13 @@ const App: React.FC = () => {
                    <i className="fas fa-sparkles"></i>
                 </div>
                 <div>
-                   <h2 className="text-xl font-black uppercase italic leading-none text-white">Welcome to the Hub</h2>
-                   <p className="text-xs font-bold opacity-80 mt-1 uppercase tracking-tight text-indigo-100">First time here? Check out our quick start guide.</p>
+                   <h2 className="text-xl font-black uppercase italic leading-none text-white">Welcome to NexRyde</h2>
+                   <p className="text-xs font-bold opacity-80 mt-1 uppercase tracking-tight text-indigo-100">Ready to move? Check out our quick start guide.</p>
                 </div>
               </div>
               <div className="relative z-10 flex gap-3 w-full sm:w-auto">
-                 <button onClick={() => setShowHelpModal(true)} className="flex-1 sm:flex-none px-6 py-3 bg-white text-indigo-600 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-xl">Open Guide</button>
-                 <button onClick={dismissWelcome} className="flex-1 sm:flex-none px-6 py-3 bg-indigo-700 text-white rounded-xl font-black text-[9px] uppercase tracking-widest">Got it</button>
+                 <button onClick={() => setShowHelpModal(true)} className="flex-1 sm:flex-none px-6 py-3 bg-white text-indigo-600 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-xl">Guide</button>
+                 <button onClick={dismissWelcome} className="flex-1 sm:flex-none px-6 py-3 bg-indigo-700 text-white rounded-xl font-black text-[9px] uppercase tracking-widest">Let's Go</button>
               </div>
               <i className="fas fa-route absolute right-[-20px] top-[-20px] text-[150px] opacity-10 pointer-events-none rotate-12"></i>
             </div>
@@ -929,7 +951,7 @@ const App: React.FC = () => {
                <i className="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-500"></i>
                <input 
                   type="text" 
-                  placeholder="Search routes or users..." 
+                  placeholder="Search routes, destinations, or partners..." 
                   className="w-full bg-white/5 border border-white/10 rounded-[2rem] py-4 lg:py-6 pl-14 pr-6 text-white font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-700"
                   value={globalSearch}
                   onChange={(e) => setGlobalSearch(e.target.value)}
@@ -1016,7 +1038,7 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* AI Help Assistant FAB (Passenger) */}
+      {/* NexRyde Assistant */}
       <button 
         onClick={() => setShowAiHelp(true)}
         className="fixed bottom-24 right-6 lg:bottom-12 lg:right-12 w-16 h-16 bg-gradient-to-tr from-indigo-600 to-purple-500 rounded-full shadow-2xl flex items-center justify-center text-white text-2xl z-[100] hover:scale-110 transition-transform animate-bounce-slow"
@@ -1024,35 +1046,32 @@ const App: React.FC = () => {
         <i className="fas fa-sparkles"></i>
       </button>
 
-      {/* AI Help Modal */}
       {showAiHelp && <AiHelpDesk onClose={() => setShowAiHelp(false)} settings={settings} />}
 
-      {/* QR Code Modal */}
       {showQrModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-sm:px-4 max-w-sm rounded-[3rem] p-10 space-y-8 animate-in zoom-in text-center border border-white/10">
               <div className="space-y-2">
-                <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white leading-none">Hub QR Code</h3>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Direct Link to UniHub Dispatch</p>
+                <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white leading-none">NexRyde Code</h3>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Scan to access the platform</p>
               </div>
               
               <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl relative group">
                  <img 
                    src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(window.location.origin)}&bgcolor=ffffff&color=020617&format=svg`} 
                    className="w-full aspect-square"
-                   alt="Hub QR"
+                   alt="NexRyde QR"
                  />
               </div>
 
               <div className="flex gap-4">
                  <button onClick={() => setShowQrModal(false)} className="flex-1 py-4 bg-white/5 rounded-[1.5rem] font-black text-[10px] uppercase text-slate-400">Close</button>
-                 <button onClick={shareHub} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-[1.5rem] font-black text-[10px] uppercase shadow-xl">Share Link</button>
+                 <button onClick={shareHub} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-[1.5rem] font-black text-[10px] uppercase shadow-xl">Share Platform</button>
               </div>
            </div>
         </div>
       )}
 
-      {/* About Modal (Hub Portfolio) */}
       {showAboutModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-w-2xl rounded-[3rem] p-8 lg:p-12 space-y-8 animate-in zoom-in border border-white/10 overflow-y-auto max-h-[90vh] no-scrollbar">
@@ -1062,8 +1081,8 @@ const App: React.FC = () => {
                       <i className="fas fa-info-circle text-xl"></i>
                    </div>
                    <div>
-                      <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white leading-none">Hub Manifesto</h3>
-                      <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-1">Our Mission & Identity</p>
+                      <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white leading-none">NexRyde Manifesto</h3>
+                      <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-1">Our Mission & Ethics</p>
                    </div>
                 </div>
                 <button onClick={() => setShowAboutModal(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-slate-500 hover:text-white transition-all">
@@ -1075,7 +1094,7 @@ const App: React.FC = () => {
                 <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
                    {settings.aboutMeImages.map((img, i) => (
                      <div key={i} className="min-w-[280px] h-[180px] rounded-[2rem] overflow-hidden border border-white/10 shadow-xl shrink-0">
-                        <img src={img} className="w-full h-full object-cover" alt="Hub Portfolio" />
+                        <img src={img} className="w-full h-full object-cover" alt="NexRyde Portfolio" />
                      </div>
                    ))}
                 </div>
@@ -1090,11 +1109,11 @@ const App: React.FC = () => {
                  <div className="grid grid-cols-2 gap-4">
                     <a href={`https://wa.me/${settings.whatsappNumber}`} target="_blank" className="flex flex-col items-center gap-3 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-emerald-600/10 hover:border-emerald-500/30 transition-all group">
                        <i className="fab fa-whatsapp text-emerald-500 text-2xl group-hover:scale-110 transition-transform"></i>
-                       <span className="text-[9px] font-black uppercase text-slate-500">Official Line</span>
+                       <span className="text-[9px] font-black uppercase text-slate-500">Partner Support</span>
                     </a>
                     <button onClick={shareHub} className="flex flex-col items-center gap-3 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-amber-600/10 hover:border-amber-500/30 transition-all group">
                        <i className="fas fa-share-nodes text-amber-500 text-2xl group-hover:scale-110 transition-transform"></i>
-                       <span className="text-[9px] font-black uppercase text-slate-500">Share Hub</span>
+                       <span className="text-[9px] font-black uppercase text-slate-500">Share Platform</span>
                     </button>
                  </div>
               </div>
@@ -1106,7 +1125,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Help Modal */}
       {showHelpModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-w-3xl rounded-[3rem] p-8 lg:p-12 space-y-10 animate-in zoom-in border border-white/10 overflow-y-auto max-h-[90vh] no-scrollbar">
@@ -1116,8 +1134,8 @@ const App: React.FC = () => {
                       <i className="fas fa-graduation-cap"></i>
                    </div>
                    <div>
-                      <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white leading-none">Hub Help Center</h3>
-                      <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1">Operational Guides v1.1</p>
+                      <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white leading-none">NexRyde Help Center</h3>
+                      <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1">Operational Standards v1.2</p>
                    </div>
                 </div>
                 <button onClick={() => setShowHelpModal(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-slate-500 hover:text-white transition-all">
@@ -1128,41 +1146,41 @@ const App: React.FC = () => {
              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <HelpSection 
                    icon="fa-user-graduate" 
-                   title="Passenger Guide" 
+                   title="Rider Guide" 
                    color="text-amber-500"
                    points={[
-                      "Form Node: Start a group ride to split costs (4 seats max). Best for budget campus travel.",
-                      "Quick Drop: Choose 'Solo Drop' for immediate, private transport (Multiplier applies).",
-                      "Verification: Share your 4-digit 'Move Code' ONLY when you safely reach your destination.",
-                      "Cancellations: If a driver fails to arrive, cancel immediately to reclaim the node and free up dispatch."
+                      "Request Ride: Start a pooled trip to split costs (4 seats max). Perfect for daily campus commutes.",
+                      "Express Drop: Select 'Solo' for private transport. Dynamic pricing multipliers apply.",
+                      "Ride PIN: Your 4-digit code is generated once a partner accepts. Only share it at destination.",
+                      "Cancellations: Only the Trip Organizer (the one who created the ride) can delete a trip."
                    ]}
                 />
                 <HelpSection 
                    icon="fa-id-card-clip" 
-                   title="Driver Guide" 
+                   title="Partner Guide" 
                    color="text-indigo-400"
                    points={[
-                      "Missions: Pay entry fees to station at high-traffic zones like Hostels or Main Gates.",
-                      "Earnings: Credit is only deducted from your wallet AFTER a passenger's Move Code is verified.",
-                      "Verification: Input the passenger's 4-digit code or scan their QR to finalize the trip and earn.",
-                      "Registration: New drivers must upload a portrait and MoMo reference for manual admin review."
+                      "Hotspots: Station at these zones for higher ride volume. Small entry fees ensure exclusivity.",
+                      "Credits: Your wallet balance allows you to accept trips. Fares are collected from riders directly.",
+                      "Verification: Input the rider's PIN or scan their code to deduct NexRyde commission and finish.",
+                      "Passwords: Use your Partner Password to log in. Keep it secure and private."
                    ]}
                 />
                 <HelpSection 
-                   icon="fa-circle-info" 
-                   title="General Rules" 
+                   icon="fa-shield-check" 
+                   title="Security Protocols" 
                    color="text-emerald-400"
                    points={[
-                      "Pricing: Base fares are strictly set by the Admin. Solo trips cost more due to convenience.",
-                      "Security: Your login PIN is private. Admin will NEVER ask for your PIN via WhatsApp.",
-                      "Disputes: Contact support using the official Hub line if a ride verification fails.",
-                      "Network: Ensure you have a stable connection; the Hub uses real-time live synchronization."
+                      "Authenticity: Partners must provide clear portraits and MoMo references during onboarding.",
+                      "Ride Safety: Share ride details with friends using the built-in share feature.",
+                      "Account: One NexRyde profile per user. Duplicate identities will be flagged by Admin.",
+                      "Support: Use the official Partner Support line for any real-time disputes."
                    ]}
                 />
              </div>
 
              <div className="pt-6 border-t border-white/5 flex justify-center">
-                <button onClick={() => setShowHelpModal(false)} className="px-12 py-4 bg-white/5 border border-white/10 rounded-2xl font-black text-xs uppercase tracking-widest text-white hover:bg-white/10 transition-all">Understood</button>
+                <button onClick={() => setShowHelpModal(false)} className="px-12 py-4 bg-white/5 border border-white/10 rounded-2xl font-black text-xs uppercase tracking-widest text-white hover:bg-white/10 transition-all">Acknowledge</button>
              </div>
           </div>
         </div>
@@ -1173,15 +1191,16 @@ const App: React.FC = () => {
 
 // --- AUTH GATEWAY ---
 
-const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string) => void }) => {
+const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string, m: 'login' | 'signup') => void }) => {
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
-    if (!username || !phone) return;
+    if (!phone) return;
     setLoading(true);
-    await onIdentify(username, phone);
+    await onIdentify(username, phone, mode);
     setLoading(false);
   };
 
@@ -1195,23 +1214,30 @@ const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string) => void
             <i className="fas fa-fingerprint"></i>
           </div>
           <div>
-            <h1 className="text-4xl font-black tracking-tighter uppercase italic leading-none text-white">Hub Gateway</h1>
-            <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.4em] mt-3">Universal Dispatch Identification</p>
+            <h1 className="text-4xl font-black tracking-tighter uppercase italic leading-none text-white">NexRyde Entry</h1>
+            <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.4em] mt-3">Smart Transit Identity</p>
           </div>
         </div>
 
         <div className="glass p-10 rounded-[3.5rem] border border-white/10 space-y-6 shadow-2xl">
+          <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 mb-2">
+             <button onClick={() => setMode('login')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'login' ? 'bg-amber-500 text-[#020617]' : 'text-slate-500'}`}>Sign In</button>
+             <button onClick={() => setMode('signup')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'signup' ? 'bg-amber-500 text-[#020617]' : 'text-slate-500'}`}>Sign Up</button>
+          </div>
+
           <div className="space-y-4">
-            <div className="relative group">
-               <i className="fas fa-user absolute left-6 top-1/2 -translate-y-1/2 text-slate-500"></i>
-               <input 
-                 type="text" 
-                 placeholder="Username / Alias" 
-                 className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 pl-14 pr-6 text-white font-bold outline-none focus:border-amber-500 transition-all"
-                 value={username}
-                 onChange={e => setUsername(e.target.value)}
-               />
-            </div>
+            {mode === 'signup' && (
+              <div className="relative group animate-in slide-in-from-top-2">
+                 <i className="fas fa-user absolute left-6 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                 <input 
+                   type="text" 
+                   placeholder="Your Name / Alias" 
+                   className="w-full bg-white/5 border border-white/10 rounded-2xl py-5 pl-14 pr-6 text-white font-bold outline-none focus:border-amber-500 transition-all"
+                   value={username}
+                   onChange={e => setUsername(e.target.value)}
+                 />
+              </div>
+            )}
             <div className="relative group">
                <i className="fas fa-phone absolute left-6 top-1/2 -translate-y-1/2 text-slate-500"></i>
                <input 
@@ -1227,14 +1253,14 @@ const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string) => void
 
           <button 
             onClick={handleSubmit}
-            disabled={loading || !username || !phone}
+            disabled={loading || !phone}
             className="w-full py-5 bg-amber-500 text-[#020617] rounded-[2rem] font-black text-[11px] uppercase tracking-widest shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50"
           >
-            {loading ? <i className="fas fa-spinner fa-spin mr-2"></i> : 'Establish Connection'}
+            {loading ? <i className="fas fa-spinner fa-spin mr-2"></i> : (mode === 'login' ? 'Verify Account' : 'Create NexRyde Profile')}
           </button>
           
           <p className="text-[9px] font-medium text-slate-500 leading-relaxed max-w-[200px] mx-auto text-center">
-            By connecting, you agree to the Hub's operational safety protocols.
+            {mode === 'login' ? 'NexRyde will verify your identity across our secure database.' : 'Join the next generation of campus transit.'}
           </p>
         </div>
       </div>
@@ -1246,7 +1272,7 @@ const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string) => void
 
 const AiHelpDesk = ({ onClose, settings }: { onClose: () => void, settings: AppSettings }) => {
   const [messages, setMessages] = useState<{ role: 'user' | 'bot', text: string }[]>([
-    { role: 'bot', text: "Hello! I'm the UniHub AI Assistant. How can I help you move today?" }
+    { role: 'bot', text: "Welcome! I'm your NexRyde AI Assistant. How can I help you travel today?" }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -1259,26 +1285,26 @@ const AiHelpDesk = ({ onClose, settings }: { onClose: () => void, settings: AppS
     setLoading(true);
 
     try {
-      const prompt = `You are the UniHub Dispatch Support AI. 
-      App Info:
+      const prompt = `You are the NexRyde Dispatch Support AI. 
+      NexRyde Info:
       - Admin MoMo: ${settings.adminMomo} (${settings.adminMomoName})
-      - WhatsApp: ${settings.whatsappNumber}
-      - Pragia Fare: ₵${settings.farePerPragia}
-      - Taxi Fare: ₵${settings.farePerTaxi}
-      - Move Codes: Passengers must share these ONLY at destination.
-      - Drivers: Pay mission fees to station.
+      - WhatsApp Support: ${settings.whatsappNumber}
+      - Ride Types: Group (split cost), Solo (express), Long Distance.
+      - Verification: Users share 'Ride PINs' only at safe arrival.
+      - Fares: Pragia ₵${settings.farePerPragia}, Taxi ₵${settings.farePerTaxi}.
       
       User Question: ${userMsg}
-      Keep it brief, friendly, and helpful. Use emojis.`;
+      Keep answers concise and professional. Use emojis.`;
 
+      // Use generateContent for text task as per guidelines
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt
       });
 
-      setMessages(prev => [...prev, { role: 'bot', text: response.text || "Sorry, I'm having trouble thinking." }]);
+      setMessages(prev => [...prev, { role: 'bot', text: response.text || "I'm having trouble retrieving that info right now." }]);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'bot', text: "Service error. Please try again." }]);
+      setMessages(prev => [...prev, { role: 'bot', text: "Service temporarily unavailable. Try again in a moment." }]);
     } finally {
       setLoading(false);
     }
@@ -1286,13 +1312,13 @@ const AiHelpDesk = ({ onClose, settings }: { onClose: () => void, settings: AppS
 
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[300] flex items-end sm:items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-[#020617] rounded-[2.5rem] border border-white/10 flex flex-col h-[80vh] overflow-hidden animate-in slide-in-from-bottom-12 shadow-2xl">
+      <div className="w-full max-lg bg-[#020617] rounded-[2.5rem] border border-white/10 flex flex-col h-[80vh] overflow-hidden animate-in slide-in-from-bottom-12 shadow-2xl">
         <div className="p-6 border-b border-white/5 flex justify-between items-center bg-indigo-600">
            <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white"><i className="fas fa-robot"></i></div>
               <div>
-                <h3 className="font-black uppercase italic text-white text-sm leading-none">AI Help Desk</h3>
-                <p className="text-[9px] font-black text-indigo-200 uppercase mt-1">UniHub Assistant</p>
+                <h3 className="font-black uppercase italic text-white text-sm leading-none">NexRyde Assistant</h3>
+                <p className="text-[9px] font-black text-indigo-200 uppercase mt-1">Live Intelligence</p>
               </div>
            </div>
            <button onClick={onClose} className="text-white/50 hover:text-white"><i className="fas fa-times"></i></button>
@@ -1305,12 +1331,12 @@ const AiHelpDesk = ({ onClose, settings }: { onClose: () => void, settings: AppS
                 </div>
              </div>
            ))}
-           {loading && <div className="text-slate-500 text-[10px] font-black uppercase flex items-center gap-2 px-2 animate-pulse"><i className="fas fa-spinner fa-spin"></i> AI is thinking...</div>}
+           {loading && <div className="text-slate-500 text-[10px] font-black uppercase flex items-center gap-2 px-2 animate-pulse"><i className="fas fa-spinner fa-spin"></i> Analyzing...</div>}
         </div>
         <div className="p-6 bg-white/5 border-t border-white/5 flex gap-2">
            <input 
              className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-6 py-3 text-xs outline-none focus:border-indigo-500 text-white" 
-             placeholder="Type your question..." 
+             placeholder="How can I help you move?" 
              value={input}
              onChange={e => setInput(e.target.value)}
              onKeyDown={e => e.key === 'Enter' && handleSend()}
@@ -1375,18 +1401,18 @@ const AdminLogin = ({ onLogin }: any) => {
       <div className="w-20 h-20 bg-amber-500/10 rounded-[2rem] border border-amber-500/20 flex items-center justify-center text-amber-500 mb-8 shadow-2xl">
         <i className="fas fa-shield-halved text-3xl"></i>
       </div>
-      <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-8 text-white">Admin Vault</h2>
+      <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-8 text-white">NexRyde Admin</h2>
       <div className="w-full max-sm:px-4 max-w-sm glass p-8 lg:p-10 rounded-[2.5rem] border border-white/10 space-y-4">
           <input 
             type="email" 
-            placeholder="Admin Email" 
+            placeholder="Security Email" 
             className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-amber-500 font-bold text-white"
             value={email}
             onChange={e => setEmail(e.target.value)}
           />
           <input 
             type="password" 
-            placeholder="Secure Password" 
+            placeholder="Vault Key" 
             className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-amber-500 font-bold text-white"
             value={pass}
             onChange={e => setPass(e.target.value)}
@@ -1398,7 +1424,7 @@ const AdminLogin = ({ onLogin }: any) => {
           className="w-full py-4 bg-amber-500 text-[#020617] rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl disabled:opacity-50 mt-4"
           disabled={isVerifying}
         >
-          {isVerifying ? 'Authenticating...' : 'Unlock Vault'}
+          {isVerifying ? 'Verifying Access...' : 'Unlock Control Panel'}
         </button>
       </div>
     </div>
@@ -1410,15 +1436,10 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
   const [joinModalNodeId, setJoinModalNodeId] = useState<string | null>(null);
   const [origin, setOrigin] = useState('');
   const [dest, setDest] = useState('');
-  const [leader, setLeader] = useState(currentUser?.username || '');
-  const [phone, setPhone] = useState(currentUser?.phone || '');
   const [type, setType] = useState<VehicleType>('Pragia');
   const [isSolo, setIsSolo] = useState(false);
   const [isLongDistance, setIsLongDistance] = useState(false);
   
-  const [joinName, setJoinName] = useState(currentUser?.username || '');
-  const [joinPhone, setJoinPhone] = useState(currentUser?.phone || '');
-
   const [aiInput, setAiInput] = useState('');
   const [aiProcessing, setAiProcessing] = useState(false);
 
@@ -1447,6 +1468,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
         "vehicleType": VehicleType
       }`;
 
+      // Call generateContent for JSON output
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt,
@@ -1462,17 +1484,15 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
       setAiInput('');
     } catch (err) {
       console.error(err);
-      alert("AI couldn't parse that. Try typing Departure and Destination.");
+      alert("AI couldn't parse that request. Try typing Departure and Destination.");
     } finally {
       setAiProcessing(false);
     }
   };
 
   const createNode = async () => {
-    if (!origin) { alert("Please enter a Departure Point."); return; }
+    if (!origin) { alert("Please enter a Pickup Point."); return; }
     if (!dest) { alert("Please enter a Destination."); return; }
-    if (!leader) { alert("Please enter your Name."); return; }
-    if (!phone) { alert("Please enter your WhatsApp Number."); return; }
     
     const standardFare = type === 'Pragia' ? settings.farePerPragia : settings.farePerTaxi;
     const finalFare = isSolo ? Math.ceil(standardFare * settings.soloMultiplier) : standardFare;
@@ -1482,10 +1502,10 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
       origin: origin,
       destination: dest,
       capacityNeeded: isSolo ? 1 : 4, 
-      passengers: [{ id: 'P-LEAD', name: leader, phone }],
+      passengers: [{ id: 'P-LEAD', name: currentUser.username, phone: currentUser.phone }],
       status: (isSolo || isLongDistance) ? 'qualified' : 'forming',
-      leaderName: leader,
-      leaderPhone: phone,
+      leaderName: currentUser.username,
+      leaderPhone: currentUser.phone,
       farePerPerson: isLongDistance ? 0 : finalFare,
       createdAt: new Date().toISOString(),
       isSolo: isSolo,
@@ -1504,8 +1524,8 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div className="flex items-center gap-4">
           <div>
-            <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Passenger Hub</h2>
-            <p className="text-slate-500 text-[10px] font-black uppercase mt-1">Request drops or form nodes</p>
+            <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Ride Center</h2>
+            <p className="text-slate-500 text-[10px] font-black uppercase mt-1">Express Drops & Group Pooling</p>
           </div>
           <button onClick={onShowAbout} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-500 lg:hidden">
             <i className="fas fa-info-circle"></i>
@@ -1515,11 +1535,10 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
           <button onClick={onShowQr} className="w-12 h-12 lg:hidden bg-white/5 rounded-2xl flex items-center justify-center text-amber-500 border border-white/10 shadow-xl">
              <i className="fas fa-qrcode"></i>
           </button>
-          <button onClick={() => setShowModal(true)} className="flex-1 sm:flex-none px-8 py-4 bg-amber-500 text-[#020617] rounded-[1.5rem] font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-transform">Form Ride</button>
+          <button onClick={() => setShowModal(true)} className="flex-1 sm:flex-none px-8 py-4 bg-amber-500 text-[#020617] rounded-[1.5rem] font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-transform">Request Ride</button>
         </div>
       </div>
 
-      {/* Spotlight Card - Prominent About Me Link */}
       <div 
         onClick={onShowAbout}
         className="relative w-full h-44 rounded-[2.5rem] overflow-hidden border border-white/10 group cursor-pointer shadow-2xl"
@@ -1533,9 +1552,9 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/50 to-transparent"></div>
         <div className="absolute bottom-6 left-8 sm:left-10">
-           <p className="text-[9px] font-black text-emerald-400 uppercase tracking-[0.3em] mb-1">Hub Spotlight</p>
-           <h3 className="text-2xl font-black italic uppercase text-white leading-none">Discover our Mission</h3>
-           <p className="text-[10px] font-bold text-slate-400 uppercase mt-2 opacity-80">Click to read our Manifesto</p>
+           <p className="text-[9px] font-black text-emerald-400 uppercase tracking-[0.3em] mb-1">NexRyde Experience</p>
+           <h3 className="text-2xl font-black italic uppercase text-white leading-none">Our Mission Identity</h3>
+           <p className="text-[10px] font-bold text-slate-400 uppercase mt-2 opacity-80">Explore our commitment to quality</p>
         </div>
         <div className="absolute bottom-6 right-8 w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 group-hover:bg-amber-500 group-hover:text-[#020617] transition-all">
            <i className="fas fa-arrow-right"></i>
@@ -1546,11 +1565,11 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
         <section className="space-y-6">
            <div className="flex items-center gap-4">
               <span className="w-3 h-3 bg-indigo-500 rounded-full animate-pulse shadow-lg shadow-indigo-500/50"></span>
-              <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-400 italic">My Active Missions</h3>
+              <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-400 italic">My Active Trips</h3>
            </div>
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
              {myActiveNodes.map((node: any) => (
-                <RideCard key={node.id} node={node} drivers={drivers} onJoin={onJoin} onCancel={onCancel} setJoinModalNodeId={setJoinModalNodeId} isPriority />
+                <RideCard key={node.id} currentUser={currentUser} node={node} drivers={drivers} onJoin={onJoin} onCancel={onCancel} setJoinModalNodeId={setJoinModalNodeId} isPriority />
              ))}
            </div>
         </section>
@@ -1558,15 +1577,15 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
 
       <section className="space-y-6">
         <div className="flex items-center gap-4">
-           <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Global Hub Traffic</h3>
+           <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Marketplace Traffic</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredNodes.length > 0 ? filteredNodes.map((node: any) => (
-            <RideCard key={node.id} node={node} drivers={drivers} onJoin={onJoin} onCancel={onCancel} setJoinModalNodeId={setJoinModalNodeId} />
+            <RideCard key={node.id} currentUser={currentUser} node={node} drivers={drivers} onJoin={onJoin} onCancel={onCancel} setJoinModalNodeId={setJoinModalNodeId} />
           )) : (
             <div className="col-span-full py-12 text-center border-2 border-dashed border-white/5 rounded-[3rem]">
                <i className="fas fa-route text-slate-800 text-4xl mb-4"></i>
-               <p className="text-slate-600 font-black uppercase text-[10px] tracking-widest">No matching Hub traffic</p>
+               <p className="text-slate-600 font-black uppercase text-[10px] tracking-widest">No rides in this route yet</p>
             </div>
           )}
         </div>
@@ -1576,14 +1595,14 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-sm:px-2 max-w-lg rounded-[2.5rem] p-5 sm:p-6 lg:p-8 space-y-4 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[90vh] no-scrollbar">
             <div className="text-center mb-2">
-              <h3 className="text-xl font-black italic tracking-tighter uppercase text-white leading-none">Create Ride Request</h3>
-              <p className="text-slate-400 text-[8px] font-black uppercase mt-1">Carpooling or Quick Drop</p>
+              <h3 className="text-xl font-black italic tracking-tighter uppercase text-white leading-none">Request a Ride</h3>
+              <p className="text-slate-400 text-[8px] font-black uppercase mt-1">NexRyde Economy or Express</p>
             </div>
 
             <div className="p-3 bg-indigo-600/10 border border-indigo-500/20 rounded-xl space-y-2">
                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-indigo-400 font-black text-[8px] uppercase tracking-widest">
-                     <i className="fas fa-sparkles"></i> AI Quick Dispatch
+                     <i className="fas fa-sparkles"></i> NexDispatch AI
                   </div>
                   <button 
                     onClick={handleAiFill} 
@@ -1595,30 +1614,30 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
                </div>
                <textarea 
                  className="w-full bg-[#020617] text-white text-[10px] border border-white/10 rounded-lg p-2 outline-none focus:border-indigo-500 transition-all placeholder:text-slate-700 h-10 resize-none"
-                 placeholder="e.g. Solo taxi Limann to Business School"
+                 placeholder="e.g. Solo taxi from Main Gate to Central Lab"
                  value={aiInput}
                  onChange={e => setAiInput(e.target.value)}
                />
             </div>
 
             <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
-              <button onClick={() => {setIsSolo(false); setIsLongDistance(false);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${!isSolo && !isLongDistance ? 'bg-amber-500 text-[#020617]' : 'text-slate-400'}`}>Group</button>
-              <button onClick={() => {setIsSolo(true); setIsLongDistance(false);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${isSolo ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400'}`}>Solo</button>
-              <button onClick={() => {setIsSolo(false); setIsLongDistance(true);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${isLongDistance ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400'}`}>Long</button>
+              <button onClick={() => {setIsSolo(false); setIsLongDistance(false);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${!isSolo && !isLongDistance ? 'bg-amber-500 text-[#020617]' : 'text-slate-500'}`}>Pool</button>
+              <button onClick={() => {setIsSolo(true); setIsLongDistance(false);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${isSolo ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-500'}`}>Solo</button>
+              <button onClick={() => {setIsSolo(false); setIsLongDistance(true);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${isLongDistance ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}>Premium</button>
             </div>
 
             <div className="space-y-3">
                <div className="grid grid-cols-2 gap-3">
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="From" value={origin} onChange={e => setOrigin(e.target.value)} />
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="To" value={dest} onChange={e => setDest(e.target.value)} />
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Pickup" value={origin} onChange={e => setOrigin(e.target.value)} />
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Drop-off" value={dest} onChange={e => setDest(e.target.value)} />
                </div>
                <div className="grid grid-cols-2 gap-3">
                   <select className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none font-bold text-xs" value={type} onChange={e => setType(e.target.value as VehicleType)}>
-                    <option value="Pragia">Pragia</option>
-                    <option value="Taxi">Taxi</option>
+                    <option value="Pragia">NexRyde Economy (Pragia)</option>
+                    <option value="Taxi">NexRyde Standard (Taxi)</option>
                   </select>
                   <div className="flex items-center px-4 bg-white/5 border border-white/10 rounded-xl text-[10px] font-bold text-slate-500 truncate">
-                    {leader}
+                    Organizer: {currentUser.username}
                   </div>
                </div>
             </div>
@@ -1626,7 +1645,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
             <div className="flex gap-3 pt-2">
                <button onClick={() => setShowModal(false)} className="flex-1 py-4 bg-white/10 rounded-2xl font-black text-[10px] uppercase text-white">Cancel</button>
                <button onClick={createNode} className={`flex-[1.5] py-4 ${isLongDistance ? 'bg-indigo-600' : (isSolo ? 'bg-emerald-500' : 'bg-amber-500')} text-white rounded-2xl font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-transform`}>
-                 {isLongDistance ? 'Post Request' : (isSolo ? 'Request Drop' : 'Form Node')}
+                 {isLongDistance ? 'Post Premium' : (isSolo ? 'Request Solo' : 'Form Pool')}
                </button>
             </div>
           </div>
@@ -1636,22 +1655,15 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
       {joinModalNodeId && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[160] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-sm:px-4 max-w-sm rounded-[2rem] p-8 space-y-6 animate-in zoom-in text-slate-900">
-              <h3 className="text-xl font-black italic uppercase text-center text-white">Join Ride</h3>
+              <h3 className="text-xl font-black italic uppercase text-center text-white">Join NexRyde Pool</h3>
               <div className="space-y-4 text-center">
                  <p className="text-white font-black text-lg">{currentUser.username}</p>
                  <p className="text-slate-500 font-bold">{currentUser.phone}</p>
               </div>
-              <p className="text-[9px] text-slate-500 text-center font-black uppercase italic">Joining with your Hub identity</p>
+              <p className="text-[9px] text-slate-500 text-center font-black uppercase italic">Adding seat to your active profile</p>
               <div className="flex gap-3">
                  <button onClick={() => setJoinModalNodeId(null)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
-                 <button onClick={() => { 
-                   if (!joinName || !joinPhone) {
-                     alert("Profile incomplete. Logout and reconnect identity.");
-                     return;
-                   }
-                   onJoin(joinModalNodeId, joinName, joinPhone); 
-                   setJoinModalNodeId(null);
-                 }} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Join Hub Node</button>
+                 <button onClick={() => onJoin(joinModalNodeId, currentUser.username, currentUser.phone)} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Confirm Seat</button>
               </div>
            </div>
         </div>
@@ -1660,8 +1672,10 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
   );
 };
 
-const RideCard = ({ node, drivers, onJoin, onCancel, setJoinModalNodeId, isPriority }: any) => {
+const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNodeId, isPriority }: any) => {
   const driver = drivers.find((d: any) => d.id === node.assignedDriverId);
+  const isOrganizer = currentUser?.phone === node.leaderPhone;
+
   return (
     <div className={`glass rounded-[2.5rem] p-8 border transition-all ${node.isLongDistance ? 'border-indigo-500/40 shadow-xl shadow-indigo-500/5' : (node.status === 'dispatched' ? (isPriority ? 'border-indigo-500 shadow-2xl shadow-indigo-500/20' : 'border-amber-500/30') : 'border-white/5 hover:border-white/10')} relative overflow-hidden`}>
       {isPriority && node.status === 'dispatched' && (
@@ -1684,12 +1698,12 @@ const RideCard = ({ node, drivers, onJoin, onCancel, setJoinModalNodeId, isPrior
       <div className="space-y-4 mb-6">
         <div className="relative pl-6 border-l-2 border-white/5">
           <div className="absolute left-[-5px] top-0 w-2 h-2 rounded-full bg-slate-500"></div>
-          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">From</p>
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Pickup</p>
           <p className="text-white font-bold text-sm truncate uppercase">{node.origin}</p>
         </div>
         <div className="relative pl-6 border-l-2 border-white/5">
           <div className="absolute left-[-5px] bottom-0 w-2 h-2 rounded-full bg-amber-500"></div>
-          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">To</p>
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Drop-off</p>
           <p className="text-white font-black text-lg truncate uppercase">{node.destination}</p>
         </div>
       </div>
@@ -1711,12 +1725,14 @@ const RideCard = ({ node, drivers, onJoin, onCancel, setJoinModalNodeId, isPrior
         {node.status === 'forming' && !node.isSolo && !node.isLongDistance && (
           <div className="flex gap-2">
             <button onClick={() => setJoinModalNodeId(node.id)} className="flex-1 py-4 bg-white/5 border border-white/10 rounded-[1.5rem] font-black text-[10px] uppercase text-white hover:bg-white/10 transition-all">Claim Seat</button>
-            <button onClick={() => { if(confirm("Remove this ride request?")) onCancel(node.id); }} className="w-12 h-12 bg-rose-600/10 border border-rose-500/20 rounded-2xl flex items-center justify-center text-rose-500"><i className="fas fa-trash"></i></button>
+            {isOrganizer && (
+              <button onClick={() => { if(confirm("Delete this ride pool?")) onCancel(node.id); }} className="w-12 h-12 bg-rose-600/10 border border-rose-500/20 rounded-2xl flex items-center justify-center text-rose-500"><i className="fas fa-trash"></i></button>
+            )}
           </div>
         )}
 
-        {(node.status === 'forming' || node.status === 'qualified') && (node.isSolo || node.isLongDistance) && (
-           <button onClick={() => { if(confirm("Remove this request?")) onCancel(node.id); }} className="w-full py-4 bg-rose-600/10 border border-rose-500/20 rounded-[1.5rem] font-black text-[10px] uppercase text-rose-500">Cancel Request</button>
+        {(node.status === 'forming' || node.status === 'qualified') && (node.isSolo || node.isLongDistance) && isOrganizer && (
+           <button onClick={() => { if(confirm("Cancel this request?")) onCancel(node.id); }} className="w-full py-4 bg-rose-600/10 border border-rose-500/20 rounded-[1.5rem] font-black text-[10px] uppercase text-rose-500">Cancel Request</button>
         )}
 
         {node.status === 'dispatched' && driver && (
@@ -1745,20 +1761,22 @@ const RideCard = ({ node, drivers, onJoin, onCancel, setJoinModalNodeId, isPrior
 
             <div className={`p-6 ${isPriority ? 'bg-indigo-600' : 'bg-amber-500'} text-white rounded-[1.5rem] text-center shadow-xl flex flex-col items-center gap-4 relative overflow-hidden group`}>
                <div className="relative z-10">
-                  <p className="text-[8px] font-black uppercase mb-1 opacity-80 tracking-[0.2em]">Your Move Code</p>
+                  <p className="text-[8px] font-black uppercase mb-1 opacity-80 tracking-[0.2em]">Your Ride PIN</p>
                   <p className="text-5xl font-black italic tracking-widest">{node.verificationCode}</p>
                </div>
                <div className="bg-white p-3 rounded-2xl shadow-inner border-4 border-[#020617]/10 relative z-10">
                   <img 
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${node.verificationCode}&bgcolor=ffffff&color=020617`} 
                     className="w-24 h-24"
-                    alt="Verification QR"
+                    alt="Ride Code QR"
                   />
-                  <p className="text-[6px] font-black text-slate-500 uppercase mt-1 text-center">Scan to Verify</p>
+                  <p className="text-[6px] font-black text-slate-500 uppercase mt-1 text-center">Partner Scan Only</p>
                </div>
                {isPriority && <i className="fas fa-certificate absolute top-[-20px] right-[-20px] text-[80px] opacity-10 rotate-12"></i>}
             </div>
-            <button onClick={() => { if(confirm("Cancel this ride assignment?")) onCancel(node.id); }} className="w-full py-3 bg-rose-600/10 border border-rose-500/20 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-rose-500">Cancel Assignment</button>
+            {isOrganizer && (
+              <button onClick={() => { if(confirm("Abort this trip assignment?")) onCancel(node.id); }} className="w-full py-3 bg-rose-600/10 border border-rose-500/20 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-rose-500">Abort Assignment</button>
+            )}
           </div>
         )}
       </div>
@@ -1791,23 +1809,26 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
 
       try {
         const base64 = compressed.split(',')[1];
+        // Multimodal content must use { parts: [...] } structure
         const response = await ai.models.generateContent({
           model: 'gemini-3-flash-preview',
-          contents: [
-            { text: "Verify if this image is a portrait of a person. If it contains a vehicle, try to extract the license plate. Return JSON: { \"isPortrait\": boolean, \"licensePlate\": string | null }" },
-            { inlineData: { mimeType: "image/jpeg", data: base64 } }
-          ],
+          contents: {
+            parts: [
+              { text: "Verify if this image is a portrait of a person. If it contains a vehicle, try to extract the license plate. Return JSON: { \"isPortrait\": boolean, \"licensePlate\": string | null }" },
+              { inlineData: { mimeType: "image/jpeg", data: base64 } }
+            ]
+          },
           config: { responseMimeType: "application/json" }
         });
 
         const visionData = JSON.parse(response.text || '{}');
         if (visionData.licensePlate) setRegData(prev => ({ ...prev, licensePlate: visionData.licensePlate }));
         if (!visionData.isPortrait) {
-          alert("Portrait check failed. Please upload a clear photo of yourself.");
+          alert("Portrait Verification Failed. Please upload a clear photo of your face.");
           setRegData(prev => ({ ...prev, avatarUrl: undefined }));
         }
       } catch (err) {
-        console.error("Vision scan failed", err);
+        console.error("Vision analysis error", err);
       } finally {
         setPortraitScanning(false);
       }
@@ -1820,20 +1841,20 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
       const activeTraffic = allNodes.filter((n:any) => n.status !== 'completed').map((n:any) => `${n.origin} -> ${n.destination}`).join(', ');
       const missionLocs = missions.map((m:any) => m.location).join(', ');
       
-      const prompt = `Act as a logistics analyst for UniHub Dispatch. 
-      Current Passenger Traffic: ${activeTraffic}
-      Available Mission Stations: ${missionLocs}
+      const prompt = `Act as a logistics analyst for NexRyde. 
+      Market Traffic: ${activeTraffic}
+      Available Hotspots: ${missionLocs}
       
-      Suggest the best station for a driver to go to right now. 
-      Keep it very short (max 2 sentences). Start with 'UniHub Strategy:'.`;
+      Strategically advise a partner on where to go for maximum profit. 
+      Very short answer. Start with 'NexRyde Strategy:'.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt
       });
-      setHubInsight(response.text || "No insights found.");
+      setHubInsight(response.text || "Market strategy unavailable. Shift to hotspots.");
     } catch (err) {
-      setHubInsight("Strategy service offline. Station at Main Gate.");
+      setHubInsight("NexRyde analysis offline. Move to high-density zones.");
     } finally {
       setInsightLoading(false);
     }
@@ -1877,7 +1898,8 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
             <div className="w-24 h-24 bg-indigo-600/10 rounded-[2.5rem] flex items-center justify-center text-indigo-500 mx-auto mb-6 border border-indigo-500/20 shadow-2xl">
               <i className="fas fa-id-card-clip text-4xl"></i>
             </div>
-            <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white">Driver Terminal</h2>
+            <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white">Partner Hub</h2>
+            <p className="text-slate-500 text-[10px] font-black uppercase mt-1">Authorized NexRyde Partners Only</p>
         </div>
         
         {selectedDriverId ? (
@@ -1891,18 +1913,20 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                     </div>
                   )}
                 </div>
-                <input 
-                  type="password" 
-                  maxLength={4}
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-4xl tracking-[1em] font-black outline-none focus:border-amber-500 text-center text-white" 
-                  placeholder="0000"
-                  value={pin}
-                  onChange={e => setPin(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && onLogin(selectedDriverId, pin)}
-                />
+                <div className="space-y-2">
+                   <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Partner Password</p>
+                   <input 
+                     type="password" 
+                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-3xl tracking-[0.5em] font-black outline-none focus:border-amber-500 text-center text-white" 
+                     placeholder="••••"
+                     value={pin}
+                     onChange={e => setPin(e.target.value)}
+                     onKeyDown={e => e.key === 'Enter' && onLogin(selectedDriverId, pin)}
+                   />
+                </div>
                 <div className="flex gap-4">
                     <button onClick={() => {setSelectedDriverId(null); setPin('');}} className="flex-1 py-4 bg-white/5 rounded-xl font-black text-[10px] uppercase text-slate-400">Back</button>
-                    <button onClick={() => onLogin(selectedDriverId, pin)} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Login</button>
+                    <button onClick={() => onLogin(selectedDriverId, pin)} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Unlock Hub</button>
                 </div>
             </div>
         ) : (
@@ -1925,7 +1949,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                 ))}
               </div>
               <button onClick={() => setShowRegModal(true)} className="px-12 py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-2xl hover:scale-105 transition-transform flex items-center gap-3">
-                 <i className="fas fa-plus-circle"></i> Join UniHub Fleet
+                 <i className="fas fa-plus-circle"></i> Join NexRyde Fleet
               </button>
             </div>
         )}
@@ -1934,8 +1958,8 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
           <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
             <div className="glass-bright w-full max-sm:px-2 max-w-md rounded-[2.5rem] p-4 sm:p-6 space-y-4 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[95vh] no-scrollbar">
                <div className="text-center">
-                  <h3 className="text-xl font-black italic tracking-tighter uppercase text-white leading-none">Fleet Onboarding</h3>
-                  <p className="text-indigo-400 text-[8px] font-black uppercase mt-1">Registration Fee: ₵{settings.registrationFee || '...'}</p>
+                  <h3 className="text-xl font-black italic tracking-tighter uppercase text-white leading-none">Partner Onboarding</h3>
+                  <p className="text-indigo-400 text-[8px] font-black uppercase mt-1">Activation Fee: ₵{settings.registrationFee || '...'}</p>
                </div>
                
                <div className="flex justify-center flex-col items-center gap-1">
@@ -1951,12 +1975,12 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                     )}
                     {portraitScanning && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><i className="fas fa-spinner fa-spin text-white"></i></div>}
                   </label>
-                  {portraitScanning && <p className="text-[7px] font-black text-indigo-400 uppercase animate-pulse">AI Scanning...</p>}
+                  {portraitScanning && <p className="text-[7px] font-black text-indigo-400 uppercase animate-pulse">AI Verification...</p>}
                </div>
 
                <div className="bg-indigo-600/10 p-3 rounded-xl border border-indigo-500/20 flex items-center justify-between">
                   <div className="text-left">
-                    <p className="text-[7px] font-black text-slate-500 uppercase">Hub MoMo Account</p>
+                    <p className="text-[7px] font-black text-slate-500 uppercase">Admin MoMo ID</p>
                     <p className="text-sm font-black text-white italic leading-none">{settings.adminMomo}</p>
                     <p className="text-[8px] font-black text-slate-400 uppercase mt-1">{settings.adminMomoName}</p>
                   </div>
@@ -1964,28 +1988,28 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                </div>
 
                <div className="space-y-2.5">
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Full Name" value={regData.name || ''} onChange={e => setRegData({...regData, name: e.target.value})} />
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Full Legal Name" value={regData.name || ''} onChange={e => setRegData({...regData, name: e.target.value})} />
                   <div className="grid grid-cols-2 gap-2.5">
                     <select className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none font-bold text-xs" value={regData.vehicleType || 'Pragia'} onChange={e => setRegData({...regData, vehicleType: e.target.value as VehicleType})}>
-                       <option value="Pragia">Pragia</option>
-                       <option value="Taxi">Taxi</option>
+                       <option value="Pragia">Economy (Pragia)</option>
+                       <option value="Taxi">Standard (Taxi)</option>
                     </select>
-                    <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Plate No." value={regData.licensePlate || ''} onChange={e => setRegData({...regData, licensePlate: e.target.value})} />
+                    <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Plate ID" value={regData.licensePlate || ''} onChange={e => setRegData({...regData, licensePlate: e.target.value})} />
                   </div>
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="WhatsApp Line" value={regData.contact || ''} onChange={e => setRegData({...regData, contact: e.target.value})} />
+                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="WhatsApp Contact" value={regData.contact || ''} onChange={e => setRegData({...regData, contact: e.target.value})} />
                   <div className="grid grid-cols-2 gap-2.5">
-                    <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-black text-center text-xs" placeholder="Login PIN" maxLength={4} value={regData.pin || ''} onChange={e => setRegData({...regData, pin: e.target.value})} />
-                    <input className="w-full bg-white border border-emerald-500/30 rounded-xl px-4 py-3 outline-none font-black text-center text-emerald-600 text-xs" placeholder="MoMo Ref" value={regData.momoReference || ''} onChange={e => setRegData({...regData, momoReference: e.target.value})} />
+                    <input type="password" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-black text-center text-xs" placeholder="Hub Password" value={regData.pin || ''} onChange={e => setRegData({...regData, pin: e.target.value})} />
+                    <input className="w-full bg-white border border-emerald-500/30 rounded-xl px-4 py-3 outline-none font-black text-center text-emerald-600 text-xs" placeholder="Payment Ref" value={regData.momoReference || ''} onChange={e => setRegData({...regData, momoReference: e.target.value})} />
                   </div>
                </div>
 
                <div className="flex gap-3 pt-2">
-                  <button onClick={() => setShowRegModal(false)} className="flex-1 py-4 bg-white/10 rounded-2xl font-black text-[10px] uppercase text-white">Cancel</button>
+                  <button onClick={() => setShowRegModal(false)} className="flex-1 py-4 bg-white/10 rounded-2xl font-black text-[10px] uppercase text-white">Abort</button>
                   <button onClick={() => { 
-                    if (!regData.name || !regData.momoReference || !regData.pin || !regData.avatarUrl) { alert("Please complete all fields including photo."); return; }
+                    if (!regData.name || !regData.momoReference || !regData.pin || !regData.avatarUrl) { alert("Please complete all fields, including your photo."); return; }
                     onRequestRegistration({ ...regData as RegistrationRequest, amount: settings.registrationFee }); 
                     setShowRegModal(false); 
-                  }} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl">Apply & Join</button>
+                  }} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl">Verify & Apply</button>
                </div>
             </div>
           </div>
@@ -2012,12 +2036,12 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
           </div>
           <div>
             <h2 className="text-2xl font-black tracking-tighter uppercase italic text-white leading-none">{activeDriver.name}</h2>
-            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mt-2">₵ {activeDriver.walletBalance.toFixed(2)}</p>
+            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mt-2">Balance: ₵ {activeDriver.walletBalance.toFixed(2)}</p>
           </div>
         </div>
         <div className="flex gap-3 w-full sm:w-auto relative z-10">
-          <button onClick={() => setShowTopupModal(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg">Top-Up</button>
-          <button onClick={onLogout} className="flex-1 sm:flex-none px-6 py-3 bg-rose-600/10 text-rose-500 rounded-xl text-[10px] font-black uppercase border border-rose-500/20">End Shift</button>
+          <button onClick={() => setShowTopupModal(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg">Top-Up Credits</button>
+          <button onClick={onLogout} className="flex-1 sm:flex-none px-6 py-3 bg-rose-600/10 text-rose-500 rounded-xl text-[10px] font-black uppercase border border-rose-500/20">Sign Out</button>
         </div>
       </div>
 
@@ -2025,12 +2049,12 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
         <div className="lg:col-span-8 space-y-12">
            <section>
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Marketplace Missions</h3>
+                <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Partner Hotspots</h3>
                 <button 
                    onClick={generateHubInsight} 
                    className="flex items-center gap-2 text-indigo-400 font-black text-[9px] uppercase hover:scale-105 transition-transform bg-indigo-500/10 px-4 py-2 rounded-xl"
                 >
-                  <i className={`fas fa-sparkles ${insightLoading ? 'animate-spin' : ''}`}></i> Hub Insights
+                  <i className={`fas fa-sparkles ${insightLoading ? 'animate-spin' : ''}`}></i> NexStrategy
                 </button>
               </div>
 
@@ -2053,9 +2077,9 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                       </div>
                       <p className="text-[10px] text-slate-400 font-medium italic leading-relaxed">{m.description}</p>
                       {m.driversJoined.includes(activeDriver.id) ? (
-                        <div className="w-full py-3 bg-emerald-500/10 text-emerald-400 rounded-xl text-[8px] font-black uppercase text-center border border-emerald-500/20">Active Station</div>
+                        <div className="w-full py-3 bg-emerald-500/10 text-emerald-400 rounded-xl text-[8px] font-black uppercase text-center border border-emerald-500/20">Hotspot Active</div>
                       ) : (
-                        <button onClick={() => onJoinMission(m.id, activeDriver.id)} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[8px] font-black uppercase shadow-lg">Pay & Enter Station</button>
+                        <button onClick={() => onJoinMission(m.id, activeDriver.id)} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[8px] font-black uppercase shadow-lg">Enter Zone</button>
                       )}
                    </div>
                  ))}
@@ -2069,9 +2093,9 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                   <div key={node.id} className="glass rounded-[2rem] p-6 border transition-all flex flex-col md:flex-row items-center gap-6 border-white/5 hover:border-indigo-500/30">
                       <div className="flex-1">
                         <p className="font-black text-sm uppercase italic text-white">{node.origin} → {node.destination}</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Requested by {node.leaderName}</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Organized by {node.leaderName}</p>
                       </div>
-                      <button onClick={() => onAccept(node.id, activeDriver.id)} className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg">Accept Job</button>
+                      <button onClick={() => onAccept(node.id, activeDriver.id)} className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg">Accept Ride</button>
                   </div>
                 ))}
               </div>
@@ -2079,12 +2103,12 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-           <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Active Mission</h3>
+           <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Current Trip</h3>
            {dispatchedNodes.filter((n: any) => n.assignedDriverId === activeDriver.id).map((node: any) => (
               <div key={node.id} className="glass rounded-[2rem] p-8 border space-y-6 border-amber-500/20">
                  <h4 className="text-xl font-black uppercase italic text-white leading-none truncate text-center">{node.origin} to {node.destination}</h4>
                  <div className="space-y-4 pt-4 border-t border-white/5 text-center">
-                    <p className="text-[9px] font-black text-slate-500 uppercase mb-2">Verify Trip to finish</p>
+                    <p className="text-[9px] font-black text-slate-500 uppercase mb-2">Verify Ride PIN to Complete</p>
                     <div className="relative group">
                        <input 
                          className="w-full bg-[#0f172a] border border-white/10 rounded-xl px-4 py-5 text-center text-4xl font-black outline-none focus:border-emerald-500 text-white" 
@@ -2101,8 +2125,8 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                        </button>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <button onClick={() => onVerify(node.id, verifyCode)} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Complete Ride</button>
-                      <button onClick={() => { if(confirm("Abandon ride?")) onCancel(node.id); }} className="w-full py-2 bg-white/5 text-slate-500 rounded-xl font-black text-[9px] uppercase">Unable to Finish</button>
+                      <button onClick={() => onVerify(node.id, verifyCode)} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Finish Ride</button>
+                      <button onClick={() => { if(confirm("Abandon trip? Partner rating may be affected.")) onCancel(node.id); }} className="w-full py-2 bg-white/5 text-slate-500 rounded-xl font-black text-[9px] uppercase">Unable to Complete</button>
                     </div>
                  </div>
               </div>
@@ -2119,7 +2143,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                        <i className="fas fa-camera text-xl"></i>
                     </div>
                     <div>
-                       <h3 className="text-xl font-black italic uppercase tracking-tighter leading-none">Scanning Trip QR</h3>
+                       <h3 className="text-xl font-black italic uppercase tracking-tighter leading-none">Scanning Ride PIN</h3>
                        <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-1">Auto Verification Active</p>
                     </div>
                  </div>
@@ -2138,13 +2162,13 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-sm:px-4 max-w-md rounded-[2.5rem] p-8 space-y-8 animate-in zoom-in text-slate-900">
             <div className="text-center">
-              <h3 className="text-2xl font-black italic tracking-tighter uppercase text-white leading-none">Credit Request</h3>
-              <p className="text-slate-400 text-[10px] font-black uppercase mt-1">Manual MoMo Verification</p>
+              <h3 className="text-2xl font-black italic tracking-tighter uppercase text-white leading-none">Credit Acquisition</h3>
+              <p className="text-slate-400 text-[10px] font-black uppercase mt-1">MoMo Verification Required</p>
             </div>
             
             <div className="space-y-4">
                <div className="p-6 bg-amber-500/10 rounded-2xl border border-amber-500/20 text-center">
-                  <p className="text-[9px] font-black text-amber-500 uppercase mb-1">Hub MoMo Account</p>
+                  <p className="text-[9px] font-black text-amber-500 uppercase mb-1">NexRyde Billing ID</p>
                   <p className="text-3xl font-black text-white italic leading-none">{settings.adminMomo}</p>
                   <p className="text-[11px] font-black text-slate-400 uppercase mt-2">{settings.adminMomoName}</p>
                </div>
@@ -2154,10 +2178,10 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
             <div className="flex gap-4">
                <button onClick={() => setShowTopupModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
                <button onClick={() => { 
-                 if (!topupAmount || !momoRef) { alert("Fields required."); return; }
+                 if (!topupAmount || !momoRef) { alert("Please fill all fields."); return; }
                  onRequestTopup(activeDriver.id, Number(topupAmount), momoRef); 
                  setShowTopupModal(false); 
-               }} className="flex-1 py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Send Request</button>
+               }} className="flex-1 py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Request Activation</button>
             </div>
           </div>
         </div>
@@ -2169,7 +2193,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
 const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onDeleteDriver, onCancelRide, onSettleRide, missions, onCreateMission, onDeleteMission, transactions, topupRequests, registrationRequests, onApproveTopup, onApproveRegistration, onLock, search, settings, onUpdateSettings, hubRevenue, adminEmail }: any) => {
   const [showDriverModal, setShowDriverModal] = useState(false);
   const [showMissionModal, setShowMissionModal] = useState(false);
-  const [newDriver, setNewDriver] = useState<Partial<Driver>>({ vehicleType: 'Pragia', pin: '0000' });
+  const [newDriver, setNewDriver] = useState<Partial<Driver>>({ vehicleType: 'Pragia', pin: '' });
   const [newMission, setNewMission] = useState<Partial<HubMission>>({ location: '', description: '', entryFee: 5, status: 'open' });
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
   
@@ -2194,20 +2218,16 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
     <div className="animate-in slide-in-from-bottom-8 space-y-8 pb-10">
       <div className="flex items-center justify-between mb-4">
          <div className="flex bg-white/5 p-1 rounded-[1.5rem] border border-white/10 overflow-x-auto no-scrollbar max-w-full">
-            <TabBtn active={activeTab === 'monitor'} label="Stats" onClick={() => setActiveTab('monitor')} />
-            <TabBtn active={activeTab === 'fleet'} label="Fleet" onClick={() => setActiveTab('fleet')} />
-            <TabBtn active={activeTab === 'onboarding'} label="Applications" onClick={() => setActiveTab('onboarding')} count={registrationRequests.filter((r:any)=>r.status==='pending').length} />
-            <TabBtn active={activeTab === 'missions'} label="Hub Missions" onClick={() => setActiveTab('missions')} />
-            <TabBtn active={activeTab === 'requests'} label="Credit" onClick={() => setActiveTab('requests')} count={topupRequests.filter((r:any)=>r.status==='pending').length} />
-            <TabBtn active={activeTab === 'settings'} label="Setup" onClick={() => setActiveTab('settings')} />
+            <TabBtn active={activeTab === 'monitor'} label="Dashboard" onClick={() => setActiveTab('monitor')} />
+            <TabBtn active={activeTab === 'fleet'} label="Partners" onClick={() => setActiveTab('fleet')} />
+            <TabBtn active={activeTab === 'onboarding'} label="Onboarding" onClick={() => setActiveTab('onboarding')} count={registrationRequests.filter((r:any)=>r.status==='pending').length} />
+            <TabBtn active={activeTab === 'missions'} label="Hotspots" onClick={() => setActiveTab('missions')} />
+            <TabBtn active={activeTab === 'requests'} label="Billing" onClick={() => setActiveTab('requests')} count={topupRequests.filter((r:any)=>r.status==='pending').length} />
+            <TabBtn active={activeTab === 'settings'} label="System" onClick={() => setActiveTab('settings')} />
          </div>
          <div className="flex items-center gap-4 bg-rose-600/10 px-4 py-2 rounded-xl border border-rose-500/20">
-            <div className="hidden sm:block text-right">
-               <p className="text-[7px] font-black text-rose-500 uppercase leading-none">Admin Active</p>
-               <p className="text-[9px] font-bold text-white truncate max-w-[120px]">{adminEmail}</p>
-            </div>
             <button onClick={onLock} className="text-rose-500 hover:text-rose-400 transition-colors">
-               <i className="fas fa-power-off text-sm"></i>
+               <i className="fas fa-lock text-sm"></i>
             </button>
          </div>
       </div>
@@ -2215,20 +2235,20 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
       {activeTab === 'monitor' && (
         <div className="space-y-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="Forming" value={nodes.filter((n:any) => n.status === 'forming').length} icon="fa-users" color="text-amber-400" />
-            <StatCard label="Total Units" value={drivers.length} icon="fa-taxi" color="text-indigo-400" />
+            <StatCard label="Requests" value={nodes.filter((n:any) => n.status === 'forming').length} icon="fa-users" color="text-amber-400" />
+            <StatCard label="Partners" value={drivers.length} icon="fa-taxi" color="text-indigo-400" />
             <StatCard label="Qualified" value={nodes.filter((n:any) => n.status === 'qualified').length} icon="fa-bolt" color="text-emerald-400" />
-            <StatCard label="Net Profit" value={hubRevenue.toFixed(0)} icon="fa-money-bill" color="text-slate-400" isCurrency />
+            <StatCard label="Revenue" value={hubRevenue.toFixed(0)} icon="fa-money-bill" color="text-slate-400" isCurrency />
           </div>
           
           <div className="glass rounded-[2rem] p-8 border border-white/5">
-             <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Active Node Traffic</h4>
+             <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Live NexRyde Activity</h4>
              <div className="space-y-3">
                {nodes.slice(0, 10).map((n: RideNode) => (
                  <div key={n.id} className="flex justify-between items-center bg-white/5 p-4 rounded-xl hover:bg-white/10 transition-all">
                     <div className="flex-1">
-                      <p className="text-[11px] font-black text-white uppercase italic">{n.origin} to {n.destination}</p>
-                      <p className="text-[9px] text-slate-500 font-bold uppercase">{n.status} | {n.passengers.length} Users</p>
+                      <p className="text-[11px] font-black text-white uppercase italic">{n.origin} → {n.destination}</p>
+                      <p className="text-[9px] text-slate-500 font-bold uppercase">{n.status} | {n.passengers.length} Riders</p>
                     </div>
                     <div className="flex gap-2">
                        {n.status !== 'completed' && <button onClick={() => onSettleRide(n.id)} className="px-3 py-1.5 bg-emerald-600/10 text-emerald-500 rounded-lg text-[8px] font-black uppercase border border-emerald-500/20">Settle</button>}
@@ -2244,27 +2264,30 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
       {activeTab === 'fleet' && (
         <div className="space-y-6">
            <div className="flex justify-between items-center px-2">
-              <h3 className="text-xl font-black uppercase italic text-white leading-none">Fleet Registry</h3>
-              <button onClick={() => setShowDriverModal(true)} className="px-6 py-3 bg-amber-500 text-[#020617] rounded-xl text-[9px] font-black uppercase shadow-xl">Register Unit</button>
+              <h3 className="text-xl font-black uppercase italic text-white leading-none">Partner Registry</h3>
+              <button onClick={() => setShowDriverModal(true)} className="px-6 py-3 bg-amber-500 text-[#020617] rounded-xl text-[9px] font-black uppercase shadow-xl">Direct Register</button>
            </div>
            <div className="glass rounded-[2rem] overflow-hidden border border-white/5">
               <table className="w-full text-left text-[11px]">
                  <thead className="bg-white/5 text-slate-500 uppercase font-black tracking-widest border-b border-white/5">
-                    <tr><th className="px-8 py-5">Unit Portrait</th><th className="px-8 py-5">Driver Details</th><th className="px-8 py-5 text-center">Wallet</th><th className="px-8 py-5 text-right">Action</th></tr>
+                    <tr><th className="px-8 py-5">Partner</th><th className="px-8 py-5">Asset Info</th><th className="px-8 py-5 text-center">Credit</th><th className="px-8 py-5 text-right">Action</th></tr>
                  </thead>
                  <tbody className="divide-y divide-white/5">
                     {filteredDrivers.map((d: any) => (
                        <tr key={d.id} className="text-slate-300 font-bold hover:bg-white/5">
                           <td className="px-8 py-5">
-                            {d.avatarUrl ? (
-                              <img src={d.avatarUrl} className="w-10 h-10 rounded-full object-cover border border-amber-500/30" />
-                            ) : (
-                              <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-600"><i className="fas fa-user"></i></div>
-                            )}
+                            <div className="flex items-center gap-3">
+                              {d.avatarUrl ? (
+                                <img src={d.avatarUrl} className="w-10 h-10 rounded-full object-cover border border-amber-500/30" />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-600"><i className="fas fa-user"></i></div>
+                              )}
+                              <span>{d.name}</span>
+                            </div>
                           </td>
-                          <td className="px-8 py-5"><div>{d.name}</div><div className="text-[8px] text-slate-500 uppercase tracking-tighter">{d.contact} | {d.licensePlate}</div></td>
+                          <td className="px-8 py-5"><div>{d.licensePlate}</div><div className="text-[8px] text-slate-500 uppercase tracking-tighter">{d.contact} | {d.vehicleType}</div></td>
                           <td className="px-8 py-5 text-center text-emerald-400 italic font-black">₵{d.walletBalance.toFixed(1)}</td>
-                          <td className="px-8 py-5 text-right"><button onClick={() => setPendingDeletionId(d.id)} className="px-4 py-2 bg-rose-600/10 text-rose-500 rounded-xl text-[8px] font-black uppercase">Unregister</button></td>
+                          <td className="px-8 py-5 text-right"><button onClick={() => setPendingDeletionId(d.id)} className="px-4 py-2 bg-rose-600/10 text-rose-500 rounded-xl text-[8px] font-black uppercase">Revoke</button></td>
                        </tr>
                     ))}
                  </tbody>
@@ -2292,21 +2315,21 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                     </div>
                   </div>
                   <div className="bg-white/5 p-4 rounded-xl space-y-2">
-                     <p className="text-[8px] font-black uppercase text-slate-500">License Plate</p>
+                     <p className="text-[8px] font-black uppercase text-slate-500">Plate Number</p>
                      <p className="text-xs font-black text-white">{reg.licensePlate}</p>
-                     <p className="text-[8px] font-black uppercase text-slate-500 mt-2">Momo Ref</p>
+                     <p className="text-[8px] font-black uppercase text-slate-500 mt-2">MoMo Reference</p>
                      <p className="text-sm font-black text-emerald-400 italic">REF: {reg.momoReference}</p>
                      <p className="text-[8px] font-black uppercase text-slate-500 mt-2">WhatsApp</p>
                      <p className="text-xs font-black text-white">{reg.contact}</p>
                   </div>
                 </div>
-                <button onClick={() => onApproveRegistration(reg.id)} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-indigo-500 mt-4 transition-all">Approve Driver</button>
+                <button onClick={() => onApproveRegistration(reg.id)} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-indigo-500 mt-4 transition-all">Activate Partner</button>
              </div>
            ))}
            {registrationRequests.filter((r:any)=>r.status==='pending').length === 0 && (
              <div className="col-span-full py-20 text-center">
                 <i className="fas fa-id-card text-slate-800 text-4xl mb-4"></i>
-                <p className="text-slate-600 font-black uppercase text-[10px]">No pending fleet applications</p>
+                <p className="text-slate-600 font-black uppercase text-[10px]">No pending onboarding requests</p>
              </div>
            )}
         </div>
@@ -2315,8 +2338,8 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
       {activeTab === 'missions' && (
         <div className="space-y-6">
            <div className="flex justify-between items-center px-2">
-              <h3 className="text-xl font-black uppercase italic text-white leading-none">Station Jobs</h3>
-              <button onClick={() => setShowMissionModal(true)} className="px-6 py-3 bg-amber-500 text-[#020617] rounded-xl text-[9px] font-black uppercase shadow-xl">Create Mission</button>
+              <h3 className="text-xl font-black uppercase italic text-white leading-none">NexRyde Hotspots</h3>
+              <button onClick={() => setShowMissionModal(true)} className="px-6 py-3 bg-amber-500 text-[#020617] rounded-xl text-[9px] font-black uppercase shadow-xl">New Hotspot</button>
            </div>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {missions.map(m => (
@@ -2324,20 +2347,13 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                    <div className="flex justify-between items-start">
                       <div>
                          <h4 className="text-white font-black uppercase italic text-lg leading-none mb-2">{m.location}</h4>
-                         <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">₵{m.entryFee} ENTRY FEE</p>
+                         <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">₵{m.entryFee} Entry Fee</p>
                       </div>
                       <button onClick={() => onDeleteMission(m.id)} className="w-8 h-8 rounded-full bg-rose-600/10 text-rose-500 hover:bg-rose-600 hover:text-white transition-all"><i className="fas fa-trash text-[10px]"></i></button>
                    </div>
                    <p className="text-[11px] text-slate-400 font-medium italic leading-relaxed">{m.description}</p>
                    <div className="pt-4 border-t border-white/5 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                         <div className="flex -space-x-2">
-                            {m.driversJoined.slice(0, 3).map((did, i) => (
-                              <div key={i} className="w-6 h-6 rounded-full bg-indigo-600 border border-[#020617] flex items-center justify-center text-[8px] font-black uppercase text-white">D</div>
-                            ))}
-                         </div>
-                         <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">{m.driversJoined.length} Drivers Stationed</span>
-                      </div>
+                      <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">{m.driversJoined.length} Partners Stationed</span>
                    </div>
                 </div>
               ))}
@@ -2352,9 +2368,9 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                 <div>
                   <h4 className="text-white font-black uppercase italic text-sm">{drivers.find((d:any)=>d.id===req.driverId)?.name}</h4>
                   <p className="text-3xl font-black text-white italic mt-4">₵ {req.amount}</p>
-                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2">Ref: {req.momoReference}</p>
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2">ID: {req.momoReference}</p>
                 </div>
-                <button onClick={() => onApproveTopup(req.id)} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Approve Credit</button>
+                <button onClick={() => onApproveTopup(req.id)} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Confirm Credits</button>
              </div>
            ))}
         </div>
@@ -2363,49 +2379,49 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
       {activeTab === 'settings' && (
         <div className="glass rounded-[2rem] p-8 border border-white/5 space-y-10 animate-in fade-in">
            <div>
-              <h3 className="text-xl font-black uppercase italic text-white leading-none">Hub Settings</h3>
-              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-2">Core logic & appearance controller</p>
+              <h3 className="text-xl font-black uppercase italic text-white leading-none">NexRyde Control</h3>
+              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-2">Global Logistics Engine Settings</p>
            </div>
            
            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <section className="space-y-6">
-                 <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pricing & Fares</h4>
+                 <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Ride & Premium Pricing</h4>
                  <div className="space-y-4">
-                    <AdminInput label="Commission (₵)" value={localSettings.commissionPerSeat} onChange={v => setLocalSettings({...localSettings, commissionPerSeat: Number(v)})} />
-                    <AdminInput label="Registration Fee (₵)" value={localSettings.registrationFee} onChange={v => setLocalSettings({...localSettings, registrationFee: Number(v)})} />
-                    <AdminInput label="Pragia Fare (₵)" value={localSettings.farePerPragia} onChange={v => setLocalSettings({...localSettings, farePerPragia: Number(v)})} />
-                    <AdminInput label="Taxi Fare (₵)" value={localSettings.farePerTaxi} onChange={v => setLocalSettings({...localSettings, farePerTaxi: Number(v)})} />
-                    <AdminInput label="Solo Multiplier (x)" value={localSettings.soloMultiplier} onChange={v => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
+                    <AdminInput label="NexRyde Fee (₵)" value={localSettings.commissionPerSeat} onChange={v => setLocalSettings({...localSettings, commissionPerSeat: Number(v)})} />
+                    <AdminInput label="Onboarding Fee (₵)" value={localSettings.registrationFee} onChange={v => setLocalSettings({...localSettings, registrationFee: Number(v)})} />
+                    <AdminInput label="Pragia Base (₵)" value={localSettings.farePerPragia} onChange={v => setLocalSettings({...localSettings, farePerPragia: Number(v)})} />
+                    <AdminInput label="Taxi Base (₵)" value={localSettings.farePerTaxi} onChange={v => setLocalSettings({...localSettings, farePerTaxi: Number(v)})} />
+                    <AdminInput label="Solo Premium (x)" value={localSettings.soloMultiplier} onChange={v => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
                  </div>
               </section>
 
               <section className="space-y-6">
-                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Communications</h4>
+                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Communication & Billing</h4>
                  <div className="space-y-4">
-                    <AdminInput label="Global Announcement" value={localSettings.hub_announcement || ''} onChange={v => setLocalSettings({...localSettings, hub_announcement: v})} />
-                    <AdminInput label="WhatsApp Line" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
-                    <AdminInput label="Admin MoMo" value={localSettings.adminMomo} onChange={v => setLocalSettings({...localSettings, adminMomo: v})} />
-                    <AdminInput label="Admin Name" value={localSettings.adminMomoName} onChange={v => setLocalSettings({...localSettings, adminMomoName: v})} />
+                    <AdminInput label="Market Announcement" value={localSettings.hub_announcement || ''} onChange={v => setLocalSettings({...localSettings, hub_announcement: v})} />
+                    <AdminInput label="Partner Hotline" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
+                    <AdminInput label="NexBilling MoMo" value={localSettings.adminMomo} onChange={v => setLocalSettings({...localSettings, adminMomo: v})} />
+                    <AdminInput label="Billing Name" value={localSettings.adminMomoName} onChange={v => setLocalSettings({...localSettings, adminMomoName: v})} />
                  </div>
               </section>
 
               <section className="md:col-span-2 space-y-6">
-                 <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Hub Content & Media</h4>
+                 <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">NexRyde Experience & Portfolio</h4>
                  <div className="space-y-4">
                     <div className="space-y-2">
-                       <label className="text-[9px] font-black text-slate-600 uppercase">Hub Portfolio / About Me</label>
+                       <label className="text-[9px] font-black text-slate-600 uppercase">Experience Manifesto</label>
                        <textarea className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-xs font-medium text-white h-32 outline-none focus:border-amber-500" value={localSettings.aboutMeText} onChange={e => setLocalSettings({...localSettings, aboutMeText: e.target.value})} />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                        <div className="space-y-4">
-                          <label className="text-[9px] font-black text-slate-600 uppercase">App Wallpaper</label>
+                          <label className="text-[9px] font-black text-slate-600 uppercase">Brand Wallpaper</label>
                           <input type="file" className="hidden" id="wallpaper-upload" onChange={e => handleSettingImage(e, 'wallpaper')} />
                           <label htmlFor="wallpaper-upload" className="flex flex-col items-center justify-center aspect-video bg-white/5 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:bg-white/10 transition-all group overflow-hidden">
-                             {localSettings.appWallpaper ? <img src={localSettings.appWallpaper} className="w-full h-full object-cover" /> : <div className="text-center"><i className="fas fa-image text-2xl text-slate-700 mb-2"></i><p className="text-[8px] font-black uppercase text-slate-500">Upload Base Wallpaper</p></div>}
+                             {localSettings.appWallpaper ? <img src={localSettings.appWallpaper} className="w-full h-full object-cover" /> : <div className="text-center"><i className="fas fa-image text-2xl text-slate-700 mb-2"></i><p className="text-[8px] font-black uppercase text-slate-500">Update Brand Imagery</p></div>}
                           </label>
                        </div>
                        <div className="space-y-4">
-                          <label className="text-[9px] font-black text-slate-600 uppercase">Gallery Images</label>
+                          <label className="text-[9px] font-black text-slate-600 uppercase">Gallery Assets</label>
                           <input type="file" className="hidden" id="about-upload" onChange={e => handleSettingImage(e, 'about')} />
                           <div className="grid grid-cols-3 gap-2">
                              {localSettings.aboutMeImages.map((img, i) => (
@@ -2423,7 +2439,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
            </div>
 
            <div className="pt-8 border-t border-white/5 flex justify-end">
-              <button onClick={() => onUpdateSettings(localSettings)} className="px-12 py-4 bg-amber-500 text-[#020617] rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-105 transition-transform">Push Updates</button>
+              <button onClick={() => onUpdateSettings(localSettings)} className="px-12 py-4 bg-amber-500 text-[#020617] rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-105 transition-transform">Sync Ecosystem</button>
            </div>
         </div>
       )}
@@ -2435,12 +2451,12 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                  <i className="fas fa-user-slash text-2xl"></i>
               </div>
               <div className="space-y-2">
-                 <h3 className="text-xl font-black uppercase italic text-white leading-none">Unregister Unit?</h3>
-                 <p className="text-[10px] font-black text-slate-500 uppercase">This will remove the driver from all active terminals.</p>
+                 <h3 className="text-xl font-black uppercase italic text-white leading-none">Deactivate Partner?</h3>
+                 <p className="text-[10px] font-black text-slate-500 uppercase">This will revoke all NexRyde terminal access immediately.</p>
               </div>
               <div className="flex gap-4">
-                 <button onClick={() => setPendingDeletionId(null)} className="flex-1 py-4 bg-white/5 rounded-xl font-black text-[10px] uppercase text-slate-400">Abort</button>
-                 <button onClick={() => { onDeleteDriver(pendingDeletionId); setPendingDeletionId(null); }} className="flex-1 py-4 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Confirm Delete</button>
+                 <button onClick={() => setPendingDeletionId(null)} className="flex-1 py-4 bg-white/5 rounded-xl font-black text-[10px] uppercase text-slate-400">Cancel</button>
+                 <button onClick={() => { onDeleteDriver(pendingDeletionId); setPendingDeletionId(null); }} className="flex-1 py-4 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Revoke Access</button>
               </div>
            </div>
         </div>
@@ -2449,19 +2465,19 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
       {showMissionModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-w-lg rounded-[2.5rem] p-8 space-y-8 animate-in zoom-in text-slate-900">
-            <h3 className="text-2xl font-black italic uppercase text-center text-white">New Hub Mission</h3>
+            <h3 className="text-2xl font-black italic uppercase text-center text-white">Declare Hotspot</h3>
             <div className="space-y-4">
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Station Location" value={newMission.location} onChange={e => setNewMission({...newMission, location: e.target.value})} />
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Entry Fee (₵)" type="number" value={newMission.entryFee} onChange={e => setNewMission({...newMission, entryFee: Number(e.target.value)})} />
-               <textarea className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-medium h-32" placeholder="Mission Description" value={newMission.description} onChange={e => setNewMission({...newMission, description: e.target.value})} />
+               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Hotspot Location Name" value={newMission.location} onChange={e => setNewMission({...newMission, location: e.target.value})} />
+               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Access Fee (₵)" type="number" value={newMission.entryFee} onChange={e => setNewMission({...newMission, entryFee: Number(e.target.value)})} />
+               <textarea className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-medium h-32" placeholder="Area Description & Rules" value={newMission.description} onChange={e => setNewMission({...newMission, description: e.target.value})} />
             </div>
             <div className="flex gap-4">
                <button onClick={() => setShowMissionModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
                <button onClick={() => { 
-                 if(!newMission.location || !newMission.description) { alert("Fields required."); return; }
+                 if(!newMission.location || !newMission.description) { alert("All fields required."); return; }
                  onCreateMission({ id: `MSN-${Date.now()}`, driversJoined: [], ...newMission, status: 'open', createdAt: new Date().toISOString() } as HubMission); 
                  setShowMissionModal(false); 
-               }} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Launch Station</button>
+               }} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Deploy Hotspot</button>
             </div>
           </div>
         </div>
@@ -2470,21 +2486,21 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
       {showDriverModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-w-lg rounded-[2.5rem] p-8 lg:p-10 space-y-8 animate-in zoom-in text-slate-900">
-            <h3 className="text-2xl font-black italic uppercase text-center text-white">Register Unit</h3>
+            <h3 className="text-2xl font-black italic uppercase text-center text-white">Register Partner Asset</h3>
             <form onSubmit={(e) => {
               e.preventDefault();
-              if(!newDriver.name || !newDriver.contact || !newDriver.pin || !newDriver.licensePlate) { alert("Fields required."); return; }
+              if(!newDriver.name || !newDriver.contact || !newDriver.pin || !newDriver.licensePlate) { alert("All fields required."); return; }
               onAddDriver(newDriver as Driver);
               setShowDriverModal(false);
             }} className="space-y-4">
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Driver Full Name" onChange={e => setNewDriver({...newDriver, name: e.target.value})} />
+               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Partner Full Name" onChange={e => setNewDriver({...newDriver, name: e.target.value})} />
                <div className="grid grid-cols-2 gap-4">
                   <select className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 outline-none font-bold" onChange={e => setNewDriver({...newDriver, vehicleType: e.target.value as VehicleType})}><option value="Pragia">Pragia</option><option value="Taxi">Taxi</option></select>
-                  <input className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 outline-none font-bold" placeholder="Plate Number" onChange={e => setNewDriver({...newDriver, licensePlate: e.target.value})} />
+                  <input className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 outline-none font-bold" placeholder="Asset Plate" onChange={e => setNewDriver({...newDriver, licensePlate: e.target.value})} />
                </div>
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="WhatsApp Number" onChange={e => setNewDriver({...newDriver, contact: e.target.value})} />
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-black text-center" placeholder="PIN (4-digit)" maxLength={4} onChange={e => setNewDriver({...newDriver, pin: e.target.value})} />
-               <div className="flex gap-4 pt-4"><button type="button" onClick={() => setShowDriverModal(false)} className="flex-1 py-4 bg-slate-100 rounded-xl font-black text-[10px] uppercase text-slate-400">Cancel</button><button type="submit" className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Submit</button></div>
+               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="WhatsApp Line" onChange={e => setNewDriver({...newDriver, contact: e.target.value})} />
+               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-black text-center" placeholder="Partner Hub Password" onChange={e => setNewDriver({...newDriver, pin: e.target.value})} />
+               <div className="flex gap-4 pt-4"><button type="button" onClick={() => setShowDriverModal(false)} className="flex-1 py-4 bg-slate-100 rounded-xl font-black text-[10px] uppercase text-slate-400">Cancel</button><button type="submit" className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Create Partner</button></div>
             </form>
           </div>
         </div>
