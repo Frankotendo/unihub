@@ -520,7 +520,7 @@ const App: React.FC = () => {
       }
     } else {
       alert("Invalid Code! Ask the passenger for their Ride PIN.");
-    } verificationCode: null 
+    }
   };
 
   const cancelRide = async (nodeId: string) => {
@@ -1543,12 +1543,21 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
   
   const [aiInput, setAiInput] = useState('');
   const [aiProcessing, setAiProcessing] = useState(false);
+  const [activePassengerTab, setActivePassengerTab] = useState<'dashboard' | 'market'>('market');
 
   // AUTH LOGIC FIX: Check both local state AND actual node data to determine active trips
   const myActiveNodes = useMemo(() => nodes.filter((n: any) => 
     (myRideIds.includes(n.id) || n.leaderPhone === currentUser.phone || n.passengers.some((p:any) => p.phone === currentUser.phone))
     && n.status !== 'completed'
   ), [nodes, myRideIds, currentUser.phone]);
+
+  const hasAutoSwitched = useRef(false);
+  useEffect(() => {
+    if (!hasAutoSwitched.current && myActiveNodes.length > 0) {
+      setActivePassengerTab('dashboard');
+      hasAutoSwitched.current = true;
+    }
+  }, [myActiveNodes.length]);
 
   // MARKETPLACE LOGIC FIX: Hide private Solo/Premium rides from the general traffic
   // STRICTLY only show pools that I am NOT already in.
@@ -1639,6 +1648,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
       await onAddNode(node);
       setShowModal(false);
       setOrigin(''); setDest(''); setIsSolo(false); setIsLongDistance(false);
+      setActivePassengerTab('dashboard'); // Auto-switch to dashboard after creation
     } catch (err) {}
   };
 
@@ -1662,58 +1672,69 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
         </div>
       </div>
 
-      <div 
-        onClick={onShowAbout}
-        className="relative w-full h-44 rounded-[2.5rem] overflow-hidden border border-white/10 group cursor-pointer shadow-2xl"
-      >
-        {settings.aboutMeImages && settings.aboutMeImages[0] ? (
-          <img src={settings.aboutMeImages[0]} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-[2s]" />
-        ) : (
-          <div className="w-full h-full bg-indigo-600/20 flex items-center justify-center">
-             <i className="fas fa-sparkles text-4xl text-indigo-500 opacity-20"></i>
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/50 to-transparent"></div>
-        <div className="absolute bottom-6 left-8 sm:left-10">
-           <p className="text-[9px] font-black text-emerald-400 uppercase tracking-[0.3em] mb-1">NexRyde Experience</p>
-           <h3 className="text-2xl font-black italic uppercase text-white leading-none">Our Mission Identity</h3>
-           <p className="text-[10px] font-bold text-slate-400 uppercase mt-2 opacity-80">Explore our commitment to quality</p>
-        </div>
-        <div className="absolute bottom-6 right-8 w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 group-hover:bg-amber-500 group-hover:text-[#020617] transition-all">
-           <i className="fas fa-arrow-right"></i>
-        </div>
+      <div className="flex p-1 bg-white/5 rounded-2xl border border-white/10 mb-6 w-full max-w-md mx-auto">
+          <button 
+            onClick={() => setActivePassengerTab('dashboard')}
+            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activePassengerTab === 'dashboard' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            My Hub {myActiveNodes.length > 0 && `(${myActiveNodes.length})`}
+          </button>
+          <button 
+            onClick={() => setActivePassengerTab('market')}
+            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activePassengerTab === 'market' ? 'bg-amber-500 text-[#020617] shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            Ride Market
+          </button>
       </div>
 
-      {myActiveNodes.length > 0 && (
-        <section className="space-y-6">
-           <div className="flex items-center gap-4">
-              <span className="w-3 h-3 bg-indigo-500 rounded-full animate-pulse shadow-lg shadow-indigo-500/50"></span>
-              <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-400 italic">My Active Trips</h3>
-           </div>
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-             {myActiveNodes.map((node: any) => (
-                <RideCard key={node.id} currentUser={currentUser} node={node} drivers={drivers} onJoin={onJoin} onCancel={onCancel} setJoinModalNodeId={setJoinModalNodeId} isPriority />
-             ))}
-           </div>
+      {activePassengerTab === 'dashboard' && (
+        <section className="space-y-6 animate-in fade-in slide-in-from-left-4">
+           {myActiveNodes.length > 0 ? (
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+               {myActiveNodes.map((node: any) => (
+                  <RideCard key={node.id} currentUser={currentUser} node={node} drivers={drivers} onJoin={onJoin} onCancel={onCancel} setJoinModalNodeId={setJoinModalNodeId} isPriority />
+               ))}
+             </div>
+           ) : (
+             <div 
+                onClick={() => setShowModal(true)}
+                className="relative w-full h-64 rounded-[2.5rem] overflow-hidden border border-white/10 group cursor-pointer shadow-2xl flex items-center justify-center bg-white/5"
+              >
+                <div className="text-center space-y-4 relative z-10">
+                   <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto text-slate-400 group-hover:bg-amber-500 group-hover:text-[#020617] transition-all">
+                      <i className="fas fa-plus text-2xl"></i>
+                   </div>
+                   <div>
+                      <h3 className="text-2xl font-black italic uppercase text-white leading-none">Start New Trip</h3>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase mt-2">No active rides found</p>
+                   </div>
+                </div>
+                {settings.aboutMeImages && settings.aboutMeImages[0] && (
+                  <img src={settings.aboutMeImages[0]} className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:scale-105 transition-transform duration-[2s] pointer-events-none" />
+                )}
+              </div>
+           )}
         </section>
       )}
 
-      <section className="space-y-6">
-        <div className="flex items-center gap-4">
-           <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Joinable Pools</h3>
-           {filteredNodes.length > 0 && <span className="px-3 py-1 bg-white/5 rounded-full text-[8px] font-black text-slate-500 uppercase">{filteredNodes.length} Matches</span>}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredNodes.length > 0 ? filteredNodes.map((node: any) => (
-            <RideCard key={node.id} currentUser={currentUser} node={node} drivers={drivers} onJoin={onJoin} onCancel={onCancel} setJoinModalNodeId={setJoinModalNodeId} />
-          )) : (
-            <div className="col-span-full py-12 text-center border-2 border-dashed border-white/5 rounded-[3rem]">
-               <i className="fas fa-route text-slate-800 text-4xl mb-4"></i>
-               <p className="text-slate-600 font-black uppercase text-[10px] tracking-widest">No pools forming at the moment</p>
-            </div>
-          )}
-        </div>
-      </section>
+      {activePassengerTab === 'market' && (
+        <section className="space-y-6 animate-in fade-in slide-in-from-right-4">
+          <div className="flex items-center gap-4">
+             <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Live Pools</h3>
+             {filteredNodes.length > 0 && <span className="px-3 py-1 bg-white/5 rounded-full text-[8px] font-black text-slate-500 uppercase">{filteredNodes.length} Matches</span>}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredNodes.length > 0 ? filteredNodes.map((node: any) => (
+              <RideCard key={node.id} currentUser={currentUser} node={node} drivers={drivers} onJoin={onJoin} onCancel={onCancel} setJoinModalNodeId={setJoinModalNodeId} maskIdentity={true} />
+            )) : (
+              <div className="col-span-full py-12 text-center border-2 border-dashed border-white/5 rounded-[3rem]">
+                 <i className="fas fa-route text-slate-800 text-4xl mb-4"></i>
+                 <p className="text-slate-600 font-black uppercase text-[10px] tracking-widest">No pools forming at the moment</p>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Ride Creation Modal ... */}
       {showModal && (
@@ -1794,7 +1815,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
 };
 
 // VISUAL THEME REWRITE: Specialized card styling based on service tier
-const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNodeId, isPriority }: any) => {
+const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNodeId, isPriority, maskIdentity = false }: any) => {
   const driver = drivers.find((d: any) => d.id === node.assignedDriverId);
   const isOrganizer = currentUser?.phone === node.leaderPhone;
   
@@ -1829,6 +1850,9 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
       hero: 'fa-users'
     };
   }, [tier, node.status]);
+
+  // Identity Masking
+  const displayName = (maskIdentity && !isParticipant) ? "Campus Rider" : node.leaderName;
 
   return (
     <div className={`glass rounded-[2.5rem] p-8 border transition-all relative overflow-hidden ${themeClasses.border} ${themeClasses.glow}`}>
@@ -1903,6 +1927,12 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
            </div>
         )}
 
+        {/* Identity Masking UI */}
+        <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xl w-fit">
+           <div className={`w-2 h-2 rounded-full ${isOrganizer ? 'bg-indigo-500' : 'bg-slate-500'}`}></div>
+           <span className="text-[9px] font-bold text-slate-400 uppercase">Organized by {displayName}</span>
+        </div>
+
         {node.status === 'forming' && tier === 'pool' && (
           <div className="flex gap-2">
             <button onClick={() => setJoinModalNodeId(node.id)} className="flex-1 py-4 bg-white/5 border border-white/10 rounded-[1.5rem] font-black text-[10px] uppercase text-white hover:bg-white/10 transition-all">Claim Seat</button>
@@ -1974,755 +2004,485 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
   );
 };
 
-const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes, dispatchedNodes, missions, allNodes, onJoinMission, onAccept, onVerify, onCancel, onRequestTopup, onRequestRegistration, searchConfig, settings }: any) => {
-  const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
-  const [pin, setPin] = useState('');
+// --- DRIVER PORTAL ---
+
+function DriverPortal({ 
+  drivers, 
+  activeDriver, 
+  onLogin, 
+  onLogout, 
+  qualifiedNodes, 
+  dispatchedNodes, 
+  missions, 
+  allNodes, 
+  onJoinMission, 
+  onAccept, 
+  onVerify, 
+  onCancel, 
+  onRequestTopup, 
+  onRequestRegistration, 
+  searchConfig, 
+  settings 
+}: any) {
+  const [view, setView] = useState<'login' | 'register'>('login');
+  const [loginId, setLoginId] = useState('');
+  const [loginPin, setLoginPin] = useState('');
+
+  // Registration states
+  const [regData, setRegData] = useState({
+    name: '',
+    contact: '',
+    licensePlate: '',
+    pin: '',
+    vehicleType: 'Taxi' as VehicleType,
+    momoReference: '',
+    amount: settings.registrationFee
+  });
+
+  const [activeTab, setActiveTab] = useState('market');
   const [verifyCode, setVerifyCode] = useState('');
-  const [showTopupModal, setShowTopupModal] = useState(false);
-  const [showRegModal, setShowRegModal] = useState(false);
   const [topupAmount, setTopupAmount] = useState('');
-  const [momoRef, setMomoRef] = useState('');
-  const [regData, setRegData] = useState<Partial<RegistrationRequest>>({ vehicleType: 'Pragia' });
-  const [isScanning, setIsScanning] = useState(false);
-  const [activeMissionNodeId, setActiveMissionNodeId] = useState<string | null>(null);
+  const [topupRef, setTopupRef] = useState('');
 
-  const [hubInsight, setHubInsight] = useState<string | null>(null);
-  const [insightLoading, setInsightLoading] = useState(false);
-  const [portraitScanning, setPortraitScanning] = useState(false);
-
-  const handlePortraitUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setPortraitScanning(true);
-      const compressed = await compressImage(file, 0.6, 400);
-      setRegData({ ...regData, avatarUrl: compressed });
-
-      try {
-        const base64 = compressed.split(',')[1];
-        const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
-          contents: {
-            parts: [
-              { text: "Verify if this image is a portrait of a person. If it contains a vehicle, try to extract the license plate. Return JSON: { \"isPortrait\": boolean, \"licensePlate\": string | null }" },
-              { inlineData: { mimeType: "image/jpeg", data: base64 } }
-            ]
-          },
-          config: { responseMimeType: "application/json" }
-        });
-
-        const visionData = JSON.parse(response.text || '{}');
-        if (visionData.licensePlate) setRegData(prev => ({ ...prev, licensePlate: visionData.licensePlate }));
-        if (!visionData.isPortrait) {
-          alert("Portrait Verification Failed. Please upload a clear photo of your face.");
-          setRegData(prev => ({ ...prev, avatarUrl: undefined }));
-        }
-      } catch (err) {
-        console.error("Vision analysis error", err);
-      } finally {
-        setPortraitScanning(false);
-      }
-    }
+  const handleLoginSubmit = () => {
+     // Check if input is a phone number or ID
+     const driver = drivers.find((d: any) => d.contact === loginId || d.id === loginId);
+     if (driver) {
+       onLogin(driver.id, loginPin);
+     } else {
+       alert("Partner not found. Please check your credentials.");
+     }
   };
-
-  const generateHubInsight = async () => {
-    setInsightLoading(true);
-    try {
-      const activeTraffic = allNodes.filter((n:any) => n.status !== 'completed').map((n:any) => `${n.origin} -> ${n.destination}`).join(', ');
-      const missionLocs = missions.map((m:any) => m.location).join(', ');
-      
-      const prompt = `Act as a logistics analyst for NexRyde. 
-      Market Traffic: ${activeTraffic}
-      Available Hotspots: ${missionLocs}
-      Strategically advise a partner on where to go for maximum profit. 
-      Very short answer. Start with 'NexRyde Strategy:'.`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt
-      });
-      setHubInsight(response.text || "Market strategy unavailable. Shift to hotspots.");
-    } catch (err) {
-      setHubInsight("NexRyde analysis offline. Move to high-density zones.");
-    } finally {
-      setInsightLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let html5QrCode: any = null;
-    if (isScanning && activeMissionNodeId) {
-      const timeout = setTimeout(async () => {
-        try {
-          html5QrCode = new (window as any).Html5Qrcode("qr-reader");
-          const config = { fps: 15, qrbox: { width: 250, height: 250 } };
-          await html5QrCode.start(
-            { facingMode: "environment" }, 
-            config, 
-            (decodedText: string) => {
-              setVerifyCode(decodedText);
-              onVerify(activeMissionNodeId, decodedText);
-              setIsScanning(false);
-              html5QrCode.stop().catch(console.error);
-            }
-          );
-        } catch (err: any) {
-          setIsScanning(false);
-        }
-      }, 300);
-      return () => {
-        clearTimeout(timeout);
-        if (html5QrCode && html5QrCode.isScanning) html5QrCode.stop().catch(console.error);
-      };
-    }
-  }, [isScanning, activeMissionNodeId, onVerify]);
 
   if (!activeDriver) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-10 px-4 animate-in fade-in">
-        <div className="text-center">
-            <div className="w-24 h-24 bg-indigo-600/10 rounded-[2.5rem] flex items-center justify-center text-indigo-500 mx-auto mb-6 border border-indigo-500/20 shadow-2xl">
-              <i className="fas fa-id-card-clip text-4xl"></i>
-            </div>
-            <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white">Partner Hub</h2>
-            <p className="text-slate-500 text-[10px] font-black uppercase mt-1">Authorized NexRyde Partners Only</p>
-        </div>
-        {selectedDriverId ? (
-            <div className="w-full max-md glass p-10 rounded-[3rem] border border-white/10 space-y-8 animate-in zoom-in text-center">
-                <div className="flex justify-center mb-4">
-                  {drivers.find((d:any)=>d.id===selectedDriverId)?.avatarUrl ? (
-                    <img src={drivers.find((d:any)=>d.id===selectedDriverId)?.avatarUrl} className="w-20 h-20 rounded-full object-cover border-4 border-amber-500/50" />
-                  ) : (
-                    <div className="w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center text-amber-500">
-                       <i className="fas fa-user text-2xl"></i>
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-2">
-                   <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Partner Password</p>
-                   <input 
-                     type="password" 
-                     className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-3xl tracking-[0.5em] font-black outline-none focus:border-amber-500 text-center text-white" 
-                     placeholder="••••"
-                     value={pin}
-                     onChange={e => setPin(e.target.value)}
-                     onKeyDown={e => e.key === 'Enter' && onLogin(selectedDriverId, pin)}
-                   />
-                </div>
-                <div className="flex gap-4">
-                    <button onClick={() => {setSelectedDriverId(null); setPin('');}} className="flex-1 py-4 bg-white/5 rounded-xl font-black text-[10px] uppercase text-slate-400">Back</button>
-                    <button onClick={() => onLogin(selectedDriverId, pin)} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Unlock Hub</button>
-                </div>
-            </div>
-        ) : (
-            <div className="flex flex-col items-center gap-8 w-full">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl">
-                {drivers.filter((d:any) => d.name.toLowerCase().includes(searchConfig.query.toLowerCase())).map((d: any) => (
-                  <button key={d.id} onClick={() => setSelectedDriverId(d.id)} className="glass p-8 rounded-[2rem] border border-white/5 text-left transition-all hover:border-amber-500/50 group flex items-center gap-6">
-                    {d.avatarUrl ? (
-                      <img src={d.avatarUrl} className="w-12 h-12 rounded-full object-cover" />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-500">
-                        <i className="fas fa-user"></i>
-                      </div>
-                    )}
-                    <div>
-                      <p className="font-black uppercase italic text-xl text-white group-hover:text-amber-500 transition-colors">{d.name}</p>
-                      <p className="text-[9px] font-black text-slate-500 uppercase">WALLET: ₵{d.walletBalance.toFixed(1)}</p>
-                    </div>
-                  </button>
-                ))}
+      <div className="max-w-md mx-auto animate-in zoom-in">
+         {view === 'login' ? (
+           <div className="glass p-8 rounded-[2.5rem] space-y-6 border border-white/10">
+              <div className="text-center">
+                 <h2 className="text-2xl font-black italic uppercase text-white">Partner Access</h2>
+                 <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mt-1">Authorized Drivers Only</p>
               </div>
-              <button onClick={() => setShowRegModal(true)} className="px-12 py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-2xl hover:scale-105 transition-transform flex items-center gap-3">
-                 <i className="fas fa-plus-circle"></i> Join NexRyde Fleet
+              <input 
+                className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-amber-500"
+                placeholder="Phone Number or Driver ID"
+                value={loginId}
+                onChange={e => setLoginId(e.target.value)}
+              />
+              <input 
+                type="password"
+                className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-amber-500"
+                placeholder="Secure PIN"
+                value={loginPin}
+                onChange={e => setLoginPin(e.target.value)}
+              />
+              <button onClick={handleLoginSubmit} className="w-full py-4 bg-amber-500 text-[#020617] rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">
+                 Access Terminal
               </button>
-            </div>
-        )}
-        {/* Onboarding Modal ... */}
-        {showRegModal && (
-          <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-            <div className="glass-bright w-full max-sm:px-2 max-w-md rounded-[2.5rem] p-4 sm:p-6 space-y-4 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[95vh] no-scrollbar">
-               <div className="text-center">
-                  <h3 className="text-xl font-black italic tracking-tighter uppercase text-white leading-none">Partner Onboarding</h3>
-                  <p className="text-indigo-400 text-[8px] font-black uppercase mt-1">Activation Fee: ₵{settings.registrationFee || '...'}</p>
-               </div>
-               <div className="flex justify-center flex-col items-center gap-1">
-                  <input type="file" id="portrait-upload" className="hidden" accept="image/*" onChange={handlePortraitUpload} />
-                  <label htmlFor="portrait-upload" className={`w-16 h-16 rounded-full bg-white/5 border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-white/10 transition-all overflow-hidden relative ${portraitScanning ? 'border-indigo-500' : 'border-white/10'}`}>
-                    {regData.avatarUrl ? (
-                      <img src={regData.avatarUrl} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="text-center">
-                        <i className="fas fa-camera text-slate-600 text-lg mb-0.5"></i>
-                        <p className="text-[6px] font-black text-slate-500 uppercase">Portrait</p>
-                      </div>
-                    )}
-                    {portraitScanning && <div className="absolute inset-0 bg-black/50 flex items-center justify-center"><i className="fas fa-spinner fa-spin text-white"></i></div>}
-                  </label>
-                  {portraitScanning && <p className="text-[7px] font-black text-indigo-400 uppercase animate-pulse">AI Verification...</p>}
-               </div>
-               <div className="bg-indigo-600/10 p-3 rounded-xl border border-indigo-500/20 flex items-center justify-between">
-                  <div className="text-left">
-                    <p className="text-[7px] font-black text-slate-500 uppercase">Admin MoMo ID</p>
-                    <p className="text-sm font-black text-white italic leading-none">{settings.adminMomo}</p>
-                    <p className="text-[8px] font-black text-slate-400 uppercase mt-1">{settings.adminMomoName}</p>
-                  </div>
-                  <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white"><i className="fas fa-wallet text-sm"></i></div>
-               </div>
-               <div className="space-y-2.5">
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Full Legal Name" value={regData.name || ''} onChange={e => setRegData({...regData, name: e.target.value})} />
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <select className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none font-bold text-xs" value={regData.vehicleType || 'Pragia'} onChange={e => setRegData({...regData, vehicleType: e.target.value as VehicleType})}>
-                       <option value="Pragia">Economy (Pragia)</option>
-                       <option value="Taxi">Standard (Taxi)</option>
-                    </select>
-                    <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Plate ID" value={regData.licensePlate || ''} onChange={e => setRegData({...regData, licensePlate: e.target.value})} />
-                  </div>
-                  <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="WhatsApp Contact" value={regData.contact || ''} onChange={e => setRegData({...regData, contact: e.target.value})} />
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <input type="password" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-black text-center text-xs" placeholder="Hub Password" value={regData.pin || ''} onChange={e => setRegData({...regData, pin: e.target.value})} />
-                    <input className="w-full bg-white border border-emerald-500/30 rounded-xl px-4 py-3 outline-none font-black text-center text-emerald-600 text-xs" placeholder="Payment Ref" value={regData.momoReference || ''} onChange={e => setRegData({...regData, momoReference: e.target.value})} />
-                  </div>
-               </div>
-               <div className="flex gap-3 pt-2">
-                  <button onClick={() => setShowRegModal(false)} className="flex-1 py-4 bg-white/10 rounded-2xl font-black text-[10px] uppercase text-white">Abort</button>
-                  <button onClick={() => { 
-                    if (!regData.name || !regData.momoReference || !regData.pin || !regData.avatarUrl) { alert("Please complete all fields, including your photo."); return; }
-                    onRequestRegistration({ ...regData as RegistrationRequest, amount: settings.registrationFee }); 
-                    setShowRegModal(false); 
-                  }} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl">Verify & Apply</button>
-               </div>
-            </div>
-          </div>
-        )}
+              <button onClick={() => setView('register')} className="w-full text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-white">
+                 Apply to Drive
+              </button>
+           </div>
+         ) : (
+           <div className="glass p-8 rounded-[2.5rem] space-y-4 border border-white/10 max-h-[80vh] overflow-y-auto no-scrollbar">
+              <div className="text-center">
+                 <h2 className="text-2xl font-black italic uppercase text-white">Partner Application</h2>
+                 <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mt-1">Join the fleet (Fee: ₵{settings.registrationFee})</p>
+              </div>
+              <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" placeholder="Full Name" value={regData.name} onChange={e => setRegData({...regData, name: e.target.value})} />
+              <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" placeholder="Phone Contact" value={regData.contact} onChange={e => setRegData({...regData, contact: e.target.value})} />
+              <div className="grid grid-cols-2 gap-2">
+                 <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" placeholder="License Plate" value={regData.licensePlate} onChange={e => setRegData({...regData, licensePlate: e.target.value})} />
+                 <select className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" value={regData.vehicleType} onChange={e => setRegData({...regData, vehicleType: e.target.value as any})}>
+                    <option value="Pragia">Pragia</option>
+                    <option value="Taxi">Taxi</option>
+                    <option value="Shuttle">Shuttle</option>
+                 </select>
+              </div>
+              <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" type="password" placeholder="Set a 4-digit PIN" value={regData.pin} onChange={e => setRegData({...regData, pin: e.target.value})} />
+              <div className="p-4 bg-indigo-600/20 rounded-2xl border border-indigo-500/30 space-y-2">
+                 <p className="text-[9px] font-bold text-indigo-300 uppercase">Send ₵{settings.registrationFee} to {settings.adminMomo}</p>
+                 <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" placeholder="MoMo Reference ID" value={regData.momoReference} onChange={e => setRegData({...regData, momoReference: e.target.value})} />
+              </div>
+              <button onClick={() => onRequestRegistration(regData)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">
+                 Submit Application
+              </button>
+              <button onClick={() => setView('login')} className="w-full text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-white">
+                 Back to Login
+              </button>
+           </div>
+         )}
       </div>
     );
   }
 
-  const filteredQualifiedNodes = qualifiedNodes.filter((n:any) => 
-    n.origin.toLowerCase().includes(searchConfig.query.toLowerCase()) ||
-    n.destination.toLowerCase().includes(searchConfig.query.toLowerCase())
+  // Active Dashboard
+  const myRides = dispatchedNodes.filter((n: any) => n.assignedDriverId === activeDriver.id);
+  const marketRides = qualifiedNodes.filter((n: any) => 
+    (searchConfig.vehicleType === 'All' || n.vehicleType === searchConfig.vehicleType) &&
+    (n.origin.toLowerCase().includes(searchConfig.query.toLowerCase()) || n.destination.toLowerCase().includes(searchConfig.query.toLowerCase()))
   );
 
   return (
-    <div className="animate-in slide-in-from-bottom-8 space-y-12 pb-20">
-      <div className="flex flex-col sm:flex-row justify-between items-start gap-4 bg-indigo-500/5 p-6 rounded-[2rem] border border-indigo-500/10 relative overflow-hidden">
-        <div className="flex items-center gap-6 relative z-10">
-          <div className="relative">
-            {activeDriver.avatarUrl ? (
-              <img src={activeDriver.avatarUrl} className="w-16 h-16 rounded-2xl object-cover border border-amber-500 shadow-xl" />
-            ) : (
-              <div className="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center text-[#020617] shadow-xl">
-                <i className={`fas ${activeDriver.vehicleType === 'Pragia' ? 'fa-motorcycle' : 'fa-taxi'} text-2xl`}></i>
-              </div>
-            )}
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-[10px] text-white ring-2 ring-[#020617]">
-               <i className="fas fa-check"></i>
-            </div>
+    <div className="space-y-6">
+       {/* Stats Header */}
+       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-emerald-500/10 p-4 rounded-3xl border border-emerald-500/20">
+             <p className="text-[9px] font-black text-emerald-400 uppercase">Wallet</p>
+             <p className="text-xl font-black text-white">₵ {activeDriver.walletBalance.toFixed(2)}</p>
           </div>
-          <div>
-            <h2 className="text-2xl font-black tracking-tighter uppercase italic text-white leading-none">{activeDriver.name}</h2>
-            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mt-2">Balance: ₵ {activeDriver.walletBalance.toFixed(2)}</p>
+          <div className="bg-indigo-500/10 p-4 rounded-3xl border border-indigo-500/20">
+             <p className="text-[9px] font-black text-indigo-400 uppercase">Rating</p>
+             <p className="text-xl font-black text-white">{activeDriver.rating} ★</p>
           </div>
-        </div>
-        <div className="flex gap-3 w-full sm:w-auto relative z-10">
-          <button onClick={() => setShowTopupModal(true)} className="flex-1 sm:flex-none px-6 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg">Top-Up Credits</button>
-          <button onClick={onLogout} className="flex-1 sm:flex-none px-6 py-3 bg-rose-600/10 text-rose-500 rounded-xl text-[10px] font-black uppercase border border-rose-500/20">Sign Out</button>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-8 space-y-12">
-           <section>
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Partner Hotspots</h3>
-                <button 
-                   onClick={generateHubInsight} 
-                   className="flex items-center gap-2 text-indigo-400 font-black text-[9px] uppercase hover:scale-105 transition-transform bg-indigo-500/10 px-4 py-2 rounded-xl"
-                >
-                  <i className={`fas fa-sparkles ${insightLoading ? 'animate-spin' : ''}`}></i> NexStrategy
-                </button>
-              </div>
-              {hubInsight && (
-                <div className="mb-6 p-4 bg-indigo-600 rounded-[1.5rem] border border-white/20 animate-in zoom-in text-white text-[11px] font-medium italic relative overflow-hidden text-center">
-                  <i className="fas fa-lightbulb absolute right-4 top-1/2 -translate-y-1/2 text-4xl opacity-10"></i>
-                  <p className="relative z-10">{hubInsight}</p>
-                </div>
-              )}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 {missions.filter(m => m.status === 'open' && m.location.toLowerCase().includes(searchConfig.query.toLowerCase())).map(m => (
-                   <div key={m.id} className={`glass p-6 rounded-3xl border ${m.driversJoined.includes(activeDriver.id) ? 'border-emerald-500/30' : 'border-white/5'} space-y-4`}>
-                      <div className="flex justify-between items-start">
-                         <div className="flex items-center gap-2">
-                            <i className="fas fa-location-dot text-amber-500 text-sm"></i>
-                            <h4 className="font-black text-white uppercase italic text-sm">{m.location}</h4>
+          <div className="bg-amber-500/10 p-4 rounded-3xl border border-amber-500/20">
+             <p className="text-[9px] font-black text-amber-500 uppercase">Active Job</p>
+             <p className="text-xl font-black text-white">{myRides.length > 0 ? 'On Route' : 'Idle'}</p>
+          </div>
+       </div>
+
+       {/* Tabs */}
+       <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar">
+          {['market', 'active', 'missions', 'wallet'].map(tab => (
+             <button 
+               key={tab}
+               onClick={() => setActiveTab(tab)} 
+               className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}
+             >
+               {tab} {tab === 'active' && myRides.length > 0 && `(${myRides.length})`}
+             </button>
+          ))}
+       </div>
+
+       {/* Tab Content */}
+       <div className="min-h-[300px]">
+          {activeTab === 'market' && (
+             <div className="space-y-4">
+                {marketRides.length === 0 && <p className="text-center text-slate-500 py-10 font-black uppercase text-[10px]">No rides available</p>}
+                {marketRides.map((node: any) => (
+                   <div key={node.id} className="glass p-6 rounded-[2rem] border border-white/5 relative">
+                      <div className="flex justify-between items-start mb-4">
+                         <div>
+                            <span className="px-3 py-1 bg-amber-500/20 text-amber-500 rounded-lg text-[8px] font-black uppercase">{node.vehicleType}</span>
+                            <span className="ml-2 px-3 py-1 bg-white/5 text-slate-400 rounded-lg text-[8px] font-black uppercase">{node.isSolo ? 'Solo' : 'Pool'}</span>
                          </div>
-                         <p className="text-emerald-400 font-black text-xs">₵{m.entryFee}</p>
+                         <p className="text-xl font-black text-amber-500">₵ {node.negotiatedTotalFare || (node.farePerPerson * node.passengers.length)}</p>
                       </div>
-                      <p className="text-[10px] text-slate-400 font-medium italic leading-relaxed">{m.description}</p>
-                      {m.driversJoined.includes(activeDriver.id) ? (
-                        <div className="w-full py-3 bg-emerald-500/10 text-emerald-400 rounded-xl text-[8px] font-black uppercase text-center border border-emerald-500/20">Hotspot Active</div>
-                      ) : (
-                        <button onClick={() => onJoinMission(m.id, activeDriver.id)} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[8px] font-black uppercase shadow-lg">Enter Zone</button>
-                      )}
+                      <div className="space-y-2 mb-4">
+                         <div className="flex gap-2 text-sm font-bold text-white"><i className="fas fa-location-dot mt-1 text-slate-500"></i> {node.origin}</div>
+                         <div className="flex gap-2 text-sm font-bold text-white"><i className="fas fa-flag-checkered mt-1 text-slate-500"></i> {node.destination}</div>
+                      </div>
+                      <button onClick={() => onAccept(node.id, activeDriver.id)} className="w-full py-3 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-lg">Accept Ride</button>
                    </div>
-                 ))}
-              </div>
-           </section>
-           <section>
-              <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic mb-6">Ready for Dispatch</h3>
-              <div className="space-y-4">
-                {filteredQualifiedNodes.map((node: any) => (
-                  <div key={node.id} className="glass rounded-[2rem] p-6 border transition-all flex flex-col md:flex-row items-center gap-6 border-white/5 hover:border-indigo-500/30">
-                      <div className="flex-1">
-                        <p className="font-black text-sm uppercase italic text-white">{node.origin} → {node.destination}</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Organized by {node.leaderName}</p>
-                      </div>
-                      <button onClick={() => onAccept(node.id, activeDriver.id)} className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg">Accept Ride</button>
-                  </div>
                 ))}
-              </div>
-           </section>
-        </div>
-        <div className="lg:col-span-4 space-y-6">
-           <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Current Trip</h3>
-           {dispatchedNodes.filter((n: any) => n.assignedDriverId === activeDriver.id).map((node: any) => (
-              <div key={node.id} className="glass rounded-[2rem] p-8 border space-y-6 border-amber-500/20">
-                 <h4 className="text-xl font-black uppercase italic text-white leading-none truncate text-center">{node.origin} to {node.destination}</h4>
-                 <div className="space-y-4 pt-4 border-t border-white/5 text-center">
-                    <p className="text-[9px] font-black text-slate-500 uppercase mb-2">Verify Ride PIN to Complete</p>
-                    <div className="relative group">
-                       <input 
-                         className="w-full bg-[#0f172a] border border-white/10 rounded-xl px-4 py-5 text-center text-4xl font-black outline-none focus:border-emerald-500 text-white" 
-                         placeholder="0000" 
-                         maxLength={4} 
-                         value={verifyCode} 
-                         onChange={e => setVerifyCode(e.target.value)} 
-                       />
-                       <button 
-                         onClick={() => { setActiveMissionNodeId(node.id); setIsScanning(true); }}
-                         className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-emerald-500/10 rounded-lg flex items-center justify-center text-emerald-400 hover:bg-emerald-500 transition-all border border-emerald-500/20 shadow-xl"
-                       >
-                          <i className="fas fa-qrcode text-lg"></i>
-                       </button>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <button onClick={() => onVerify(node.id, verifyCode)} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Finish Ride</button>
-                      <button onClick={() => { if(confirm("Abandon trip? Partner rating may be affected.")) onCancel(node.id); }} className="w-full py-2 bg-white/5 text-slate-500 rounded-xl font-black text-[9px] uppercase">Unable to Complete</button>
-                    </div>
+             </div>
+          )}
+          
+          {activeTab === 'active' && (
+             <div className="space-y-4">
+                {myRides.length === 0 && <p className="text-center text-slate-500 py-10 font-black uppercase text-[10px]">No active jobs</p>}
+                {myRides.map((node: any) => (
+                   <div key={node.id} className="glass p-6 rounded-[2rem] border border-indigo-500/30 bg-indigo-900/10">
+                      <div className="flex justify-between items-center mb-4">
+                         <h3 className="text-lg font-black italic uppercase text-white">Current Trip</h3>
+                         <a href={`tel:${node.leaderPhone}`} className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white"><i className="fas fa-phone"></i></a>
+                      </div>
+                      <div className="bg-black/20 p-4 rounded-xl mb-4 space-y-2">
+                         <div className="flex justify-between text-xs font-bold text-slate-300"><span>Passenger:</span> <span className="text-white">{node.leaderName}</span></div>
+                         <div className="flex justify-between text-xs font-bold text-slate-300"><span>Route:</span> <span className="text-white">{node.origin} → {node.destination}</span></div>
+                         <div className="flex justify-between text-xs font-bold text-slate-300"><span>Fare:</span> <span className="text-emerald-400">₵ {node.negotiatedTotalFare || (node.farePerPerson * node.passengers.length)}</span></div>
+                      </div>
+                      <div className="space-y-3">
+                         <input 
+                           className="w-full bg-white/10 border border-white/10 rounded-xl p-3 text-center text-white font-black tracking-[0.5em] outline-none focus:border-indigo-500" 
+                           placeholder="0000"
+                           maxLength={4}
+                           value={verifyCode}
+                           onChange={e => setVerifyCode(e.target.value)}
+                         />
+                         <button onClick={() => onVerify(node.id, verifyCode)} className="w-full py-3 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase shadow-lg">Verify & Complete</button>
+                         <button onClick={() => onCancel(node.id)} className="w-full py-3 bg-rose-500/10 text-rose-500 rounded-xl font-black text-[10px] uppercase">Cancel Job</button>
+                      </div>
+                   </div>
+                ))}
+             </div>
+          )}
+
+          {activeTab === 'missions' && (
+             <div className="space-y-4">
+                {missions.map((m: any) => (
+                   <div key={m.id} className="glass p-6 rounded-[2rem] border border-white/10 relative overflow-hidden">
+                      <div className="flex justify-between items-start relative z-10">
+                         <div>
+                            <h3 className="text-lg font-black uppercase text-white">{m.location}</h3>
+                            <p className="text-xs text-slate-400">{m.description}</p>
+                         </div>
+                         <div className="text-right">
+                             <p className="text-xl font-black text-indigo-400">Fee: ₵{m.entryFee}</p>
+                             <p className="text-[9px] text-slate-500 font-bold uppercase">{m.driversJoined.length} Drivers Here</p>
+                         </div>
+                      </div>
+                      <button 
+                        onClick={() => onJoinMission(m.id, activeDriver.id)}
+                        disabled={m.driversJoined.includes(activeDriver.id)}
+                        className="mt-4 w-full py-3 bg-white/10 border border-white/10 hover:bg-indigo-600 hover:border-indigo-500 text-white rounded-xl font-black text-[10px] uppercase transition-all disabled:opacity-50"
+                      >
+                        {m.driversJoined.includes(activeDriver.id) ? 'Stationed' : 'Join Hotspot'}
+                      </button>
+                   </div>
+                ))}
+             </div>
+          )}
+
+          {activeTab === 'wallet' && (
+             <div className="glass p-8 rounded-[2rem] border border-white/10 space-y-6">
+                 <h3 className="text-xl font-black italic uppercase text-white">Top-up Credits</h3>
+                 <div className="p-4 bg-indigo-600/20 rounded-2xl border border-indigo-500/30">
+                    <p className="text-[10px] font-bold text-indigo-300 uppercase mb-2">Instructions</p>
+                    <p className="text-xs text-slate-300">Send amount to <span className="text-white font-bold">{settings.adminMomo}</span> ({settings.adminMomoName}). Enter reference below.</p>
                  </div>
-              </div>
-           ))}
-        </div>
-      </div>
-      {/* Driver Modals ... */}
-      {isScanning && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl z-[200] flex items-center justify-center p-4">
-           <div className="w-full max-md space-y-8 animate-in zoom-in duration-300">
-              <div className="flex justify-between items-center text-white px-2">
-                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-[#020617] shadow-xl shadow-emerald-500/20">
-                       <i className="fas fa-camera text-xl"></i>
-                    </div>
-                    <div>
-                       <h3 className="text-xl font-black italic uppercase tracking-tighter leading-none">Scanning Ride PIN</h3>
-                       <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-1">Auto Verification Active</p>
-                    </div>
+                 <div className="space-y-3">
+                    <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" type="number" placeholder="Amount (₵)" value={topupAmount} onChange={e => setTopupAmount(e.target.value)} />
+                    <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" placeholder="MoMo Reference ID" value={topupRef} onChange={e => setTopupRef(e.target.value)} />
+                    <button onClick={() => { onRequestTopup(activeDriver.id, parseFloat(topupAmount), topupRef); setTopupAmount(''); setTopupRef(''); }} className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl">
+                       Request Top-up
+                    </button>
                  </div>
-                 <button onClick={() => setIsScanning(false)} className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-rose-500 hover:bg-rose-500/10 transition-all border border-white/10">
-                    <i className="fas fa-times text-lg"></i>
-                 </button>
-              </div>
-              <div id="qr-reader" className="w-full aspect-square bg-black/40 rounded-[2rem] overflow-hidden relative border border-white/10">
-                  <div className="scanner-line"></div>
-              </div>
-           </div>
-        </div>
-      )}
-      {showTopupModal && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
-          <div className="glass-bright w-full max-sm:px-4 max-w-md rounded-[2.5rem] p-8 space-y-8 animate-in zoom-in text-slate-900">
-            <div className="text-center">
-              <h3 className="text-2xl font-black italic tracking-tighter uppercase text-white leading-none">Credit Acquisition</h3>
-              <p className="text-slate-400 text-[10px] font-black uppercase mt-1">MoMo Verification Required</p>
-            </div>
-            <div className="space-y-4">
-               <div className="p-6 bg-amber-500/10 rounded-2xl border border-amber-500/20 text-center">
-                  <p className="text-[9px] font-black text-amber-500 uppercase mb-1">NexRyde Billing ID</p>
-                  <p className="text-3xl font-black text-white italic leading-none">{settings.adminMomo}</p>
-                  <p className="text-[11px] font-black text-slate-400 uppercase mt-2">{settings.adminMomoName}</p>
-               </div>
-               <input type="number" className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-black text-emerald-600 text-center text-xl" placeholder="Amount (₵)" value={topupAmount} onChange={e => setTopupAmount(e.target.value)} />
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold text-center" placeholder="Transaction Reference" value={momoRef} onChange={e => setMomoRef(e.target.value)} />
-            </div>
-            <div className="flex gap-4">
-               <button onClick={() => setShowTopupModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
-               <button onClick={() => { 
-                 if (!topupAmount || !momoRef) { alert("Please fill all fields."); return; }
-                 onRequestTopup(activeDriver.id, Number(topupAmount), momoRef); 
-                 setShowTopupModal(false); 
-               }} className="flex-1 py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Request Activation</button>
-            </div>
-          </div>
-        </div>
-      )}
+             </div>
+          )}
+       </div>
     </div>
   );
-};
+}
 
-const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onDeleteDriver, onCancelRide, onSettleRide, missions, onCreateMission, onDeleteMission, transactions, topupRequests, registrationRequests, onApproveTopup, onApproveRegistration, onLock, searchConfig, settings, onUpdateSettings, hubRevenue, adminEmail }: any) => {
-  const [showDriverModal, setShowDriverModal] = useState(false);
-  const [showMissionModal, setShowMissionModal] = useState(false);
-  const [newDriver, setNewDriver] = useState<Partial<Driver>>({ vehicleType: 'Pragia', pin: '' });
-  const [newMission, setNewMission] = useState<Partial<HubMission>>({ location: '', description: '', entryFee: 5, status: 'open' });
-  const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
-  
-  const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
-  useEffect(() => { setLocalSettings(settings); }, [settings]);
+// --- ADMIN PORTAL ---
 
-  const filteredDrivers = useMemo(() => {
-    let result = drivers.filter((d: any) => d.name.toLowerCase().includes(searchConfig.query.toLowerCase()) || d.licensePlate.toLowerCase().includes(searchConfig.query.toLowerCase()));
-    if (searchConfig.vehicleType !== 'All') {
-      result = result.filter(d => d.vehicleType === searchConfig.vehicleType);
-    }
-    return result;
-  }, [drivers, searchConfig]);
+function AdminPortal({ 
+  activeTab, 
+  setActiveTab, 
+  nodes, 
+  setNodes, 
+  drivers, 
+  onAddDriver, 
+  onDeleteDriver, 
+  onCancelRide, 
+  onSettleRide, 
+  missions, 
+  onCreateMission, 
+  onDeleteMission, 
+  transactions, 
+  topupRequests, 
+  registrationRequests, 
+  onApproveTopup, 
+  onApproveRegistration, 
+  onLock, 
+  searchConfig, 
+  settings, 
+  onUpdateSettings, 
+  hubRevenue, 
+  adminEmail 
+}: any) {
+  const [newMission, setNewMission] = useState<Partial<HubMission>>({
+    location: '', description: '', entryFee: 5
+  });
 
-  const handleSettingImage = async (e: React.ChangeEvent<HTMLInputElement>, field: 'wallpaper' | 'about') => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const compressed = await compressImage(file, 0.6, 1200);
-      if (field === 'wallpaper') {
-        setLocalSettings({...localSettings, appWallpaper: compressed});
-      } else {
-        setLocalSettings({...localSettings, aboutMeImages: [...localSettings.aboutMeImages, compressed]});
-      }
-    }
-  };
+  const [editSettings, setEditSettings] = useState<AppSettings>(settings);
+
+  useEffect(() => {
+    setEditSettings(settings);
+  }, [settings]);
 
   return (
-    <div className="animate-in slide-in-from-bottom-8 space-y-8 pb-10">
-      <div className="flex items-center justify-between mb-4">
-         <div className="flex bg-white/5 p-1 rounded-[1.5rem] border border-white/10 overflow-x-auto no-scrollbar max-w-full">
-            <TabBtn active={activeTab === 'monitor'} label="Dashboard" onClick={() => setActiveTab('monitor')} />
-            <TabBtn active={activeTab === 'fleet'} label="Partners" onClick={() => setActiveTab('fleet')} />
-            <TabBtn active={activeTab === 'onboarding'} label="Onboarding" onClick={() => setActiveTab('onboarding')} count={registrationRequests.filter((r:any)=>r.status==='pending').length} />
-            <TabBtn active={activeTab === 'missions'} label="Hotspots" onClick={() => setActiveTab('missions')} />
-            <TabBtn active={activeTab === 'requests'} label="Billing" onClick={() => setActiveTab('requests')} count={topupRequests.filter((r:any)=>r.status==='pending').length} />
-            <TabBtn active={activeTab === 'settings'} label="Hub Setup" onClick={() => setActiveTab('settings')} />
-         </div>
-         <div className="flex items-center gap-4 bg-rose-600/10 px-4 py-2 rounded-xl border border-rose-500/20">
-            <button onClick={onLock} className="text-rose-500 hover:text-rose-400 transition-colors">
-               <i className="fas fa-lock text-sm"></i>
-            </button>
-         </div>
-      </div>
-
-      {activeTab === 'monitor' && (
-        <div className="space-y-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard label="Requests" value={nodes.filter((n:any) => n.status === 'forming').length} icon="fa-users" color="text-amber-400" />
-            <StatCard label="Partners" value={drivers.length} icon="fa-taxi" color="text-indigo-400" />
-            <StatCard label="Qualified" value={nodes.filter((n:any) => n.status === 'qualified').length} icon="fa-bolt" color="text-emerald-400" />
-            <StatCard label="Revenue" value={hubRevenue.toFixed(0)} icon="fa-money-bill" color="text-slate-400" isCurrency />
+    <div className="space-y-8 animate-in fade-in">
+       <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Admin Vault</h2>
+            <p className="text-slate-500 text-[10px] font-black uppercase mt-1">Logged in as {adminEmail}</p>
           </div>
-          <div className="glass rounded-[2rem] p-8 border border-white/5">
-             <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Live NexRyde Activity</h4>
-             <div className="space-y-3">
-               {nodes.filter((n:any) => n.origin.toLowerCase().includes(searchConfig.query.toLowerCase()) || n.destination.toLowerCase().includes(searchConfig.query.toLowerCase())).slice(0, 10).map((n: RideNode) => (
-                 <div key={n.id} className="flex justify-between items-center bg-white/5 p-4 rounded-xl hover:bg-white/10 transition-all">
-                    <div className="flex-1">
-                      <p className="text-[11px] font-black text-white uppercase italic">{n.origin} → {n.destination}</p>
-                      <p className="text-[9px] text-slate-500 font-bold uppercase">{n.status} | {n.passengers.length} Riders</p>
-                    </div>
-                    <div className="flex gap-2">
-                       {n.status !== 'completed' && <button onClick={() => onSettleRide(n.id)} className="px-3 py-1.5 bg-emerald-600/10 text-emerald-500 rounded-lg text-[8px] font-black uppercase border border-emerald-500/20">Settle</button>}
-                       <button onClick={() => onCancelRide(n.id)} className="px-3 py-1.5 bg-rose-600/10 text-rose-500 rounded-lg text-[8px] font-black uppercase border border-rose-500/20">Kill</button>
-                    </div>
-                 </div>
-               ))}
+          <button onClick={onLock} className="w-12 h-12 bg-rose-600 rounded-2xl flex items-center justify-center text-white shadow-xl"><i className="fas fa-lock"></i></button>
+       </div>
+
+       {/* Stats */}
+       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-emerald-500/10 p-4 rounded-3xl border border-emerald-500/20">
+             <p className="text-[9px] font-black text-emerald-400 uppercase">Hub Revenue</p>
+             <p className="text-xl font-black text-white">₵ {hubRevenue.toFixed(2)}</p>
+          </div>
+          <div className="bg-indigo-500/10 p-4 rounded-3xl border border-indigo-500/20">
+             <p className="text-[9px] font-black text-indigo-400 uppercase">Total Rides</p>
+             <p className="text-xl font-black text-white">{nodes.length}</p>
+          </div>
+          <div className="bg-amber-500/10 p-4 rounded-3xl border border-amber-500/20">
+             <p className="text-[9px] font-black text-amber-500 uppercase">Fleet Size</p>
+             <p className="text-xl font-black text-white">{drivers.length}</p>
+          </div>
+       </div>
+
+       {/* Tabs */}
+       <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar">
+          {['monitor', 'fleet', 'requests', 'missions', 'settings'].map(tab => (
+             <button 
+               key={tab}
+               onClick={() => setActiveTab(tab)} 
+               className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}
+             >
+               {tab}
+             </button>
+          ))}
+       </div>
+
+       {/* Content */}
+       <div className="min-h-[400px]">
+          {activeTab === 'monitor' && (
+             <div className="space-y-4">
+                {nodes.length === 0 && <p className="text-center text-slate-500">No trip history.</p>}
+                {nodes.map((n: any) => (
+                   <div key={n.id} className="glass p-4 rounded-2xl border border-white/5 flex justify-between items-center">
+                      <div>
+                         <p className="text-xs font-bold text-white uppercase">{n.origin} → {n.destination}</p>
+                         <p className="text-[9px] text-slate-500 font-bold uppercase">{n.status} • {n.passengers.length} Pax</p>
+                      </div>
+                      <div className="flex gap-2">
+                         <button onClick={() => onSettleRide(n.id)} className="px-3 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg text-[8px] font-black uppercase">Settle</button>
+                         <button onClick={() => onCancelRide(n.id)} className="px-3 py-2 bg-rose-500/20 text-rose-500 rounded-lg text-[8px] font-black uppercase">Delete</button>
+                      </div>
+                   </div>
+                ))}
              </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {activeTab === 'fleet' && (
-        <div className="space-y-6">
-           <div className="flex justify-between items-center px-2">
-              <h3 className="text-xl font-black uppercase italic text-white leading-none">Partner Registry</h3>
-              <button onClick={() => setShowDriverModal(true)} className="px-6 py-3 bg-amber-500 text-[#020617] rounded-xl text-[9px] font-black uppercase shadow-xl">Direct Register</button>
-           </div>
-           <div className="glass rounded-[2rem] overflow-hidden border border-white/5">
-              <table className="w-full text-left text-[11px]">
-                 <thead className="bg-white/5 text-slate-500 uppercase font-black tracking-widest border-b border-white/5">
-                    <tr><th className="px-8 py-5">Partner</th><th className="px-8 py-5">Asset Info</th><th className="px-8 py-5 text-center">Credit</th><th className="px-8 py-5 text-right">Action</th></tr>
-                 </thead>
-                 <tbody className="divide-y divide-white/5">
-                    {filteredDrivers.map((d: any) => (
-                       <tr key={d.id} className="text-slate-300 font-bold hover:bg-white/5">
-                          <td className="px-8 py-5">
-                            <div className="flex items-center gap-3">
-                              {d.avatarUrl ? (
-                                <img src={d.avatarUrl} className="w-10 h-10 rounded-full object-cover border border-amber-500/30" />
-                              ) : (
-                                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-600"><i className="fas fa-user"></i></div>
-                              )}
-                              <span>{d.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-8 py-5"><div>{d.licensePlate}</div><div className="text-[8px] text-slate-500 uppercase tracking-tighter">{d.contact} | {d.vehicleType}</div></td>
-                          <td className="px-8 py-5 text-center text-emerald-400 italic font-black">₵{d.walletBalance.toFixed(1)}</td>
-                          <td className="px-8 py-5 text-right"><button onClick={() => setPendingDeletionId(d.id)} className="px-4 py-2 bg-rose-600/10 text-rose-500 rounded-xl text-[8px] font-black uppercase">Revoke</button></td>
-                       </tr>
-                    ))}
-                 </tbody>
-              </table>
-           </div>
-        </div>
-      )}
-
-      {activeTab === 'onboarding' && (
-        <div className="space-y-6">
-           <h3 className="text-xl font-black uppercase italic text-white leading-none px-2">Pending Applications</h3>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {registrationRequests.filter(r => r.status === 'pending').map(reg => (
-                <div key={reg.id} className="glass p-6 rounded-[2.5rem] border border-indigo-500/20 flex gap-6 items-center">
-                   <img src={reg.avatarUrl} className="w-20 h-20 rounded-2xl object-cover border border-white/10" />
-                   <div className="flex-1 space-y-2">
-                      <div className="flex justify-between">
-                         <h4 className="font-black text-white text-lg leading-none uppercase italic">{reg.name}</h4>
-                         <span className="text-[8px] font-black text-indigo-400 uppercase">{reg.vehicleType}</span>
+          {activeTab === 'fleet' && (
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {drivers.map((d: any) => (
+                   <div key={d.id} className="glass p-6 rounded-[2rem] border border-white/10 relative">
+                      <div className="flex items-center gap-3 mb-4">
+                         <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-black">{d.name[0]}</div>
+                         <div>
+                            <p className="text-white font-bold">{d.name}</p>
+                            <p className="text-[10px] text-slate-500 uppercase">{d.licensePlate} • {d.vehicleType}</p>
+                         </div>
                       </div>
-                      <p className="text-[10px] text-slate-500 font-bold">{reg.licensePlate} • {reg.contact}</p>
-                      <p className="text-[9px] text-emerald-500 font-black italic">REF: {reg.momoReference}</p>
-                      <button onClick={() => onApproveRegistration(reg.id)} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[8px] font-black uppercase shadow-lg">Activate Partner</button>
+                      <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl mb-4">
+                         <p className="text-xs font-bold text-slate-400">Wallet Balance</p>
+                         <p className="text-lg font-black text-white">₵ {d.walletBalance.toFixed(2)}</p>
+                      </div>
+                      <button onClick={() => onDeleteDriver(d.id)} className="w-full py-3 bg-rose-600/10 text-rose-500 rounded-xl font-black text-[10px] uppercase hover:bg-rose-600 hover:text-white transition-all">Remove Partner</button>
                    </div>
-                </div>
-              ))}
-           </div>
-        </div>
-      )}
+                ))}
+             </div>
+          )}
 
-      {activeTab === 'missions' && (
-        <div className="space-y-6">
-           <div className="flex justify-between items-center px-2">
-              <h3 className="text-xl font-black uppercase italic text-white leading-none">Market Hotspots</h3>
-              <button onClick={() => setShowMissionModal(true)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase shadow-xl">Create Hotspot</button>
-           </div>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {missions.map(m => (
-                <div key={m.id} className="glass p-6 rounded-[2.5rem] border border-white/5 flex justify-between items-center">
+          {activeTab === 'requests' && (
+             <div className="space-y-8">
+                <div>
+                   <h3 className="text-xs font-black uppercase text-slate-500 mb-4 tracking-widest">Top-up Requests</h3>
+                   {topupRequests.filter((r: any) => r.status === 'pending').length === 0 && <p className="text-[10px] text-slate-600 italic">No pending top-ups.</p>}
+                   {topupRequests.filter((r: any) => r.status === 'pending').map((r: any) => (
+                      <div key={r.id} className="glass p-4 rounded-2xl border border-white/5 flex justify-between items-center mb-2">
+                         <div>
+                            <p className="text-white font-bold">₵ {r.amount}</p>
+                            <p className="text-[9px] text-slate-500 uppercase">Ref: {r.momoReference}</p>
+                         </div>
+                         <button onClick={() => onApproveTopup(r.id)} className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-black text-[9px] uppercase">Approve</button>
+                      </div>
+                   ))}
+                </div>
+                <div>
+                   <h3 className="text-xs font-black uppercase text-slate-500 mb-4 tracking-widest">Onboarding Applications</h3>
+                   {registrationRequests.filter((r: any) => r.status === 'pending').length === 0 && <p className="text-[10px] text-slate-600 italic">No pending applications.</p>}
+                   {registrationRequests.filter((r: any) => r.status === 'pending').map((r: any) => (
+                      <div key={r.id} className="glass p-6 rounded-[2rem] border border-white/10 mb-4 space-y-2">
+                         <div className="flex justify-between">
+                            <h4 className="font-bold text-white">{r.name}</h4>
+                            <span className="px-2 py-1 bg-white/10 rounded-lg text-[8px] text-slate-400 uppercase">{r.vehicleType}</span>
+                         </div>
+                         <p className="text-xs text-slate-400">Phone: {r.contact}</p>
+                         <p className="text-xs text-slate-400">Plate: {r.licensePlate}</p>
+                         <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                            <p className="text-[9px] font-bold text-emerald-400 uppercase">Paid: ₵{r.amount} (Ref: {r.momoReference})</p>
+                         </div>
+                         <button onClick={() => onApproveRegistration(r.id)} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase mt-2">Approve Partner</button>
+                      </div>
+                   ))}
+                </div>
+             </div>
+          )}
+
+          {activeTab === 'missions' && (
+             <div className="space-y-6">
+                <div className="glass p-6 rounded-[2rem] border border-white/10 space-y-3">
+                   <h3 className="text-sm font-black text-white uppercase">New Hotspot</h3>
+                   <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" placeholder="Location Name" value={newMission.location} onChange={e => setNewMission({...newMission, location: e.target.value})} />
+                   <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" placeholder="Description" value={newMission.description} onChange={e => setNewMission({...newMission, description: e.target.value})} />
+                   <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" type="number" placeholder="Entry Fee" value={newMission.entryFee} onChange={e => setNewMission({...newMission, entryFee: parseFloat(e.target.value)})} />
+                   <button onClick={() => {
+                      if(!newMission.location) return;
+                      onCreateMission({
+                         id: `MISS-${Date.now()}`,
+                         ...newMission,
+                         driversJoined: [],
+                         status: 'open',
+                         createdAt: new Date().toISOString()
+                      });
+                      setNewMission({location: '', description: '', entryFee: 5});
+                   }} className="w-full py-3 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase">Launch Mission</button>
+                </div>
+                <div className="space-y-4">
+                   {missions.map((m: any) => (
+                      <div key={m.id} className="glass p-4 rounded-2xl border border-white/5 flex justify-between items-center">
+                         <div>
+                            <p className="text-white font-bold">{m.location}</p>
+                            <p className="text-[9px] text-slate-500 uppercase">{m.driversJoined.length} Drivers • Fee: ₵{m.entryFee}</p>
+                         </div>
+                         <button onClick={() => onDeleteMission(m.id)} className="w-8 h-8 rounded-full bg-rose-500/20 text-rose-500 flex items-center justify-center"><i className="fas fa-trash text-xs"></i></button>
+                      </div>
+                   ))}
+                </div>
+             </div>
+          )}
+
+          {activeTab === 'settings' && (
+             <div className="glass p-8 rounded-[2rem] border border-white/10 space-y-4 max-h-[60vh] overflow-y-auto no-scrollbar">
+                <h3 className="text-sm font-black text-white uppercase">App Configuration</h3>
+                <div className="grid grid-cols-2 gap-4">
                    <div>
-                      <h4 className="font-black text-white italic uppercase">{m.location}</h4>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Entry Fee: ₵{m.entryFee}</p>
+                      <label className="text-[9px] text-slate-500 uppercase font-bold">Pragia Fare</label>
+                      <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" type="number" value={editSettings.farePerPragia} onChange={e => setEditSettings({...editSettings, farePerPragia: parseFloat(e.target.value)})} />
                    </div>
-                   <button onClick={() => onDeleteMission(m.id)} className="text-rose-500 hover:text-rose-400 p-3 bg-rose-500/10 rounded-xl"><i className="fas fa-trash-alt"></i></button>
+                   <div>
+                      <label className="text-[9px] text-slate-500 uppercase font-bold">Taxi Fare</label>
+                      <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" type="number" value={editSettings.farePerTaxi} onChange={e => setEditSettings({...editSettings, farePerTaxi: parseFloat(e.target.value)})} />
+                   </div>
+                   <div>
+                      <label className="text-[9px] text-slate-500 uppercase font-bold">Commission</label>
+                      <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" type="number" value={editSettings.commissionPerSeat} onChange={e => setEditSettings({...editSettings, commissionPerSeat: parseFloat(e.target.value)})} />
+                   </div>
+                   <div>
+                      <label className="text-[9px] text-slate-500 uppercase font-bold">Reg Fee</label>
+                      <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" type="number" value={editSettings.registrationFee} onChange={e => setEditSettings({...editSettings, registrationFee: parseFloat(e.target.value)})} />
+                   </div>
                 </div>
-              ))}
-           </div>
-        </div>
-      )}
-
-      {activeTab === 'requests' && (
-        <div className="space-y-6">
-           <h3 className="text-xl font-black uppercase italic text-white leading-none px-2">Top-Up Requests</h3>
-           <div className="glass rounded-[2rem] overflow-hidden border border-white/5">
-              <table className="w-full text-left text-[11px]">
-                 <thead className="bg-white/5 text-slate-500 uppercase font-black tracking-widest border-b border-white/5">
-                    <tr><th className="px-8 py-5">Partner</th><th className="px-8 py-5 text-center">Amount</th><th className="px-8 py-5">Reference</th><th className="px-8 py-5 text-right">Action</th></tr>
-                 </thead>
-                 <tbody className="divide-y divide-white/5">
-                    {topupRequests.filter(r => r.status === 'pending').map(r => (
-                       <tr key={r.id} className="text-slate-300 font-bold hover:bg-white/5">
-                          <td className="px-8 py-5 uppercase italic">{drivers.find(d => d.id === r.driverId)?.name || 'Unknown'}</td>
-                          <td className="px-8 py-5 text-center text-emerald-400 font-black italic">₵{r.amount}</td>
-                          <td className="px-8 py-5 font-mono text-[9px]">{r.momoReference}</td>
-                          <td className="px-8 py-5 text-right"><button onClick={() => onApproveTopup(r.id)} className="px-6 py-2 bg-emerald-600 text-white rounded-xl text-[8px] font-black uppercase">Release</button></td>
-                       </tr>
-                    ))}
-                 </tbody>
-              </table>
-           </div>
-        </div>
-      )}
-
-      {activeTab === 'settings' && (
-        <div className="glass rounded-[3rem] p-10 lg:p-14 border border-white/5 space-y-12 animate-in fade-in relative min-h-[600px]">
-           <div>
-              <h3 className="text-4xl font-black uppercase italic text-white tracking-tighter">HUB SETUP</h3>
-           </div>
-           
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
-              {/* FARES */}
-              <section className="space-y-8">
-                 <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-[0.4em]">FARES</h4>
-                 <div className="space-y-6">
-                    <AdminInput label="COMM (C)" value={localSettings.commissionPerSeat} onChange={v => setLocalSettings({...localSettings, commissionPerSeat: Number(v)})} />
-                    <AdminInput label="REG FEE (C)" value={localSettings.registrationFee} onChange={v => setLocalSettings({...localSettings, registrationFee: Number(v)})} />
-                    <AdminInput label="PRAGIA (C)" value={localSettings.farePerPragia} onChange={v => setLocalSettings({...localSettings, farePerPragia: Number(v)})} />
-                    <AdminInput label="TAXI (C)" value={localSettings.farePerTaxi} onChange={v => setLocalSettings({...localSettings, farePerTaxi: Number(v)})} />
-                 </div>
-              </section>
-
-              {/* PAYMENT & LOGIC */}
-              <section className="space-y-8">
-                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">PAYMENT & LOGIC</h4>
-                 <div className="space-y-6">
-                    <AdminInput label="MOMO" value={localSettings.adminMomo} onChange={v => setLocalSettings({...localSettings, adminMomo: v})} />
-                    <AdminInput label="WHATSAPP" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
-                    <AdminInput label="SOLO MULTI (X)" value={localSettings.soloMultiplier} onChange={v => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
-                    <AdminInput label="HUB ANNOUNCEMENT" value={localSettings.hub_announcement || ''} onChange={v => setLocalSettings({...localSettings, hub_announcement: v})} />
-                 </div>
-              </section>
-
-              {/* VISUALS & INFO */}
-              <section className="space-y-8">
-                 <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em]">VISUALS & INFO</h4>
-                 <div className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest">HUB BACKGROUND</label>
-                      <div className="relative group w-full h-16 rounded-xl overflow-hidden border border-white/10 bg-white/5">
-                        {localSettings.appWallpaper ? (
-                          <img src={localSettings.appWallpaper} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-700 italic text-[10px]">No Wallpaper</div>
-                        )}
-                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={e => handleSettingImage(e, 'wallpaper')} />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                       <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest">ABOUT THE HUB</label>
-                       <textarea 
-                         className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-[10px] font-bold text-slate-300 outline-none focus:border-amber-500 transition-all h-24 resize-none leading-relaxed"
-                         value={localSettings.aboutMeText}
-                         onChange={e => setLocalSettings({...localSettings, aboutMeText: e.target.value})}
-                         placeholder="Describe your hub mission..."
-                       />
-                    </div>
-
-                    <div className="space-y-2">
-                       <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest">GALLERY IMAGES</label>
-                       <div className="flex flex-wrap gap-2">
-                          {localSettings.aboutMeImages.map((img, idx) => (
-                            <div key={idx} className="w-10 h-10 rounded-lg overflow-hidden border border-white/20 relative group">
-                               <img src={img} className="w-full h-full object-cover" />
-                               <button 
-                                 onClick={() => setLocalSettings({...localSettings, aboutMeImages: localSettings.aboutMeImages.filter((_, i) => i !== idx)})}
-                                 className="absolute inset-0 bg-rose-600/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
-                               >
-                                 <i className="fas fa-times text-[8px]"></i>
-                               </button>
-                            </div>
-                          ))}
-                          <label className="w-10 h-10 rounded-lg bg-white/5 border border-dashed border-white/20 flex items-center justify-center text-slate-600 cursor-pointer hover:bg-white/10 transition-all">
-                             <i className="fas fa-plus text-[8px]"></i>
-                             <input type="file" className="hidden" accept="image/*" onChange={e => handleSettingImage(e, 'about')} />
-                          </label>
-                       </div>
-                    </div>
-                 </div>
-              </section>
-           </div>
-
-           <div className="pt-8 flex justify-end">
-              <button 
-                onClick={() => onUpdateSettings(localSettings)} 
-                className="px-16 py-5 bg-amber-500 text-[#020617] rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all shadow-amber-500/20"
-              >
-                PUSH UPDATES
-              </button>
-           </div>
-        </div>
-      )}
-
-      {/* Admin Modals */}
-      {showDriverModal && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-           <div className="glass-bright w-full max-w-sm rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in border border-white/10 text-slate-900">
-              <h3 className="text-xl font-black italic uppercase text-white text-center">Direct Onboard</h3>
-              <div className="space-y-4">
-                 <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Partner Name" onChange={e => setNewDriver({...newDriver, name: e.target.value})} />
-                 <div className="grid grid-cols-2 gap-3">
-                    <select className="w-full bg-white rounded-xl px-2 py-3 font-bold text-xs" onChange={e => setNewDriver({...newDriver, vehicleType: e.target.value as any})}>
-                       <option value="Pragia">Pragia</option>
-                       <option value="Taxi">Taxi</option>
-                    </select>
-                    <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Plate" onChange={e => setNewDriver({...newDriver, licensePlate: e.target.value})} />
-                 </div>
-                 <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Contact" onChange={e => setNewDriver({...newDriver, contact: e.target.value})} />
-                 <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs text-center font-black" placeholder="Set Hub Password" onChange={e => setNewDriver({...newDriver, pin: e.target.value})} />
-              </div>
-              <div className="flex gap-3">
-                 <button onClick={() => setShowDriverModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
-                 <button onClick={() => { onAddDriver(newDriver); setShowDriverModal(false); }} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Activate</button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {showMissionModal && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-           <div className="glass-bright w-full max-w-sm rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in border border-white/10 text-slate-900">
-              <h3 className="text-xl font-black italic uppercase text-white text-center">New Hotspot</h3>
-              <div className="space-y-4">
-                 <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Zone Name" onChange={e => setNewMission({...newMission, location: e.target.value})} />
-                 <textarea className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs h-20" placeholder="Description..." onChange={e => setNewMission({...newMission, description: e.target.value})} />
-                 <input type="number" className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Entry Fee (₵)" onChange={e => setNewMission({...newMission, entryFee: Number(e.target.value)})} />
-              </div>
-              <div className="flex gap-3">
-                 <button onClick={() => setShowMissionModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
-                 <button onClick={() => { 
-                   onCreateMission({ ...newMission, id: `MSN-${Date.now()}`, driversJoined: [], createdAt: new Date().toISOString() }); 
-                   setShowMissionModal(false); 
-                 }} className="flex-1 py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Confirm Hotspot</button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {pendingDeletionId && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4">
-           <div className="glass-bright w-full max-w-xs rounded-[2rem] p-8 space-y-6 animate-in zoom-in border border-rose-500/20 text-center">
-              <i className="fas fa-exclamation-triangle text-rose-500 text-4xl mb-4"></i>
-              <h3 className="text-xl font-black uppercase text-white italic">Revoke Access?</h3>
-              <p className="text-slate-400 text-xs font-bold leading-relaxed">This will permanently unregister the partner. This action cannot be undone.</p>
-              <div className="flex gap-3">
-                 <button onClick={() => setPendingDeletionId(null)} className="flex-1 py-3 bg-white/5 text-slate-500 rounded-xl text-[10px] font-black uppercase">Cancel</button>
-                 <button onClick={() => { onDeleteDriver(pendingDeletionId); setPendingDeletionId(null); }} className="flex-1 py-3 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase">Revoke</button>
-              </div>
-           </div>
-        </div>
-      )}
+                <div>
+                   <label className="text-[9px] text-slate-500 uppercase font-bold">Announcement Banner</label>
+                   <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" placeholder="Message..." value={editSettings.hub_announcement || ''} onChange={e => setEditSettings({...editSettings, hub_announcement: e.target.value})} />
+                </div>
+                <div>
+                   <label className="text-[9px] text-slate-500 uppercase font-bold">About Text</label>
+                   <textarea className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs h-24" value={editSettings.aboutMeText} onChange={e => setEditSettings({...editSettings, aboutMeText: e.target.value})} />
+                </div>
+                <button onClick={() => onUpdateSettings(editSettings)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">
+                   Save Changes
+                </button>
+             </div>
+          )}
+       </div>
     </div>
   );
-};
-
-const AdminInput = ({ label, value, onChange, type = "text" }: { label: string, value: any, onChange: (v: string) => void, type?: string }) => (
-  <div className="space-y-3">
-     <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">{label}</label>
-     <input 
-       type={type} 
-       className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xs font-bold text-white outline-none focus:border-amber-500 transition-all shadow-inner" 
-       value={value} 
-       onChange={e => onChange(e.target.value)} 
-     />
-  </div>
-);
-
-const TabBtn = ({ active, label, onClick, count }: any) => (
-  <button onClick={onClick} className={`px-5 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap relative ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'text-slate-500 hover:text-slate-300'}`}>
-    {label} {count !== undefined && count > 0 && <span className="ml-1 bg-rose-500 text-white text-[7px] px-1.5 py-0.5 rounded-full ring-2 ring-[#020617]">{count}</span>}
-  </button>
-);
-
-const StatCard = ({ label, value, icon, color, isCurrency }: any) => (
-  <div className="glass p-6 rounded-[2rem] border border-white/5 relative overflow-hidden flex flex-col justify-end min-h-[140px] group transition-all hover:border-white/10">
-    <i className={`fas ${icon} absolute top-6 left-6 ${color} text-xl transition-transform group-hover:scale-110`}></i>
-    <div className="relative z-10"><p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500 mb-1">{label}</p><p className="text-3xl font-black italic text-white leading-none">{isCurrency ? '₵' : ''}{value}</p></div>
-  </div>
-);
+}
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<App />);
 }
+
