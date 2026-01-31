@@ -78,6 +78,7 @@ interface Driver {
   status: 'online' | 'busy' | 'offline';
   pin: string; 
   avatarUrl?: string; 
+  currentVicinity?: string; // New: To show passengers where they are working
 }
 
 interface TopupRequest {
@@ -434,6 +435,17 @@ const App: React.FC = () => {
     alert(`Successfully stationed at ${mission.location}! ₵${mission.entryFee} deducted.`);
   };
 
+  const updateDriverVicinity = async (driverId: string, vicinity: string) => {
+    const { error } = await supabase.from('unihub_drivers').update({ currentVicinity: vicinity }).eq('id', driverId);
+    if (error) {
+      console.error("Vicinity update error:", error);
+      // Fallback: If column doesn't exist, we might get an error. 
+      // We can handle this by informing the admin to run the SQL migration.
+    } else {
+      alert(`Broadcasting your location: ${vicinity}`);
+    }
+  };
+
   const addRideToMyList = (nodeId: string) => {
     setMyRideIds(prev => prev.includes(nodeId) ? prev : [...prev, nodeId]);
   };
@@ -520,7 +532,7 @@ const App: React.FC = () => {
       }
     } else {
       alert("Invalid Code! Ask the passenger for their Ride PIN.");
-    } verificationCode: null 
+    } 
   };
 
   const cancelRide = async (nodeId: string) => {
@@ -661,7 +673,8 @@ const App: React.FC = () => {
       walletBalance: 0,
       rating: 5.0,
       status: 'online',
-      avatarUrl: reg.avatarUrl
+      avatarUrl: reg.avatarUrl,
+      currentVicinity: 'Hub Entry'
     };
 
     try {
@@ -689,7 +702,8 @@ const App: React.FC = () => {
       id: `DRV-${Date.now()}`,
       walletBalance: 0,
       rating: 5.0,
-      status: 'online'
+      status: 'online',
+      currentVicinity: 'Direct Onboard'
     };
     try {
       const { error } = await supabase.from('unihub_drivers').insert([newDriver]);
@@ -1001,6 +1015,7 @@ const App: React.FC = () => {
               missions={missions}
               allNodes={nodes}
               onJoinMission={joinMission}
+              onUpdateVicinity={updateDriverVicinity}
               onAccept={acceptRide}
               onVerify={verifyRide}
               onCancel={cancelRide}
@@ -1054,7 +1069,6 @@ const App: React.FC = () => {
 
       {showAiHelp && <AiHelpDesk onClose={() => setShowAiHelp(false)} settings={settings} />}
 
-      {/* Rest of modals remain unchanged ... */}
       {showQrModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-sm:px-4 max-w-sm rounded-[3rem] p-10 space-y-8 animate-in zoom-in text-center border border-white/10">
@@ -1947,6 +1961,7 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
                   <div>
                     <p className="text-white font-black italic text-sm">{driver.name}</p>
                     <p className="text-[9px] font-black text-slate-500 uppercase">{driver.licensePlate}</p>
+                    {driver.currentVicinity && <p className="text-[7px] font-black text-indigo-400 uppercase italic">Vicinity: {driver.currentVicinity}</p>}
                   </div>
                </div>
                <a href={`tel:${driver.contact}`} className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-xs"><i className="fas fa-phone"></i></a>
@@ -1978,7 +1993,7 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
   );
 };
 
-const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes, dispatchedNodes, missions, allNodes, onJoinMission, onAccept, onVerify, onCancel, onRequestTopup, onRequestRegistration, searchConfig, settings }: any) => {
+const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes, dispatchedNodes, missions, allNodes, onJoinMission, onUpdateVicinity, onAccept, onVerify, onCancel, onRequestTopup, onRequestRegistration, searchConfig, settings }: any) => {
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [pin, setPin] = useState('');
   const [verifyCode, setVerifyCode] = useState('');
@@ -1989,6 +2004,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
   const [regData, setRegData] = useState<Partial<RegistrationRequest>>({ vehicleType: 'Pragia' });
   const [isScanning, setIsScanning] = useState(false);
   const [activeMissionNodeId, setActiveMissionNodeId] = useState<string | null>(null);
+  const [vicinityInput, setVicinityInput] = useState(activeDriver?.currentVicinity || '');
 
   const [hubInsight, setHubInsight] = useState<string | null>(null);
   const [insightLoading, setInsightLoading] = useState(false);
@@ -2141,7 +2157,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
               </button>
             </div>
         )}
-        {/* Onboarding Modal ... */}
         {showRegModal && (
           <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
             <div className="glass-bright w-full max-sm:px-2 max-w-md rounded-[2.5rem] p-4 sm:p-6 space-y-4 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[95vh] no-scrollbar">
@@ -2233,6 +2248,27 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
           <button onClick={onLogout} className="flex-1 sm:flex-none px-6 py-3 bg-rose-600/10 text-rose-500 rounded-xl text-[10px] font-black uppercase border border-rose-500/20">Sign Out</button>
         </div>
       </div>
+      
+      {/* Vicinity Broadcasting Card */}
+      <div className="bg-indigo-600 rounded-[2.5rem] p-8 border border-white/10 shadow-2xl relative overflow-hidden group">
+         <i className="fas fa-tower-broadcast absolute right-[-20px] top-[-20px] text-[120px] opacity-10 rotate-12 group-hover:scale-110 transition-transform duration-1000"></i>
+         <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+               <h3 className="text-2xl font-black italic uppercase text-white leading-none tracking-tighter">Broadcast Your Hub Vicinity</h3>
+               <p className="text-indigo-100 text-xs font-bold uppercase mt-2 opacity-80">Help people at different places find your drive.</p>
+            </div>
+            <div className="flex gap-2 w-full md:w-auto">
+               <input 
+                 className="flex-1 md:w-64 bg-white/10 border border-white/20 rounded-2xl px-6 py-4 outline-none focus:bg-white/20 text-white font-black uppercase text-xs" 
+                 placeholder="e.g. Near Main Gate" 
+                 value={vicinityInput}
+                 onChange={e => setVicinityInput(e.target.value)}
+               />
+               <button onClick={() => onUpdateVicinity(activeDriver.id, vicinityInput)} className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-transform">Broadcast</button>
+            </div>
+         </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-12">
            <section>
@@ -2378,7 +2414,13 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
   const [newDriver, setNewDriver] = useState<Partial<Driver>>({ vehicleType: 'Pragia', pin: '' });
   const [newMission, setNewMission] = useState<Partial<HubMission>>({ location: '', description: '', entryFee: 5, status: 'open' });
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
-  
+  const [imageProcessing, setImageProcessing] = useState(false);
+
+  // AI Orchestrator States
+  const [orchestratorQuery, setOrchestratorQuery] = useState('');
+  const [orchestratorLoading, setOrchestratorLoading] = useState(false);
+  const [orchestratorResponse, setOrchestratorResponse] = useState<string | null>(null);
+
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   useEffect(() => { setLocalSettings(settings); }, [settings]);
 
@@ -2390,6 +2432,16 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
     return result;
   }, [drivers, searchConfig]);
 
+  const handleAdminDirectPortrait = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImageProcessing(true);
+      const compressed = await compressImage(file, 0.6, 400);
+      setNewDriver({ ...newDriver, avatarUrl: compressed });
+      setImageProcessing(false);
+    }
+  };
+
   const handleSettingImage = async (e: React.ChangeEvent<HTMLInputElement>, field: 'wallpaper' | 'about') => {
     const file = e.target.files?.[0];
     if (file) {
@@ -2399,6 +2451,29 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
       } else {
         setLocalSettings({...localSettings, aboutMeImages: [...localSettings.aboutMeImages, compressed]});
       }
+    }
+  };
+
+  const runHubOrchestrator = async () => {
+    if (!orchestratorQuery.trim()) return;
+    setOrchestratorLoading(true);
+    try {
+      const activeStats = `Active Trips: ${nodes.filter((n:any)=>n.status!=='completed').length}, Online Partners: ${drivers.filter((d:any)=>d.status==='online').length}`;
+      const prompt = `You are the NexRyde Hub Architect. Daily AI Strategy Tool.
+      Context: ${activeStats}. User Request: "${orchestratorQuery}".
+      Based on the current campus demand, advise the Admin on specific Hub Setup changes or Mission updates.
+      If the user wants to change logic (fares, multi, etc.), suggest the exact values.
+      Very short, actionable response. Suggest code logic tweaks if requested.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt
+      });
+      setOrchestratorResponse(response.text || "Hub optimization algorithm completed.");
+    } catch (err) {
+      setOrchestratorResponse("AI Orchestrator offline. Manual adjustments required.");
+    } finally {
+      setOrchestratorLoading(false);
     }
   };
 
@@ -2506,7 +2581,42 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
       )}
 
       {activeTab === 'missions' && (
-        <div className="space-y-6">
+        <div className="space-y-8">
+           {/* AI Hub Orchestrator Logic */}
+           <div className="bg-indigo-600 rounded-[2.5rem] p-8 border border-white/10 shadow-2xl relative overflow-hidden group">
+              <i className="fas fa-brain absolute right-[-20px] top-[-20px] text-[120px] opacity-10 rotate-12 group-hover:scale-110 transition-transform duration-1000"></i>
+              <div className="relative z-10 space-y-6">
+                 <div>
+                    <h3 className="text-2xl font-black italic uppercase text-white leading-none tracking-tighter flex items-center gap-3">
+                       <i className="fas fa-sparkles"></i> AI Hub Orchestrator
+                    </h3>
+                    <p className="text-indigo-100 text-xs font-bold uppercase mt-2 opacity-80">Daily Hub Logic & Hotspot Optimization (Update Settings via Prompt)</p>
+                 </div>
+                 <div className="flex gap-2">
+                    <input 
+                      className="flex-1 bg-white/10 border border-white/20 rounded-2xl px-6 py-4 outline-none focus:bg-white/20 text-white font-black text-xs placeholder:text-indigo-300" 
+                      placeholder="e.g. Demand is high at the library, suggest mission entry fee and fare multiplier..." 
+                      value={orchestratorQuery}
+                      onChange={e => setOrchestratorQuery(e.target.value)}
+                    />
+                    <button 
+                      onClick={runHubOrchestrator} 
+                      disabled={orchestratorLoading}
+                      className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-transform disabled:opacity-50"
+                    >
+                       {orchestratorLoading ? <i className="fas fa-spinner fa-spin"></i> : 'Run Engine'}
+                    </button>
+                 </div>
+                 {orchestratorResponse && (
+                    <div className="p-6 bg-black/30 rounded-2xl border border-white/10 animate-in zoom-in">
+                       <p className="text-[10px] font-black uppercase text-indigo-300 mb-2">Architect Strategy Output:</p>
+                       <p className="text-white text-xs font-medium italic leading-relaxed whitespace-pre-wrap">{orchestratorResponse}</p>
+                       <button onClick={() => setOrchestratorResponse(null)} className="mt-4 text-[8px] font-black uppercase text-indigo-200 underline">Dismiss Strategy</button>
+                    </div>
+                 )}
+              </div>
+           </div>
+
            <div className="flex justify-between items-center px-2">
               <h3 className="text-xl font-black uppercase italic text-white leading-none">Market Hotspots</h3>
               <button onClick={() => setShowMissionModal(true)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase shadow-xl">Create Hotspot</button>
@@ -2642,13 +2752,30 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
       {showDriverModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-w-sm rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in border border-white/10 text-slate-900">
-              <h3 className="text-xl font-black italic uppercase text-white text-center">Direct Onboard</h3>
+              <h3 className="text-xl font-black italic uppercase text-white text-center tracking-tighter leading-none">Direct Onboard</h3>
+              
+              {/* Added Image logic to Direct Register */}
+              <div className="flex justify-center">
+                 <input type="file" id="direct-portrait" className="hidden" accept="image/*" onChange={handleAdminDirectPortrait} />
+                 <label htmlFor="direct-portrait" className={`w-20 h-20 rounded-full border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden ${newDriver.avatarUrl ? 'border-amber-500' : 'border-white/20 bg-white/5'}`}>
+                    {newDriver.avatarUrl ? (
+                       <img src={newDriver.avatarUrl} className="w-full h-full object-cover" />
+                    ) : (
+                       <div className="text-center">
+                          <i className={`fas ${imageProcessing ? 'fa-spinner fa-spin' : 'fa-camera'} text-slate-400 text-xl`}></i>
+                          <p className="text-[6px] font-black text-slate-500 uppercase mt-1">Portrait</p>
+                       </div>
+                    )}
+                 </label>
+              </div>
+
               <div className="space-y-4">
-                 <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Partner Name" onChange={e => setNewDriver({...newDriver, name: e.target.value})} />
+                 <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs outline-none focus:border-amber-500 border-2 border-transparent" placeholder="Partner Name" onChange={e => setNewDriver({...newDriver, name: e.target.value})} />
                  <div className="grid grid-cols-2 gap-3">
-                    <select className="w-full bg-white rounded-xl px-2 py-3 font-bold text-xs" onChange={e => setNewDriver({...newDriver, vehicleType: e.target.value as any})}>
+                    <select className="w-full bg-white rounded-xl px-2 py-3 font-bold text-xs" value={newDriver.vehicleType} onChange={e => setNewDriver({...newDriver, vehicleType: e.target.value as any})}>
                        <option value="Pragia">Pragia</option>
                        <option value="Taxi">Taxi</option>
+                       <option value="Shuttle">Shuttle</option>
                     </select>
                     <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Plate" onChange={e => setNewDriver({...newDriver, licensePlate: e.target.value})} />
                  </div>
