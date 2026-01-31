@@ -1571,7 +1571,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
   // MARKETPLACE LOGIC FIX: Hide private Solo/Premium rides from the general traffic
   const filteredNodes = useMemo(() => {
     let result = nodes.filter((n: any) => 
-      n.status !== 'completed' && 
+      n.status === 'forming' && // FIX: Only show forming pools. Dispatched/qualified/completed are private.
       !myRideIds.includes(n.id) &&
       n.leaderPhone !== currentUser.phone && // Don't show your own request in the market
       !n.isSolo && // Solo rides are private
@@ -1717,7 +1717,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
 
       <section className="space-y-6">
         <div className="flex items-center gap-4">
-           <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Marketplace Traffic</h3>
+           <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Joinable Pools</h3>
            {filteredNodes.length > 0 && <span className="px-3 py-1 bg-white/5 rounded-full text-[8px] font-black text-slate-500 uppercase">{filteredNodes.length} Matches</span>}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1814,6 +1814,11 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
 const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNodeId, isPriority }: any) => {
   const driver = drivers.find((d: any) => d.id === node.assignedDriverId);
   const isOrganizer = currentUser?.phone === node.leaderPhone;
+  
+  // Security Check: Is the current user actually in this ride?
+  const isParticipant = useMemo(() => {
+    return node.passengers.some((p: any) => p.phone === currentUser?.phone);
+  }, [node.passengers, currentUser]);
 
   // Determine Tiers
   const tier = node.isLongDistance ? 'premium' : (node.isSolo ? 'solo' : 'pool');
@@ -1952,21 +1957,29 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
                <a href={`tel:${driver.contact}`} className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-xs"><i className="fas fa-phone"></i></a>
             </div>
             
-            <div className={`p-6 rounded-[1.5rem] text-center shadow-xl flex flex-col items-center gap-4 relative overflow-hidden group ${tier === 'premium' ? 'bg-indigo-600' : 'bg-amber-500'} text-white`}>
-               <div className="relative z-10">
-                  <p className="text-[8px] font-black uppercase mb-1 opacity-80 tracking-[0.2em]">Your Ride PIN</p>
-                  <p className="text-5xl font-black italic tracking-widest">{node.verificationCode}</p>
-               </div>
-               <div className="bg-white p-3 rounded-2xl shadow-inner border-4 border-[#020617]/10 relative z-10">
-                  <img 
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${node.verificationCode}&bgcolor=ffffff&color=020617`} 
-                    className="w-24 h-24"
-                    alt="Ride Code QR"
-                  />
-                  <p className="text-[6px] font-black text-slate-500 uppercase mt-1 text-center">Partner Scan Only</p>
-               </div>
-               {tier === 'premium' && <i className="fas fa-certificate absolute top-[-20px] right-[-20px] text-[80px] opacity-10 rotate-12"></i>}
-            </div>
+            {/* SECURITY CHECK: Only show verification PIN/QR if user is a participant */}
+            {isParticipant ? (
+              <div className={`p-6 rounded-[1.5rem] text-center shadow-xl flex flex-col items-center gap-4 relative overflow-hidden group ${tier === 'premium' ? 'bg-indigo-600' : 'bg-amber-500'} text-white`}>
+                 <div className="relative z-10">
+                    <p className="text-[8px] font-black uppercase mb-1 opacity-80 tracking-[0.2em]">Your Ride PIN</p>
+                    <p className="text-5xl font-black italic tracking-widest">{node.verificationCode}</p>
+                 </div>
+                 <div className="bg-white p-3 rounded-2xl shadow-inner border-4 border-[#020617]/10 relative z-10">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${node.verificationCode}&bgcolor=ffffff&color=020617`} 
+                      className="w-24 h-24"
+                      alt="Ride Code QR"
+                    />
+                    <p className="text-[6px] font-black text-slate-500 uppercase mt-1 text-center">Partner Scan Only</p>
+                 </div>
+                 {tier === 'premium' && <i className="fas fa-certificate absolute top-[-20px] right-[-20px] text-[80px] opacity-10 rotate-12"></i>}
+              </div>
+            ) : (
+              <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-center">
+                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Verification Protected</p>
+                 <p className="text-xs font-bold text-slate-300 mt-1">Join pool to view Ride PIN</p>
+              </div>
+            )}
 
             {isOrganizer && (
               <button onClick={() => { if(confirm("Abort this trip assignment?")) onCancel(node.id); }} className="w-full py-3 bg-rose-600/10 border border-rose-500/20 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-rose-500">Abort Assignment</button>
