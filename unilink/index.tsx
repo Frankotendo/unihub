@@ -541,7 +541,7 @@ const AiHelpDesk = ({ onClose, settings }: any) => {
         - Fares: Pragia (₵${settings.farePerPragia}), Taxi (₵${settings.farePerTaxi}). Solo rides are x${settings.soloMultiplier}.
         - Commission: ₵${settings.commissionPerSeat} per seat.
         - Features: Pooling (cheaper), Solo (express), Hotspots (drivers station there).
-        - Admin Contact: ${settings.adminMomo}
+        - Admin Contact: ${settings.adminMomo} (${settings.adminMomoName})
         
         Keep answers short, friendly and helpful. Use emojis.`
         }
@@ -712,7 +712,7 @@ const App: React.FC = () => {
       ]);
 
       if (sData) {
-        setSettings(sData as AppSettings);
+        setSettings(prev => ({ ...prev, ...sData }));
         const currentMsg = sData.hub_announcement || '';
         if (currentMsg !== sessionStorage.getItem('nexryde_last_announcement')) {
           setDismissedAnnouncement(null);
@@ -1686,6 +1686,10 @@ function DriverPortal({
   const [topupRef, setTopupRef] = useState('');
   const [showScanner, setShowScanner] = useState(false);
 
+  useEffect(() => {
+    setRegData(prev => ({ ...prev, amount: settings.registrationFee }));
+  }, [settings.registrationFee]);
+
   const handleLoginSubmit = () => {
      const driver = drivers.find((d: any) => d.contact === loginId || d.id === loginId);
      if (driver) onLogin(driver.id, loginPin);
@@ -1734,7 +1738,7 @@ function DriverPortal({
               </div>
               <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" type="password" placeholder="Set a 4-digit PIN" value={regData.pin} onChange={e => setRegData({...regData, pin: e.target.value})} />
               <div className="p-4 bg-indigo-600/20 rounded-2xl border border-indigo-500/30 space-y-2">
-                 <p className="text-[9px] font-bold text-indigo-300 uppercase">Send ₵{settings.registrationFee} to {settings.adminMomo}</p>
+                 <p className="text-[9px] font-bold text-indigo-300 uppercase">Send ₵{settings.registrationFee} to {settings.adminMomo} <span className="text-white">({settings.adminMomoName})</span></p>
                  <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" placeholder="MoMo Reference ID" value={regData.momoReference} onChange={e => setRegData({...regData, momoReference: e.target.value})} />
               </div>
               <button onClick={() => onRequestRegistration(regData)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Submit Application</button>
@@ -2012,6 +2016,16 @@ function AdminPortal({
                 <div className="grid grid-cols-2 gap-6">
                    <div className="space-y-4">
                       <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Financials</h3>
+                      <div className="grid grid-cols-2 gap-3 mb-2 bg-white/5 p-3 rounded-xl col-span-2">
+                         <div className="col-span-1">
+                           <label className="text-[8px] text-slate-500 uppercase font-bold">Admin MoMo Number</label>
+                           <input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" value={editSettings.adminMomo} onChange={e => setEditSettings({...editSettings, adminMomo: e.target.value})} />
+                         </div>
+                         <div className="col-span-1">
+                           <label className="text-[8px] text-slate-500 uppercase font-bold">Account Name</label>
+                           <input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" value={editSettings.adminMomoName} onChange={e => setEditSettings({...editSettings, adminMomoName: e.target.value})} />
+                         </div>
+                      </div>
                       <div className="grid grid-cols-2 gap-3">
                          <div><label className="text-[8px] text-slate-500 uppercase font-bold">Pragia</label><input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" type="number" value={editSettings.farePerPragia} onChange={e => setEditSettings({...editSettings, farePerPragia: parseFloat(e.target.value)})} /></div>
                          <div><label className="text-[8px] text-slate-500 uppercase font-bold">Taxi</label><input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" type="number" value={editSettings.farePerTaxi} onChange={e => setEditSettings({...editSettings, farePerTaxi: parseFloat(e.target.value)})} /></div>
