@@ -1332,7 +1332,7 @@ const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string, m: 'log
   return (
     <div className="fixed inset-0 bg-[#020617] flex items-center justify-center p-6 z-[500]">
       <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-amber-500/10 pointer-events-none"></div>
-      <div className="w-full max-w-md space-y-12 text-center relative z-10 animate-in fade-in zoom-in duration-500">
+      <div className="w-full max-md space-y-12 text-center relative z-10 animate-in fade-in zoom-in duration-500">
         <div className="space-y-6">
           <div className="w-24 h-24 bg-amber-500 rounded-[2.5rem] flex items-center justify-center text-[#020617] text-4xl shadow-2xl mx-auto shadow-amber-500/20">
             <i className="fas fa-fingerprint"></i>
@@ -1521,7 +1521,7 @@ const AdminLogin = ({ onLogin }: any) => {
         <i className="fas fa-shield-halved text-3xl"></i>
       </div>
       <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-8 text-white">NexRyde Admin</h2>
-      <div className="w-full max-sm:px-4 max-w-sm glass p-8 lg:p-10 rounded-[2.5rem] border border-white/10 space-y-4">
+      <div className="w-full max-md glass p-10 rounded-[2.5rem] border border-white/10 space-y-4">
           <input 
             type="email" 
             placeholder="Security Email" 
@@ -2320,7 +2320,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
       {/* Driver Modals ... */}
       {isScanning && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl z-[200] flex items-center justify-center p-4">
-           <div className="w-full max-lg space-y-8 animate-in zoom-in duration-300">
+           <div className="w-full max-md space-y-8 animate-in zoom-in duration-300">
               <div className="flex justify-between items-center text-white px-2">
                  <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-[#020617] shadow-xl shadow-emerald-500/20">
@@ -2411,7 +2411,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
             <TabBtn active={activeTab === 'onboarding'} label="Onboarding" onClick={() => setActiveTab('onboarding')} count={registrationRequests.filter((r:any)=>r.status==='pending').length} />
             <TabBtn active={activeTab === 'missions'} label="Hotspots" onClick={() => setActiveTab('missions')} />
             <TabBtn active={activeTab === 'requests'} label="Billing" onClick={() => setActiveTab('requests')} count={topupRequests.filter((r:any)=>r.status==='pending').length} />
-            <TabBtn active={activeTab === 'settings'} label="System" onClick={() => setActiveTab('settings')} />
+            <TabBtn active={activeTab === 'settings'} label="Hub Setup" onClick={() => setActiveTab('settings')} />
          </div>
          <div className="flex items-center gap-4 bg-rose-600/10 px-4 py-2 rounded-xl border border-rose-500/20">
             <button onClick={onLock} className="text-rose-500 hover:text-rose-400 transition-colors">
@@ -2483,109 +2483,92 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
         </div>
       )}
 
-      {activeTab === 'onboarding' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           {registrationRequests.filter((r:any)=>r.status==='pending' && r.name.toLowerCase().includes(searchConfig.query.toLowerCase())).map((reg: any) => (
-             <div key={reg.id} className="glass p-8 rounded-3xl border border-indigo-500/20 space-y-6 flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-4">
-                       {reg.avatarUrl ? (
-                          <img src={reg.avatarUrl} className="w-16 h-16 rounded-2xl object-cover border border-white/10" />
-                       ) : (
-                          <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-slate-700"><i className="fas fa-user text-xl"></i></div>
-                       )}
-                       <div>
-                         <h4 className="text-white font-black uppercase italic text-sm">{reg.name}</h4>
-                         <span className="text-[8px] font-black text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded-md">{reg.vehicleType}</span>
+      {activeTab === 'settings' && (
+        <div className="glass rounded-[3rem] p-10 lg:p-14 border border-white/5 space-y-12 animate-in fade-in relative min-h-[600px]">
+           <div>
+              <h3 className="text-4xl font-black uppercase italic text-white tracking-tighter">HUB SETUP</h3>
+           </div>
+           
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
+              {/* FARES */}
+              <section className="space-y-8">
+                 <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-[0.4em]">FARES</h4>
+                 <div className="space-y-6">
+                    <AdminInput label="COMM (C)" value={localSettings.commissionPerSeat} onChange={v => setLocalSettings({...localSettings, commissionPerSeat: Number(v)})} />
+                    <AdminInput label="REG FEE (C)" value={localSettings.registrationFee} onChange={v => setLocalSettings({...localSettings, registrationFee: Number(v)})} />
+                    <AdminInput label="PRAGIA (C)" value={localSettings.farePerPragia} onChange={v => setLocalSettings({...localSettings, farePerPragia: Number(v)})} />
+                    <AdminInput label="TAXI (C)" value={localSettings.farePerTaxi} onChange={v => setLocalSettings({...localSettings, farePerTaxi: Number(v)})} />
+                 </div>
+              </section>
+
+              {/* PAYMENT & LOGIC */}
+              <section className="space-y-8">
+                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">PAYMENT & LOGIC</h4>
+                 <div className="space-y-6">
+                    <AdminInput label="MOMO" value={localSettings.adminMomo} onChange={v => setLocalSettings({...localSettings, adminMomo: v})} />
+                    <AdminInput label="WHATSAPP" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
+                    <AdminInput label="SOLO MULTI (X)" value={localSettings.soloMultiplier} onChange={v => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
+                    <AdminInput label="HUB ANNOUNCEMENT" value={localSettings.hub_announcement || ''} onChange={v => setLocalSettings({...localSettings, hub_announcement: v})} />
+                 </div>
+              </section>
+
+              {/* VISUALS & INFO */}
+              <section className="space-y-8">
+                 <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em]">VISUALS & INFO</h4>
+                 <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest">HUB BACKGROUND</label>
+                      <div className="relative group w-full h-16 rounded-xl overflow-hidden border border-white/10 bg-white/5">
+                        {localSettings.appWallpaper ? (
+                          <img src={localSettings.appWallpaper} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-700 italic text-[10px]">No Wallpaper</div>
+                        )}
+                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" onChange={e => handleSettingImage(e, 'wallpaper')} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                       <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest">ABOUT THE HUB</label>
+                       <textarea 
+                         className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-[10px] font-bold text-slate-300 outline-none focus:border-amber-500 transition-all h-24 resize-none leading-relaxed"
+                         value={localSettings.aboutMeText}
+                         onChange={e => setLocalSettings({...localSettings, aboutMeText: e.target.value})}
+                         placeholder="Describe your hub mission..."
+                       />
+                    </div>
+
+                    <div className="space-y-2">
+                       <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest">GALLERY IMAGES</label>
+                       <div className="flex flex-wrap gap-2">
+                          {localSettings.aboutMeImages.map((img, idx) => (
+                            <div key={idx} className="w-10 h-10 rounded-lg overflow-hidden border border-white/20 relative group">
+                               <img src={img} className="w-full h-full object-cover" />
+                               <button 
+                                 onClick={() => setLocalSettings({...localSettings, aboutMeImages: localSettings.aboutMeImages.filter((_, i) => i !== idx)})}
+                                 className="absolute inset-0 bg-rose-600/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                               >
+                                 <i className="fas fa-times text-[8px]"></i>
+                               </button>
+                            </div>
+                          ))}
+                          <label className="w-10 h-10 rounded-lg bg-white/5 border border-dashed border-white/20 flex items-center justify-center text-slate-600 cursor-pointer hover:bg-white/10 transition-all">
+                             <i className="fas fa-plus text-[8px]"></i>
+                             <input type="file" className="hidden" accept="image/*" onChange={e => handleSettingImage(e, 'about')} />
+                          </label>
                        </div>
                     </div>
-                  </div>
-                  <div className="bg-white/5 p-4 rounded-xl space-y-2">
-                     <p className="text-[8px] font-black uppercase text-slate-500">Plate Number</p>
-                     <p className="text-xs font-black text-white">{reg.licensePlate}</p>
-                     <p className="text-[8px] font-black uppercase text-slate-500 mt-2">MoMo Reference</p>
-                     <p className="text-sm font-black text-emerald-400 italic">REF: {reg.momoReference}</p>
-                     <p className="text-[8px] font-black uppercase text-slate-500 mt-2">WhatsApp</p>
-                     <p className="text-xs font-black text-white">{reg.contact}</p>
-                  </div>
-                </div>
-                <button onClick={() => onApproveRegistration(reg.id)} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-indigo-500 mt-4 transition-all">Activate Partner</button>
-             </div>
-           ))}
-        </div>
-      )}
-
-      {activeTab === 'missions' && (
-        <div className="space-y-6">
-           <div className="flex justify-between items-center px-2">
-              <h3 className="text-xl font-black uppercase italic text-white leading-none">NexRyde Hotspots</h3>
-              <button onClick={() => setShowMissionModal(true)} className="px-6 py-3 bg-amber-500 text-[#020617] rounded-xl text-[9px] font-black uppercase shadow-xl">New Hotspot</button>
-           </div>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {missions.filter(m => m.location.toLowerCase().includes(searchConfig.query.toLowerCase())).map(m => (
-                <div key={m.id} className="glass p-8 rounded-3xl border border-white/5 space-y-4 relative overflow-hidden group">
-                   <div className="flex justify-between items-start">
-                      <div>
-                         <h4 className="text-white font-black uppercase italic text-lg leading-none mb-2">{m.location}</h4>
-                         <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">₵{m.entryFee} Entry Fee</p>
-                      </div>
-                      <button onClick={() => onDeleteMission(m.id)} className="w-8 h-8 rounded-full bg-rose-600/10 text-rose-500 hover:bg-rose-600 hover:text-white transition-all"><i className="fas fa-trash text-[10px]"></i></button>
-                   </div>
-                   <p className="text-[11px] text-slate-400 font-medium italic leading-relaxed">{m.description}</p>
-                   <div className="pt-4 border-t border-white/5 flex items-center justify-between">
-                      <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">{m.driversJoined.length} Partners Stationed</span>
-                   </div>
-                </div>
-              ))}
-           </div>
-        </div>
-      )}
-
-      {activeTab === 'requests' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-           {topupRequests.filter((r:any)=>r.status==='pending').map((req: any) => (
-             <div key={req.id} className="glass p-8 rounded-3xl border border-emerald-500/20 space-y-6">
-                <div>
-                  <h4 className="text-white font-black uppercase italic text-sm">{drivers.find((d:any)=>d.id===req.driverId)?.name}</h4>
-                  <p className="text-3xl font-black text-white italic mt-4">₵ {req.amount}</p>
-                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-2">ID: {req.momoReference}</p>
-                </div>
-                <button onClick={() => onApproveTopup(req.id)} className="w-full py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Confirm Credits</button>
-             </div>
-           ))}
-        </div>
-      )}
-
-      {activeTab === 'settings' && (
-        <div className="glass rounded-[2rem] p-8 border border-white/5 space-y-10 animate-in fade-in">
-           <div>
-              <h3 className="text-xl font-black uppercase italic text-white leading-none">NexRyde Control</h3>
-              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-2">Global Logistics Engine Settings</p>
-           </div>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <section className="space-y-6">
-                 <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Ride & Premium Pricing</h4>
-                 <div className="space-y-4">
-                    <AdminInput label="NexRyde Fee (₵)" value={localSettings.commissionPerSeat} onChange={v => setLocalSettings({...localSettings, commissionPerSeat: Number(v)})} />
-                    <AdminInput label="Onboarding Fee (₵)" value={localSettings.registrationFee} onChange={v => setLocalSettings({...localSettings, registrationFee: Number(v)})} />
-                    <AdminInput label="Pragia Base (₵)" value={localSettings.farePerPragia} onChange={v => setLocalSettings({...localSettings, farePerPragia: Number(v)})} />
-                    <AdminInput label="Taxi Base (₵)" value={localSettings.farePerTaxi} onChange={v => setLocalSettings({...localSettings, farePerTaxi: Number(v)})} />
-                    <AdminInput label="Solo Premium (x)" value={localSettings.soloMultiplier} onChange={v => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
-                 </div>
-              </section>
-              <section className="space-y-6">
-                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Communication & Billing</h4>
-                 <div className="space-y-4">
-                    <AdminInput label="Market Announcement" value={localSettings.hub_announcement || ''} onChange={v => setLocalSettings({...localSettings, hub_announcement: v})} />
-                    <AdminInput label="Partner Hotline" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
-                    <AdminInput label="NexBilling MoMo" value={localSettings.adminMomo} onChange={v => setLocalSettings({...localSettings, adminMomo: v})} />
-                    <AdminInput label="Billing Name" value={localSettings.adminMomoName} onChange={v => setLocalSettings({...localSettings, adminMomoName: v})} />
                  </div>
               </section>
            </div>
-           <div className="pt-8 border-t border-white/5 flex justify-end">
-              <button onClick={() => onUpdateSettings(localSettings)} className="px-12 py-4 bg-amber-500 text-[#020617] rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-105 transition-transform">Sync Ecosystem</button>
+
+           <div className="pt-8 flex justify-end">
+              <button 
+                onClick={() => onUpdateSettings(localSettings)} 
+                className="px-16 py-5 bg-amber-500 text-[#020617] rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all shadow-amber-500/20"
+              >
+                PUSH UPDATES
+              </button>
            </div>
         </div>
       )}
@@ -2594,11 +2577,11 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
 };
 
 const AdminInput = ({ label, value, onChange, type = "text" }: { label: string, value: any, onChange: (v: string) => void, type?: string }) => (
-  <div className="space-y-1.5">
-     <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest">{label}</label>
+  <div className="space-y-3">
+     <label className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">{label}</label>
      <input 
        type={type} 
-       className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs font-bold text-white outline-none focus:border-amber-500" 
+       className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xs font-bold text-white outline-none focus:border-amber-500 transition-all shadow-inner" 
        value={value} 
        onChange={e => onChange(e.target.value)} 
      />
