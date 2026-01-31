@@ -125,7 +125,12 @@ interface AppSettings {
   aboutMeImages: string[]; // Base64 strings
   appWallpaper?: string; // Base64 string
   registrationFee: number;
-  hub_announcement?: string; 
+  hub_announcement?: string;
+  // AdSense Config
+  adSenseClientId?: string;
+  adSenseSlotId?: string;
+  adSenseLayoutKey?: string; // Optional for in-feed
+  adSenseStatus?: 'active' | 'inactive';
 }
 
 // --- UTILS ---
@@ -207,6 +212,115 @@ const compressImage = (file: File, quality = 0.6, maxWidth = 800): Promise<strin
 };
 
 // --- SUB-COMPONENTS ---
+
+const InlineAd = ({ className, settings }: { className?: string, settings: AppSettings }) => {
+  const adRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (settings.adSenseStatus !== 'active' || !settings.adSenseClientId || !settings.adSenseSlotId) return;
+
+    try {
+      // Corrected: prevent double push if ad is already loaded
+      if (adRef.current && adRef.current.innerHTML !== "") {
+         return; 
+      }
+      setTimeout(() => {
+         try {
+           (window as any).adsbygoogle = (window as any).adsbygoogle || [];
+           (window as any).adsbygoogle.push({});
+         } catch(e) { console.debug("AdSense Push", e); }
+      }, 500);
+    } catch (e) {
+      console.error("AdSense Init Error", e);
+    }
+  }, [settings.adSenseStatus, settings.adSenseClientId, settings.adSenseSlotId]);
+
+  if (settings.adSenseStatus !== 'active' || !settings.adSenseClientId || !settings.adSenseSlotId) return null;
+
+  return (
+    <div className={`glass p-4 rounded-[2rem] border border-white/5 flex flex-col items-center justify-center bg-white/5 overflow-hidden ${className}`}>
+        <p className="text-[8px] font-black uppercase text-slate-500 mb-2 tracking-widest">Sponsored</p>
+        <div className="w-full flex justify-center bg-transparent" ref={adRef}>
+            <ins className="adsbygoogle"
+                 style={{display:'block', width: '100%', maxWidth: '300px', height: '100px'}}
+                 data-ad-format="fluid"
+                 data-ad-layout-key={settings.adSenseLayoutKey || "-fb+5w+4e-db+86"}
+                 data-ad-client={settings.adSenseClientId}
+                 data-ad-slot={settings.adSenseSlotId}></ins>
+        </div>
+    </div>
+  );
+};
+
+const AdGate = ({ onUnlock, label, settings }: { onUnlock: () => void, label: string, settings: AppSettings }) => {
+  const [timeLeft, setTimeLeft] = useState(5);
+  const adRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev > 0 ? prev - 1 : 0);
+    }, 1000);
+
+    // Initialize AdSense
+    if (settings.adSenseStatus === 'active' && settings.adSenseClientId && settings.adSenseSlotId) {
+      try {
+        // Corrected: prevent double push if ad is already loaded
+        if (adRef.current && adRef.current.innerHTML !== "") {
+           // Ad already loaded, do nothing
+        } else {
+            setTimeout(() => {
+               try {
+                 (window as any).adsbygoogle = (window as any).adsbygoogle || [];
+                 (window as any).adsbygoogle.push({});
+               } catch(e) { console.error("AdSense Push Error", e); }
+            }, 100);
+        }
+      } catch (e) {
+        console.error("AdSense Init Error", e);
+      }
+    }
+
+    return () => clearInterval(timer);
+  }, [settings.adSenseStatus, settings.adSenseClientId, settings.adSenseSlotId]);
+
+  return (
+    <div className="fixed inset-0 bg-black/95 z-[500] flex items-center justify-center p-4 backdrop-blur-md">
+      <div className="glass-bright w-full max-w-sm p-6 rounded-[2.5rem] border border-white/10 text-center relative overflow-hidden animate-in zoom-in">
+         <div className="absolute top-0 left-0 right-0 h-1 bg-white/10">
+            <div className="h-full bg-amber-500 transition-all duration-1000 ease-linear" style={{ width: `${(1 - timeLeft/5) * 100}%` }}></div>
+         </div>
+         
+         <div className="mb-4">
+            <span className="text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] animate-pulse">Sponsored Session</span>
+            <h3 className="text-xl font-black italic text-white mt-1">{label}</h3>
+            <p className="text-[10px] text-slate-400 mt-1">Watch this ad to unlock premium features.</p>
+         </div>
+
+         <div className="bg-white rounded-xl overflow-hidden min-h-[250px] flex items-center justify-center mb-6 relative">
+             <div className="absolute inset-0 flex items-center justify-center text-slate-300 text-[10px] font-bold uppercase z-0">
+               {settings.adSenseStatus !== 'active' ? 'Ads Disabled' : 'Ad Loading...'}
+             </div>
+             {settings.adSenseStatus === 'active' && settings.adSenseClientId && (
+               <div className="relative z-10 w-full flex justify-center bg-white" ref={adRef}>
+                  <ins className="adsbygoogle"
+                       style={{display:'inline-block', width:'300px', height:'250px'}}
+                       data-ad-client={settings.adSenseClientId}
+                       data-ad-slot={settings.adSenseSlotId}></ins>
+               </div>
+             )}
+         </div>
+
+         <button 
+           onClick={onUnlock} 
+           disabled={timeLeft > 0}
+           className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${timeLeft > 0 ? 'bg-white/5 text-slate-500 cursor-not-allowed' : 'bg-emerald-500 text-white shadow-xl hover:scale-105'}`}
+         >
+           {timeLeft > 0 ? `Unlocking in ${timeLeft}s` : 'Continue to Feature'}
+         </button>
+      </div>
+    </div>
+  );
+};
 
 const HubGateway = ({ onIdentify }: { onIdentify: (username: string, phone: string, mode: 'login' | 'signup') => void }) => {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -321,6 +435,10 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
   const [newNode, setNewNode] = useState<Partial<RideNode>>({ origin: '', destination: '', vehicleType: 'Pragia', isSolo: false });
   const [fareEstimate, setFareEstimate] = useState(0);
   const [expandedQr, setExpandedQr] = useState<string | null>(null);
+  
+  // Ad states
+  const [showSoloAd, setShowSoloAd] = useState(false);
+  const [isSoloUnlocked, setIsSoloUnlocked] = useState(false);
 
   // Filter logic
   const filteredNodes = nodes.filter((n: RideNode) => {
@@ -338,6 +456,24 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
     if (newNode.isSolo) base *= settings.soloMultiplier;
     setFareEstimate(base);
   }, [newNode.vehicleType, newNode.isSolo, settings]);
+
+  const toggleSolo = () => {
+    if (newNode.isSolo) {
+      setNewNode({...newNode, isSolo: false});
+    } else {
+      if (isSoloUnlocked) {
+        setNewNode({...newNode, isSolo: true});
+      } else {
+        setShowSoloAd(true);
+      }
+    }
+  };
+
+  const handleSoloUnlock = () => {
+    setIsSoloUnlocked(true);
+    setNewNode({...newNode, isSolo: true});
+    setShowSoloAd(false);
+  };
 
   const handleSubmit = () => {
     if (!newNode.origin || !newNode.destination) return alert("Please fill all fields");
@@ -361,7 +497,9 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
 
   if (createMode) {
     return (
-      <div className="glass p-8 rounded-[2.5rem] border border-white/10 animate-in zoom-in max-w-lg mx-auto">
+      <div className="glass p-8 rounded-[2.5rem] border border-white/10 animate-in zoom-in max-w-lg mx-auto relative">
+         {showSoloAd && <AdGate onUnlock={handleSoloUnlock} label="Unlock Solo Ride Mode" settings={settings} />}
+         
          <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-black italic uppercase text-white">New Request</h2>
             <button onClick={() => setCreateMode(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white"><i className="fas fa-times"></i></button>
@@ -369,7 +507,10 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2 p-1 bg-white/5 rounded-2xl">
                <button onClick={() => setNewNode({...newNode, isSolo: false})} className={`py-3 rounded-xl font-black text-[10px] uppercase transition-all ${!newNode.isSolo ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>Pool (Cheaper)</button>
-               <button onClick={() => setNewNode({...newNode, isSolo: true})} className={`py-3 rounded-xl font-black text-[10px] uppercase transition-all ${newNode.isSolo ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>Solo (Express)</button>
+               <button onClick={toggleSolo} className={`py-3 rounded-xl font-black text-[10px] uppercase transition-all flex items-center justify-center gap-2 ${newNode.isSolo ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>
+                 Solo (Express)
+                 {!isSoloUnlocked && !newNode.isSolo && <i className="fas fa-lock text-[8px] opacity-70"></i>}
+               </button>
             </div>
             <input value={newNode.origin} onChange={e => setNewNode({...newNode, origin: e.target.value})} placeholder="Pickup Location" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-sm focus:border-indigo-500" />
             <input value={newNode.destination} onChange={e => setNewNode({...newNode, destination: e.target.value})} placeholder="Dropoff Location" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-sm focus:border-indigo-500" />
@@ -463,8 +604,9 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
           <h3 className="text-xs font-black uppercase text-slate-500 tracking-widest px-2 mb-4">Community Rides</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              {availableRides.length === 0 && <p className="text-slate-600 text-xs font-bold uppercase col-span-full text-center py-8">No matching rides found.</p>}
-             {availableRides.map((node: RideNode) => (
-                <div key={node.id} className="glass p-6 rounded-[2rem] border border-white/5 hover:border-white/10 transition-all">
+             {availableRides.map((node: RideNode, index: number) => (
+               <React.Fragment key={node.id}>
+                <div className="glass p-6 rounded-[2rem] border border-white/5 hover:border-white/10 transition-all">
                    <div className="flex justify-between items-start mb-4">
                       <div>
                          <span className="px-2 py-1 bg-white/10 rounded-md text-[8px] font-black uppercase text-slate-300">{node.vehicleType}</span>
@@ -486,6 +628,9 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
                    </div>
                    <button onClick={() => onJoin(node.id, currentUser.username, currentUser.phone)} className="w-full py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-black text-[10px] uppercase transition-all">Join Ride</button>
                 </div>
+                {/* Insert Ad after every 3rd item */}
+                {(index + 1) % 3 === 0 && <InlineAd className="col-span-1" settings={settings} />}
+               </React.Fragment>
              ))}
           </div>
        </div>
@@ -698,6 +843,10 @@ const App: React.FC = () => {
   const [isNewUser, setIsNewUser] = useState(() => !localStorage.getItem('nexryde_seen_welcome_v1'));
   const [isSyncing, setIsSyncing] = useState(true);
   const [dismissedAnnouncement, setDismissedAnnouncement] = useState(() => sessionStorage.getItem('nexryde_dismissed_announcement'));
+  
+  // Ad states for global AI feature
+  const [showAiAd, setShowAiAd] = useState(false);
+  const [isAiUnlocked, setIsAiUnlocked] = useState(false);
 
   const [settings, setSettings] = useState<AppSettings>({
     adminMomo: "024-123-4567",
@@ -711,7 +860,12 @@ const App: React.FC = () => {
     aboutMeImages: [],
     appWallpaper: "",
     registrationFee: 20.00,
-    hub_announcement: ""
+    hub_announcement: "",
+    // Default AdSense keys (fallback/example)
+    adSenseClientId: "ca-pub-7812709042449387",
+    adSenseSlotId: "9489307110",
+    adSenseLayoutKey: "-fb+5w+4e-db+86",
+    adSenseStatus: "active"
   });
   const [nodes, setNodes] = useState<RideNode[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -770,6 +924,21 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('nexryde_my_rides_v1', JSON.stringify(myRideIds));
   }, [myRideIds]);
+
+  // Inject AdSense Script Dynamically
+  useEffect(() => {
+    if (settings.adSenseStatus === 'active' && settings.adSenseClientId) {
+      const scriptId = 'google-adsense-script';
+      if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${settings.adSenseClientId}`;
+        script.async = true;
+        script.crossOrigin = "anonymous";
+        document.head.appendChild(script);
+      }
+    }
+  }, [settings.adSenseStatus, settings.adSenseClientId]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -1281,6 +1450,21 @@ const App: React.FC = () => {
     setViewMode(mode);
   };
 
+  // Handle AI unlocking logic
+  const handleAiAccess = () => {
+    if (isAiUnlocked) {
+      setShowAiHelp(true);
+    } else {
+      setShowAiAd(true);
+    }
+  };
+
+  const handleAiUnlock = () => {
+    setIsAiUnlocked(true);
+    setShowAiAd(false);
+    setShowAiHelp(true);
+  };
+
   // --- GATEWAY CHECK ---
   if (!currentUser) {
     return <HubGateway onIdentify={handleGlobalUserAuth} />;
@@ -1529,13 +1713,15 @@ const App: React.FC = () => {
         </div>
       </main>
 
+      {/* Global AI Help Trigger */}
       <button 
-        onClick={() => setShowAiHelp(true)}
+        onClick={handleAiAccess}
         className="fixed bottom-24 right-6 lg:bottom-12 lg:right-12 w-16 h-16 bg-gradient-to-tr from-indigo-600 to-purple-500 rounded-full shadow-2xl flex items-center justify-center text-white text-2xl z-[100] hover:scale-110 transition-transform animate-bounce-slow"
       >
         <i className="fas fa-sparkles"></i>
       </button>
 
+      {showAiAd && <AdGate onUnlock={handleAiUnlock} label="Launch AI Assistant" settings={settings} />}
       {showAiHelp && <AiHelpDesk onClose={() => setShowAiHelp(false)} settings={settings} />}
 
       {showQrModal && (
@@ -1743,6 +1929,7 @@ function DriverPortal({
   const [topupAmount, setTopupAmount] = useState('');
   const [topupRef, setTopupRef] = useState('');
   const [showScanner, setShowScanner] = useState(false);
+  const [missionGate, setMissionGate] = useState<string | null>(null);
 
   useEffect(() => {
     setRegData(prev => ({ ...prev, amount: settings.registrationFee }));
@@ -1766,6 +1953,17 @@ function DriverPortal({
     }
     setVerifyCode(pin);
     setShowScanner(false);
+  };
+
+  const triggerMissionJoin = (missionId: string) => {
+    setMissionGate(missionId);
+  };
+
+  const confirmMissionJoin = () => {
+    if(missionGate) {
+      onJoinMission(missionGate, activeDriver.id);
+      setMissionGate(null);
+    }
   };
 
   if (!activeDriver) {
@@ -1816,6 +2014,7 @@ function DriverPortal({
   return (
     <div className="space-y-6">
        {showScanner && <QrScanner onScan={handleScan} onClose={() => setShowScanner(false)} />}
+       {missionGate && <AdGate onUnlock={confirmMissionJoin} label="Access Prime Hotspot" settings={settings} />}
        
        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-emerald-500/10 p-4 rounded-3xl border border-emerald-500/20"><p className="text-[9px] font-black text-emerald-400 uppercase">Wallet</p><p className="text-xl font-black text-white">₵ {activeDriver.walletBalance.toFixed(2)}</p></div>
@@ -1833,8 +2032,9 @@ function DriverPortal({
           {activeTab === 'market' && (
              <div className="space-y-4">
                 {marketRides.length === 0 && <p className="text-center text-slate-500 py-10 font-black uppercase text-[10px]">No rides available</p>}
-                {marketRides.map((node: any) => (
-                   <div key={node.id} className="glass p-6 rounded-[2rem] border border-white/5 relative">
+                {marketRides.map((node: any, index: number) => (
+                   <React.Fragment key={node.id}>
+                   <div className="glass p-6 rounded-[2rem] border border-white/5 relative">
                       <div className="flex justify-between items-start mb-4">
                          <div><span className="px-3 py-1 bg-amber-500/20 text-amber-500 rounded-lg text-[8px] font-black uppercase">{node.vehicleType}</span><span className="ml-2 px-3 py-1 bg-white/5 text-slate-400 rounded-lg text-[8px] font-black uppercase">{node.isSolo ? 'Solo' : 'Pool'}</span></div>
                          <p className="text-xl font-black text-amber-500">₵ {node.negotiatedTotalFare || (node.farePerPerson * node.passengers.length)}</p>
@@ -1842,6 +2042,9 @@ function DriverPortal({
                       <div className="space-y-2 mb-4"><div className="flex gap-2 text-sm font-bold text-white"><i className="fas fa-location-dot mt-1 text-slate-500"></i> {node.origin}</div><div className="flex gap-2 text-sm font-bold text-white"><i className="fas fa-flag-checkered mt-1 text-slate-500"></i> {node.destination}</div></div>
                       <button onClick={() => { if(confirm(`Accept trip near ${node.origin}?`)) onAccept(node.id, activeDriver.id); }} className="w-full py-3 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-lg hover:scale-[1.02] transition-transform">Accept Ride</button>
                    </div>
+                   {/* Insert Ad after every 3rd item */}
+                   {(index + 1) % 3 === 0 && <InlineAd settings={settings} />}
+                   </React.Fragment>
                 ))}
              </div>
           )}
@@ -1878,7 +2081,9 @@ function DriverPortal({
                          <div><h3 className="text-lg font-black uppercase text-white">{m.location}</h3><p className="text-xs text-slate-400">{m.description}</p></div>
                          <div className="text-right"><p className="text-xl font-black text-indigo-400">Fee: ₵{m.entryFee}</p><p className="text-[9px] text-slate-500 font-bold uppercase">{m.driversJoined.length} Drivers Here</p></div>
                       </div>
-                      <button onClick={() => onJoinMission(m.id, activeDriver.id)} disabled={m.driversJoined.includes(activeDriver.id)} className="mt-4 w-full py-3 bg-white/10 border border-white/10 hover:bg-indigo-600 hover:border-indigo-500 text-white rounded-xl font-black text-[10px] uppercase transition-all disabled:opacity-50">{m.driversJoined.includes(activeDriver.id) ? 'Stationed' : 'Join Hotspot'}</button>
+                      <button onClick={() => triggerMissionJoin(m.id)} disabled={m.driversJoined.includes(activeDriver.id)} className="mt-4 w-full py-3 bg-white/10 border border-white/10 hover:bg-indigo-600 hover:border-indigo-500 text-white rounded-xl font-black text-[10px] uppercase transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                        {m.driversJoined.includes(activeDriver.id) ? 'Stationed' : <>Join Hotspot <i className="fas fa-lock text-[8px] opacity-70"></i></>}
+                      </button>
                    </div>
                 ))}
              </div>
@@ -1887,6 +2092,7 @@ function DriverPortal({
           {activeTab === 'wallet' && (
              <div className="glass p-8 rounded-[2rem] border border-white/10 space-y-6">
                  <h3 className="text-xl font-black italic uppercase text-white">Top-up Credits</h3>
+                 <InlineAd settings={settings} />
                  <div className="p-4 bg-indigo-600/20 rounded-2xl border border-indigo-500/30"><p className="text-[10px] font-bold text-indigo-300 uppercase mb-2">Instructions</p><p className="text-xs text-slate-300">Send amount to <span className="text-white font-bold">{settings.adminMomo}</span> ({settings.adminMomoName}). Enter reference below.</p></div>
                  <div className="space-y-3">
                     <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" type="number" placeholder="Amount (₵)" value={topupAmount} onChange={e => setTopupAmount(e.target.value)} />
@@ -2102,6 +2308,31 @@ function AdminPortal({
                          {editSettings.appWallpaper && <button onClick={() => setEditSettings({...editSettings, appWallpaper: ''})} className="mt-1 text-[8px] text-rose-500 uppercase font-bold underline">Remove Wallpaper</button>}
                       </div>
                    </div>
+                </div>
+
+                <div className="p-4 bg-orange-500/10 rounded-2xl border border-orange-500/20">
+                    <h3 className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-3">Google AdSense Configuration</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                       <div className="col-span-2">
+                          <label className="text-[8px] text-slate-500 uppercase font-bold">Status</label>
+                          <select className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" value={editSettings.adSenseStatus || 'inactive'} onChange={e => setEditSettings({...editSettings, adSenseStatus: e.target.value as any})}>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                          </select>
+                       </div>
+                       <div>
+                          <label className="text-[8px] text-slate-500 uppercase font-bold">Client ID (ca-pub-xxx)</label>
+                          <input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" placeholder="ca-pub-..." value={editSettings.adSenseClientId || ''} onChange={e => setEditSettings({...editSettings, adSenseClientId: e.target.value})} />
+                       </div>
+                       <div>
+                          <label className="text-[8px] text-slate-500 uppercase font-bold">Slot ID (Numeric)</label>
+                          <input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" placeholder="9489..." value={editSettings.adSenseSlotId || ''} onChange={e => setEditSettings({...editSettings, adSenseSlotId: e.target.value})} />
+                       </div>
+                       <div className="col-span-2">
+                          <label className="text-[8px] text-slate-500 uppercase font-bold">Layout Key (-fb+...)</label>
+                          <input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" placeholder="-fb+5w+4e-db+86" value={editSettings.adSenseLayoutKey || ''} onChange={e => setEditSettings({...editSettings, adSenseLayoutKey: e.target.value})} />
+                       </div>
+                    </div>
                 </div>
 
                 <div>
