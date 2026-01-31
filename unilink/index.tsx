@@ -520,7 +520,7 @@ const App: React.FC = () => {
       }
     } else {
       alert("Invalid Code! Ask the passenger for their Ride PIN.");
-    }
+    } verificationCode: null 
   };
 
   const cancelRide = async (nodeId: string) => {
@@ -2483,6 +2483,71 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
         </div>
       )}
 
+      {activeTab === 'onboarding' && (
+        <div className="space-y-6">
+           <h3 className="text-xl font-black uppercase italic text-white leading-none px-2">Pending Applications</h3>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {registrationRequests.filter(r => r.status === 'pending').map(reg => (
+                <div key={reg.id} className="glass p-6 rounded-[2.5rem] border border-indigo-500/20 flex gap-6 items-center">
+                   <img src={reg.avatarUrl} className="w-20 h-20 rounded-2xl object-cover border border-white/10" />
+                   <div className="flex-1 space-y-2">
+                      <div className="flex justify-between">
+                         <h4 className="font-black text-white text-lg leading-none uppercase italic">{reg.name}</h4>
+                         <span className="text-[8px] font-black text-indigo-400 uppercase">{reg.vehicleType}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-bold">{reg.licensePlate} • {reg.contact}</p>
+                      <p className="text-[9px] text-emerald-500 font-black italic">REF: {reg.momoReference}</p>
+                      <button onClick={() => onApproveRegistration(reg.id)} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[8px] font-black uppercase shadow-lg">Activate Partner</button>
+                   </div>
+                </div>
+              ))}
+           </div>
+        </div>
+      )}
+
+      {activeTab === 'missions' && (
+        <div className="space-y-6">
+           <div className="flex justify-between items-center px-2">
+              <h3 className="text-xl font-black uppercase italic text-white leading-none">Market Hotspots</h3>
+              <button onClick={() => setShowMissionModal(true)} className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase shadow-xl">Create Hotspot</button>
+           </div>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {missions.map(m => (
+                <div key={m.id} className="glass p-6 rounded-[2.5rem] border border-white/5 flex justify-between items-center">
+                   <div>
+                      <h4 className="font-black text-white italic uppercase">{m.location}</h4>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Entry Fee: ₵{m.entryFee}</p>
+                   </div>
+                   <button onClick={() => onDeleteMission(m.id)} className="text-rose-500 hover:text-rose-400 p-3 bg-rose-500/10 rounded-xl"><i className="fas fa-trash-alt"></i></button>
+                </div>
+              ))}
+           </div>
+        </div>
+      )}
+
+      {activeTab === 'requests' && (
+        <div className="space-y-6">
+           <h3 className="text-xl font-black uppercase italic text-white leading-none px-2">Top-Up Requests</h3>
+           <div className="glass rounded-[2rem] overflow-hidden border border-white/5">
+              <table className="w-full text-left text-[11px]">
+                 <thead className="bg-white/5 text-slate-500 uppercase font-black tracking-widest border-b border-white/5">
+                    <tr><th className="px-8 py-5">Partner</th><th className="px-8 py-5 text-center">Amount</th><th className="px-8 py-5">Reference</th><th className="px-8 py-5 text-right">Action</th></tr>
+                 </thead>
+                 <tbody className="divide-y divide-white/5">
+                    {topupRequests.filter(r => r.status === 'pending').map(r => (
+                       <tr key={r.id} className="text-slate-300 font-bold hover:bg-white/5">
+                          <td className="px-8 py-5 uppercase italic">{drivers.find(d => d.id === r.driverId)?.name || 'Unknown'}</td>
+                          <td className="px-8 py-5 text-center text-emerald-400 font-black italic">₵{r.amount}</td>
+                          <td className="px-8 py-5 font-mono text-[9px]">{r.momoReference}</td>
+                          <td className="px-8 py-5 text-right"><button onClick={() => onApproveTopup(r.id)} className="px-6 py-2 bg-emerald-600 text-white rounded-xl text-[8px] font-black uppercase">Release</button></td>
+                       </tr>
+                    ))}
+                 </tbody>
+              </table>
+           </div>
+        </div>
+      )}
+
       {activeTab === 'settings' && (
         <div className="glass rounded-[3rem] p-10 lg:p-14 border border-white/5 space-y-12 animate-in fade-in relative min-h-[600px]">
            <div>
@@ -2572,6 +2637,65 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
            </div>
         </div>
       )}
+
+      {/* Admin Modals */}
+      {showDriverModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+           <div className="glass-bright w-full max-w-sm rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in border border-white/10 text-slate-900">
+              <h3 className="text-xl font-black italic uppercase text-white text-center">Direct Onboard</h3>
+              <div className="space-y-4">
+                 <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Partner Name" onChange={e => setNewDriver({...newDriver, name: e.target.value})} />
+                 <div className="grid grid-cols-2 gap-3">
+                    <select className="w-full bg-white rounded-xl px-2 py-3 font-bold text-xs" onChange={e => setNewDriver({...newDriver, vehicleType: e.target.value as any})}>
+                       <option value="Pragia">Pragia</option>
+                       <option value="Taxi">Taxi</option>
+                    </select>
+                    <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Plate" onChange={e => setNewDriver({...newDriver, licensePlate: e.target.value})} />
+                 </div>
+                 <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Contact" onChange={e => setNewDriver({...newDriver, contact: e.target.value})} />
+                 <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs text-center font-black" placeholder="Set Hub Password" onChange={e => setNewDriver({...newDriver, pin: e.target.value})} />
+              </div>
+              <div className="flex gap-3">
+                 <button onClick={() => setShowDriverModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
+                 <button onClick={() => { onAddDriver(newDriver); setShowDriverModal(false); }} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Activate</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {showMissionModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+           <div className="glass-bright w-full max-w-sm rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in border border-white/10 text-slate-900">
+              <h3 className="text-xl font-black italic uppercase text-white text-center">New Hotspot</h3>
+              <div className="space-y-4">
+                 <input className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Zone Name" onChange={e => setNewMission({...newMission, location: e.target.value})} />
+                 <textarea className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs h-20" placeholder="Description..." onChange={e => setNewMission({...newMission, description: e.target.value})} />
+                 <input type="number" className="w-full bg-white rounded-xl px-4 py-3 font-bold text-xs" placeholder="Entry Fee (₵)" onChange={e => setNewMission({...newMission, entryFee: Number(e.target.value)})} />
+              </div>
+              <div className="flex gap-3">
+                 <button onClick={() => setShowMissionModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
+                 <button onClick={() => { 
+                   onCreateMission({ ...newMission, id: `MSN-${Date.now()}`, driversJoined: [], createdAt: new Date().toISOString() }); 
+                   setShowMissionModal(false); 
+                 }} className="flex-1 py-4 bg-emerald-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Confirm Hotspot</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {pendingDeletionId && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-4">
+           <div className="glass-bright w-full max-w-xs rounded-[2rem] p-8 space-y-6 animate-in zoom-in border border-rose-500/20 text-center">
+              <i className="fas fa-exclamation-triangle text-rose-500 text-4xl mb-4"></i>
+              <h3 className="text-xl font-black uppercase text-white italic">Revoke Access?</h3>
+              <p className="text-slate-400 text-xs font-bold leading-relaxed">This will permanently unregister the partner. This action cannot be undone.</p>
+              <div className="flex gap-3">
+                 <button onClick={() => setPendingDeletionId(null)} className="flex-1 py-3 bg-white/5 text-slate-500 rounded-xl text-[10px] font-black uppercase">Cancel</button>
+                 <button onClick={() => { onDeleteDriver(pendingDeletionId); setPendingDeletionId(null); }} className="flex-1 py-3 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase">Revoke</button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -2606,4 +2730,3 @@ if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<App />);
 }
-
