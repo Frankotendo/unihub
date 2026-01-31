@@ -43,7 +43,7 @@ interface HubMission {
   location: string;
   description: string;
   entryFee: number;
-  driversJoined: string[]; // List of driver IDs
+  driversJoined: string[]; 
   status: 'open' | 'closed';
   createdAt: string;
 }
@@ -64,13 +64,13 @@ interface RideNode {
   isSolo?: boolean;
   isLongDistance?: boolean;
   negotiatedTotalFare?: number;
-  vehicleType?: VehicleType; 
+  vehicle_type?: VehicleType; 
 }
 
 interface Driver {
   id: string;
   name: string;
-  vehicleType: VehicleType;
+  vehicle_type: VehicleType;
   licensePlate: string;
   contact: string;
   walletBalance: number; 
@@ -647,6 +647,11 @@ const App: React.FC = () => {
     ]);
   };
 
+  const rejectTopup = async (reqId: string) => {
+    await supabase.from('unihub_topups').update({ status: 'rejected' }).eq('id', reqId);
+    alert("Credit request rejected.");
+  };
+
   const approveRegistration = async (regId: string) => {
     const reg = registrationRequests.find(r => r.id === regId);
     if (!reg || reg.status !== 'pending') return;
@@ -654,7 +659,7 @@ const App: React.FC = () => {
     const newDriver: Driver = {
       id: `DRV-${Date.now()}`,
       name: reg.name,
-      vehicleType: reg.vehicleType,
+      vehicle_type: reg.vehicleType,
       licensePlate: reg.licensePlate,
       contact: reg.contact,
       pin: reg.pin,
@@ -683,9 +688,19 @@ const App: React.FC = () => {
     }
   };
 
-  const registerDriver = async (d: Omit<Driver, 'id' | 'walletBalance' | 'rating' | 'status'>) => {
+  const rejectRegistration = async (regId: string) => {
+    await supabase.from('unihub_registrations').update({ status: 'rejected' }).eq('id', regId);
+    alert("Application rejected.");
+  };
+
+  const registerDriver = async (d: Omit<Driver, 'id' | 'walletBalance' | 'rating' | 'status' | 'vehicle_type'> & { vehicleType: VehicleType }) => {
     const newDriver: Driver = {
-      ...d,
+      name: d.name,
+      vehicle_type: d.vehicleType,
+      licensePlate: d.licensePlate,
+      contact: d.contact,
+      pin: d.pin,
+      avatarUrl: d.avatarUrl,
       id: `DRV-${Date.now()}`,
       walletBalance: 0,
       rating: 5.0,
@@ -1031,7 +1046,9 @@ const App: React.FC = () => {
                 topupRequests={topupRequests}
                 registrationRequests={registrationRequests}
                 onApproveTopup={approveTopup}
+                onRejectTopup={rejectTopup}
                 onApproveRegistration={approveRegistration}
+                onRejectRegistration={rejectRegistration}
                 onLock={handleAdminLogout}
                 searchConfig={searchConfig}
                 settings={settings}
@@ -1582,7 +1599,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
     );
 
     if (searchConfig.vehicleType !== 'All') {
-      result = result.filter(n => n.vehicleType === searchConfig.vehicleType || (n.vehicleType === undefined && searchConfig.vehicleType === 'Taxi'));
+      result = result.filter(n => (n.vehicle_type || n.vehicleType) === searchConfig.vehicleType || ((n.vehicle_type || n.vehicleType) === undefined && searchConfig.vehicleType === 'Taxi'));
     }
 
     // Apply Sorting
@@ -1649,7 +1666,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
       createdAt: new Date().toISOString(),
       isSolo: isSolo,
       isLongDistance: isLongDistance,
-      vehicleType: type
+      vehicle_type: type
     };
 
     try {
@@ -2372,10 +2389,12 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
   );
 };
 
-const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onDeleteDriver, onCancelRide, onSettleRide, missions, onCreateMission, onDeleteMission, transactions, topupRequests, registrationRequests, onApproveTopup, onApproveRegistration, onLock, searchConfig, settings, onUpdateSettings, hubRevenue, adminEmail }: any) => {
+const AdminPortal = ({ 
+  activeTab, setActiveTab, nodes, drivers, onAddDriver, onDeleteDriver, onCancelRide, onSettleRide, missions, onCreateMission, onDeleteMission, transactions, topupRequests, registrationRequests, onApproveTopup, onRejectTopup, onApproveRegistration, onRejectRegistration, onLock, searchConfig, settings, onUpdateSettings, hubRevenue, adminEmail 
+}: any) => {
   const [showDriverModal, setShowDriverModal] = useState(false);
   const [showMissionModal, setShowMissionModal] = useState(false);
-  const [newDriver, setNewDriver] = useState<Partial<Driver>>({ vehicleType: 'Pragia', pin: '' });
+  const [newDriver, setNewDriver] = useState<Partial<Driver>>({ vehicle_type: 'Pragia', pin: '' });
   const [newMission, setNewMission] = useState<Partial<HubMission>>({ location: '', description: '', entryFee: 5, status: 'open' });
   const [pendingDeletionId, setPendingDeletionId] = useState<string | null>(null);
   
@@ -2385,7 +2404,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
   const filteredDrivers = useMemo(() => {
     let result = drivers.filter((d: any) => d.name.toLowerCase().includes(searchConfig.query.toLowerCase()) || d.licensePlate.toLowerCase().includes(searchConfig.query.toLowerCase()));
     if (searchConfig.vehicleType !== 'All') {
-      result = result.filter(d => d.vehicleType === searchConfig.vehicleType);
+      result = result.filter(d => (d.vehicle_type || d.vehicleType) === searchConfig.vehicleType);
     }
     return result;
   }, [drivers, searchConfig]);
@@ -2472,13 +2491,123 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                               <span>{d.name}</span>
                             </div>
                           </td>
-                          <td className="px-8 py-5"><div>{d.licensePlate}</div><div className="text-[8px] text-slate-500 uppercase tracking-tighter">{d.contact} | {d.vehicleType}</div></td>
+                          <td className="px-8 py-5"><div>{d.licensePlate}</div><div className="text-[8px] text-slate-500 uppercase tracking-tighter">{d.contact} | {d.vehicle_type || d.vehicleType}</div></td>
                           <td className="px-8 py-5 text-center text-emerald-400 italic font-black">₵{d.walletBalance.toFixed(1)}</td>
                           <td className="px-8 py-5 text-right"><button onClick={() => setPendingDeletionId(d.id)} className="px-4 py-2 bg-rose-600/10 text-rose-500 rounded-xl text-[8px] font-black uppercase">Revoke</button></td>
                        </tr>
                     ))}
                  </tbody>
               </table>
+           </div>
+        </div>
+      )}
+
+      {activeTab === 'onboarding' && (
+        <div className="space-y-6 animate-in fade-in">
+           <h3 className="text-xl font-black uppercase italic text-white px-2">Pending Applications</h3>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {registrationRequests.filter((r:any) => r.status === 'pending').map((r: any) => (
+                 <div key={r.id} className="glass p-8 rounded-[2.5rem] border border-white/5 space-y-6 relative overflow-hidden">
+                    <div className="flex items-center gap-6">
+                       {r.avatarUrl ? (
+                          <img src={r.avatarUrl} className="w-16 h-16 rounded-2xl object-cover border border-indigo-500/30 shadow-xl" alt="Portrait" />
+                       ) : (
+                          <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-500"><i className="fas fa-user text-xl"></i></div>
+                       )}
+                       <div className="flex-1">
+                          <h4 className="text-lg font-black text-white italic leading-none">{r.name}</h4>
+                          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mt-2">{r.vehicleType} | {r.licensePlate}</p>
+                          <p className="text-[10px] text-slate-500 font-bold mt-1">WA: {r.contact}</p>
+                       </div>
+                    </div>
+                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10 flex justify-between items-center">
+                       <div>
+                          <p className="text-[8px] font-black text-slate-500 uppercase">Payment Ref</p>
+                          <p className="text-xs font-black text-emerald-500 italic mt-1">{r.momoReference}</p>
+                       </div>
+                       <p className="text-sm font-black text-white">₵{r.amount}</p>
+                    </div>
+                    <div className="flex gap-3">
+                       <button onClick={() => onRejectRegistration(r.id)} className="flex-1 py-4 bg-rose-600/10 border border-rose-500/20 text-rose-500 rounded-2xl text-[10px] font-black uppercase">Decline</button>
+                       <button onClick={() => onApproveRegistration(r.id)} className="flex-[2] py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase shadow-xl">Approve & Activate</button>
+                    </div>
+                 </div>
+              ))}
+              {registrationRequests.filter((r:any) => r.status === 'pending').length === 0 && (
+                 <div className="col-span-full py-20 text-center glass rounded-[2.5rem] border-dashed border-2 border-white/5">
+                    <i className="fas fa-id-card text-slate-800 text-4xl mb-4"></i>
+                    <p className="text-slate-600 font-black uppercase text-[10px] tracking-widest">No pending applications</p>
+                 </div>
+              )}
+           </div>
+        </div>
+      )}
+
+      {activeTab === 'requests' && (
+        <div className="space-y-6 animate-in fade-in">
+           <h3 className="text-xl font-black uppercase italic text-white px-2">Billing Queue</h3>
+           <div className="space-y-4">
+              {topupRequests.filter((t:any) => t.status === 'pending').map((t: any) => {
+                 const driver = drivers.find((d:any) => d.id === t.driverId);
+                 return (
+                    <div key={t.id} className="glass p-6 rounded-[2rem] border border-white/5 flex flex-col md:flex-row items-center gap-6">
+                       <div className="flex items-center gap-4 flex-1">
+                          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 shadow-lg">
+                             <i className="fas fa-wallet text-sm"></i>
+                          </div>
+                          <div>
+                             <p className="text-[11px] font-black text-white italic">{driver?.name || 'Unknown Partner'}</p>
+                             <p className="text-[8px] font-black text-slate-500 uppercase tracking-tighter">REF: {t.momoReference}</p>
+                          </div>
+                       </div>
+                       <div className="text-right">
+                          <p className="text-lg font-black text-emerald-400 italic leading-none">₵{t.amount}</p>
+                          <p className="text-[8px] font-black text-slate-600 uppercase mt-1">{t.timestamp}</p>
+                       </div>
+                       <div className="flex gap-2 w-full md:w-auto">
+                          <button onClick={() => onRejectTopup(t.id)} className="px-4 py-3 bg-white/5 text-slate-400 rounded-xl text-[8px] font-black uppercase">Dismiss</button>
+                          <button onClick={() => onApproveTopup(t.id)} className="px-8 py-3 bg-emerald-600 text-white rounded-xl text-[8px] font-black uppercase shadow-lg">Approve</button>
+                       </div>
+                    </div>
+                 );
+              })}
+              {topupRequests.filter((t:any) => t.status === 'pending').length === 0 && (
+                 <div className="py-20 text-center glass rounded-[2.5rem] border-dashed border-2 border-white/5">
+                    <i className="fas fa-receipt text-slate-800 text-4xl mb-4"></i>
+                    <p className="text-slate-600 font-black uppercase text-[10px] tracking-widest">Billing queue is clear</p>
+                 </div>
+              )}
+           </div>
+        </div>
+      )}
+
+      {activeTab === 'missions' && (
+        <div className="space-y-6 animate-in fade-in">
+           <div className="flex justify-between items-center px-2">
+              <h3 className="text-xl font-black uppercase italic text-white">Hub Hotspots</h3>
+              <button onClick={() => setShowMissionModal(true)} className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase shadow-xl">Deploy Hotspot</button>
+           </div>
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {missions.map((m: any) => (
+                 <div key={m.id} className="glass p-8 rounded-[2.5rem] border border-white/5 space-y-4 relative group">
+                    <button onClick={() => onDeleteMission(m.id)} className="absolute top-6 right-6 text-slate-700 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"><i className="fas fa-trash-can text-xs"></i></button>
+                    <div className="flex items-center gap-3">
+                       <i className="fas fa-location-dot text-amber-500 text-sm"></i>
+                       <h4 className="text-lg font-black text-white uppercase italic">{m.location}</h4>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-medium italic leading-relaxed">{m.description}</p>
+                    <div className="flex justify-between items-end pt-4">
+                       <div>
+                          <p className="text-[8px] font-black text-slate-600 uppercase">Stationed</p>
+                          <p className="text-xl font-black text-indigo-400 italic">{m.driversJoined.length}</p>
+                       </div>
+                       <div className="text-right">
+                          <p className="text-[8px] font-black text-slate-600 uppercase">Access Fee</p>
+                          <p className="text-xl font-black text-emerald-500 italic">₵{m.entryFee}</p>
+                       </div>
+                    </div>
+                 </div>
+              ))}
            </div>
         </div>
       )}
@@ -2569,6 +2698,75 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
               >
                 PUSH UPDATES
               </button>
+           </div>
+        </div>
+      )}
+
+      {showMissionModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+           <div className="glass-bright w-full max-w-md rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in text-white">
+              <h3 className="text-xl font-black italic uppercase text-center">Deploy Hub Hotspot</h3>
+              <div className="space-y-4">
+                 <AdminInput label="LOCATION NAME" value={newMission.location} onChange={v => setNewMission({...newMission, location: v})} />
+                 <AdminInput label="ENTRY FEE (₵)" value={newMission.entryFee} type="number" onChange={v => setNewMission({...newMission, entryFee: Number(v)})} />
+                 <div className="space-y-2">
+                    <label className="text-[8px] font-black text-slate-500 uppercase">STRATEGY DESCRIPTION</label>
+                    <textarea 
+                      className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-[10px] font-bold text-white outline-none focus:border-amber-500 h-24 resize-none"
+                      value={newMission.description}
+                      onChange={e => setNewMission({...newMission, description: e.target.value})}
+                    />
+                 </div>
+              </div>
+              <div className="flex gap-4">
+                 <button onClick={() => setShowMissionModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase">Cancel</button>
+                 <button onClick={() => { onCreateMission({...newMission, id: `MISS-${Date.now()}`, driversJoined: [], createdAt: new Date().toISOString()}); setShowMissionModal(false); }} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Station Zone</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {showDriverModal && (
+         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+            <div className="glass-bright w-full max-w-md rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in text-white">
+               <h3 className="text-xl font-black italic uppercase text-center">Manual Partner Entry</h3>
+               <div className="space-y-4">
+                  <AdminInput label="FULL NAME" value={newDriver.name || ''} onChange={v => setNewDriver({...newDriver, name: v})} />
+                  <AdminInput label="LICENSE PLATE" value={newDriver.licensePlate || ''} onChange={v => setNewDriver({...newDriver, licensePlate: v})} />
+                  <AdminInput label="CONTACT" value={newDriver.contact || ''} onChange={v => setNewDriver({...newDriver, contact: v})} />
+                  <AdminInput label="PIN" value={newDriver.pin || ''} type="password" onChange={v => setNewDriver({...newDriver, pin: v})} />
+                  <div className="grid grid-cols-2 gap-4">
+                     <div className="space-y-2">
+                        <label className="text-[8px] font-black text-slate-500 uppercase">ASSET TYPE</label>
+                        <select className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-xs font-bold text-white outline-none" value={newDriver.vehicle_type || 'Pragia'} onChange={e => setNewDriver({...newDriver, vehicle_type: e.target.value as any})}>
+                           <option value="Pragia">Pragia</option>
+                           <option value="Taxi">Taxi</option>
+                        </select>
+                     </div>
+                  </div>
+               </div>
+               <div className="flex gap-4">
+                  <button onClick={() => setShowDriverModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase">Abort</button>
+                  <button onClick={() => { onAddDriver(newDriver as any); setShowDriverModal(false); }} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Register Partner</button>
+               </div>
+            </div>
+         </div>
+      )}
+
+      {pendingDeletionId && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+           <div className="glass-bright w-full max-w-sm rounded-[2.5rem] p-8 space-y-8 animate-in zoom-in text-center">
+              <div className="w-20 h-20 bg-rose-600/10 rounded-[2rem] flex items-center justify-center text-rose-500 mx-auto border border-rose-500/20">
+                 <i className="fas fa-user-slash text-3xl"></i>
+              </div>
+              <div>
+                 <h3 className="text-xl font-black text-white uppercase italic">Revoke Access?</h3>
+                 <p className="text-[10px] text-slate-500 font-bold mt-2 leading-relaxed">This will permanently delete the partner's wallet, history, and hub access.</p>
+              </div>
+              <div className="flex gap-4">
+                 <button onClick={() => setPendingDeletionId(null)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Keep</button>
+                 <button onClick={() => { onDeleteDriver(pendingDeletionId); setPendingDeletionId(null); }} className="flex-1 py-4 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Revoke Hub</button>
+              </div>
            </div>
         </div>
       )}
