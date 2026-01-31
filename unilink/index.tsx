@@ -18,6 +18,14 @@ type VehicleType = 'Pragia' | 'Taxi' | 'Shuttle';
 type NodeStatus = 'forming' | 'qualified' | 'dispatched' | 'completed'; 
 type PortalMode = 'passenger' | 'driver' | 'admin';
 
+interface SearchConfig {
+  query: string;
+  vehicleType: VehicleType | 'All';
+  status: NodeStatus | 'All';
+  sortBy: 'newest' | 'price' | 'capacity';
+  isSolo: boolean | null;
+}
+
 interface UniUser {
   id: string;
   username: string;
@@ -56,6 +64,7 @@ interface RideNode {
   isSolo?: boolean;
   isLongDistance?: boolean;
   negotiatedTotalFare?: number;
+  vehicleType?: VehicleType; 
 }
 
 interface Driver {
@@ -68,7 +77,7 @@ interface Driver {
   rating: number;
   status: 'online' | 'busy' | 'offline';
   pin: string; 
-  avatarUrl?: string; // Driver's profile picture
+  avatarUrl?: string; 
 }
 
 interface TopupRequest {
@@ -91,7 +100,7 @@ interface RegistrationRequest {
   momoReference: string;
   status: 'pending' | 'approved' | 'rejected';
   timestamp: string;
-  avatarUrl?: string; // Captured during registration
+  avatarUrl?: string; 
 }
 
 interface Transaction {
@@ -216,6 +225,15 @@ const App: React.FC = () => {
     return sessionStorage.getItem('nexryde_driver_session_v1');
   });
 
+  // Global Search State
+  const [searchConfig, setSearchConfig] = useState<SearchConfig>({
+    query: '',
+    vehicleType: 'All',
+    status: 'All',
+    sortBy: 'newest',
+    isSolo: null
+  });
+
   // Track user's own rides locally
   const [myRideIds, setMyRideIds] = useState<string[]>(() => {
     try {
@@ -252,8 +270,6 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [topupRequests, setTopupRequests] = useState<TopupRequest[]>([]);
   const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>([]);
-
-  const [globalSearch, setGlobalSearch] = useState('');
 
   const isVaultAccess = useMemo(() => {
     return new URLSearchParams(window.location.search).get('access') === 'vault';
@@ -584,7 +600,6 @@ const App: React.FC = () => {
   };
 
   const requestRegistration = async (reg: Omit<RegistrationRequest, 'id' | 'status' | 'timestamp'>) => {
-    // Duplicate check
     const existingDriver = drivers.find(d => d.contact === reg.contact || d.licensePlate === reg.licensePlate);
     const existingReq = registrationRequests.find(r => (r.contact === reg.contact || r.licensePlate === reg.licensePlate) && r.status === 'pending');
     
@@ -845,14 +860,14 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex-1 space-y-1">
-          <NavItem active={viewMode === 'passenger'} icon="fa-user-graduate" label="Ride Center" onClick={() => {safeSetViewMode('passenger'); setGlobalSearch('');}} />
-          <NavItem active={viewMode === 'driver'} icon="fa-id-card-clip" label="Partner Terminal" onClick={() => {safeSetViewMode('driver'); setGlobalSearch('');}} />
+          <NavItem active={viewMode === 'passenger'} icon="fa-user-graduate" label="Ride Center" onClick={() => {safeSetViewMode('passenger'); setSearchConfig({...searchConfig, query: ''});}} />
+          <NavItem active={viewMode === 'driver'} icon="fa-id-card-clip" label="Partner Terminal" onClick={() => {safeSetViewMode('driver'); setSearchConfig({...searchConfig, query: ''});}} />
           {(isVaultAccess || isAdminAuthenticated) && (
             <NavItem 
               active={viewMode === 'admin'} 
               icon="fa-shield-halved" 
               label="Control Vault" 
-              onClick={() => {safeSetViewMode('admin'); setGlobalSearch('');}} 
+              onClick={() => {safeSetViewMode('admin'); setSearchConfig({...searchConfig, query: ''});}} 
               badge={isAdminAuthenticated && pendingRequestsCount > 0 ? pendingRequestsCount : undefined}
             />
           )}
@@ -947,16 +962,7 @@ const App: React.FC = () => {
           )}
 
           {(viewMode === 'passenger' || viewMode === 'driver' || (viewMode === 'admin' && isAdminAuthenticated)) && (
-            <div className="relative group">
-               <i className="fas fa-search absolute left-6 top-1/2 -translate-y-1/2 text-slate-500"></i>
-               <input 
-                  type="text" 
-                  placeholder="Search routes, destinations, or partners..." 
-                  className="w-full bg-white/5 border border-white/10 rounded-[2rem] py-4 lg:py-6 pl-14 pr-6 text-white font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-700"
-                  value={globalSearch}
-                  onChange={(e) => setGlobalSearch(e.target.value)}
-               />
-            </div>
+            <SearchHub searchConfig={searchConfig} setSearchConfig={setSearchConfig} portalMode={viewMode} />
           )}
 
           {viewMode === 'passenger' && (
@@ -978,7 +984,7 @@ const App: React.FC = () => {
               onForceQualify={forceQualify} 
               onCancel={cancelRide} 
               drivers={drivers} 
-              search={globalSearch} 
+              searchConfig={searchConfig} 
               settings={settings} 
               onShowQr={() => setShowQrModal(true)} 
               onShowAbout={() => setShowAboutModal(true)}
@@ -1000,7 +1006,7 @@ const App: React.FC = () => {
               onCancel={cancelRide}
               onRequestTopup={requestTopup}
               onRequestRegistration={requestRegistration}
-              search={globalSearch}
+              searchConfig={searchConfig}
               settings={settings}
             />
           )}
@@ -1027,7 +1033,7 @@ const App: React.FC = () => {
                 onApproveTopup={approveTopup}
                 onApproveRegistration={approveRegistration}
                 onLock={handleAdminLogout}
-                search={globalSearch}
+                searchConfig={searchConfig}
                 settings={settings}
                 onUpdateSettings={updateGlobalSettings}
                 hubRevenue={hubRevenue}
@@ -1048,6 +1054,7 @@ const App: React.FC = () => {
 
       {showAiHelp && <AiHelpDesk onClose={() => setShowAiHelp(false)} settings={settings} />}
 
+      {/* Rest of modals remain unchanged ... */}
       {showQrModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-sm:px-4 max-w-sm rounded-[3rem] p-10 space-y-8 animate-in zoom-in text-center border border-white/10">
@@ -1055,7 +1062,6 @@ const App: React.FC = () => {
                 <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white leading-none">NexRyde Code</h3>
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Scan to access the platform</p>
               </div>
-              
               <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl relative group">
                  <img 
                    src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(window.location.origin)}&bgcolor=ffffff&color=020617&format=svg`} 
@@ -1063,7 +1069,6 @@ const App: React.FC = () => {
                    alt="NexRyde QR"
                  />
               </div>
-
               <div className="flex gap-4">
                  <button onClick={() => setShowQrModal(false)} className="flex-1 py-4 bg-white/5 rounded-[1.5rem] font-black text-[10px] uppercase text-slate-400">Close</button>
                  <button onClick={shareHub} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-[1.5rem] font-black text-[10px] uppercase shadow-xl">Share Platform</button>
@@ -1089,7 +1094,6 @@ const App: React.FC = () => {
                    <i className="fas fa-times"></i>
                 </button>
               </div>
-
               {settings.aboutMeImages.length > 0 && (
                 <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
                    {settings.aboutMeImages.map((img, i) => (
@@ -1099,13 +1103,11 @@ const App: React.FC = () => {
                    ))}
                 </div>
               )}
-
               <div className="space-y-6">
                  <div className="p-8 bg-white/5 rounded-[2.5rem] border border-white/10 relative overflow-hidden">
                     <i className="fas fa-quote-left absolute top-4 left-4 text-4xl text-emerald-500/10"></i>
                     <p className="text-sm lg:text-base font-medium italic text-slate-300 leading-relaxed relative z-10 whitespace-pre-wrap">{settings.aboutMeText}</p>
                  </div>
-
                  <div className="grid grid-cols-2 gap-4">
                     <a href={`https://wa.me/${settings.whatsappNumber}`} target="_blank" className="flex flex-col items-center gap-3 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-emerald-600/10 hover:border-emerald-500/30 transition-all group">
                        <i className="fab fa-whatsapp text-emerald-500 text-2xl group-hover:scale-110 transition-transform"></i>
@@ -1117,7 +1119,6 @@ const App: React.FC = () => {
                     </button>
                  </div>
               </div>
-
               <div className="pt-6 border-t border-white/5 text-center">
                  <button onClick={() => setShowAboutModal(false)} className="px-12 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Close Portfolio</button>
               </div>
@@ -1142,7 +1143,6 @@ const App: React.FC = () => {
                    <i className="fas fa-times"></i>
                 </button>
              </div>
-
              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <HelpSection 
                    icon="fa-user-graduate" 
@@ -1178,11 +1178,136 @@ const App: React.FC = () => {
                    ]}
                 />
              </div>
-
              <div className="pt-6 border-t border-white/5 flex justify-center">
                 <button onClick={() => setShowHelpModal(false)} className="px-12 py-4 bg-white/5 border border-white/10 rounded-2xl font-black text-xs uppercase tracking-widest text-white hover:bg-white/10 transition-all">Acknowledge</button>
              </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- SEARCH HUB COMPONENT ---
+
+const SearchHub = ({ searchConfig, setSearchConfig, portalMode }: { searchConfig: SearchConfig, setSearchConfig: any, portalMode: PortalMode }) => {
+  const [showFilters, setShowFilters] = useState(false);
+  const [aiParsing, setAiParsing] = useState(false);
+
+  const handleAiSearchParse = async () => {
+    if (!searchConfig.query.trim()) return;
+    setAiParsing(true);
+    try {
+      const prompt = `Analyze this search intent for a ride-sharing app: "${searchConfig.query}". 
+      Available filters: vehicleType (Pragia, Taxi, Shuttle), status (forming, qualified, dispatched, completed), isSolo (boolean or null), sortBy (newest, price, capacity).
+      If the user says "cheap" or "low cost", set sortBy to 'price'.
+      If the user says "fast" or "express", set isSolo to true.
+      Return JSON: { "query": string (cleaned), "vehicleType": string | "All", "status": string | "All", "isSolo": boolean | null, "sortBy": string }`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+        config: { responseMimeType: "application/json" }
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      setSearchConfig({
+        ...searchConfig,
+        ...parsed
+      });
+      setShowFilters(true);
+    } catch (err) {
+      console.error("Search parse error", err);
+    } finally {
+      setAiParsing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="relative group">
+        <i className={`fas ${aiParsing ? 'fa-spinner fa-spin text-amber-500' : 'fa-search text-slate-500'} absolute left-6 top-1/2 -translate-y-1/2`}></i>
+        <input 
+          type="text" 
+          placeholder={portalMode === 'admin' ? "Search partners, plates, or transactions..." : "Find rides (e.g., 'taxi to gate under 10')"} 
+          className="w-full bg-white/5 border border-white/10 rounded-[2rem] py-4 lg:py-6 pl-14 pr-32 text-white font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-700"
+          value={searchConfig.query}
+          onChange={(e) => setSearchConfig({...searchConfig, query: e.target.value})}
+          onKeyDown={(e) => e.key === 'Enter' && handleAiSearchParse()}
+        />
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+           <button 
+             onClick={handleAiSearchParse}
+             title="AI Search Parse"
+             className="w-10 h-10 rounded-xl bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white transition-all border border-indigo-500/30 flex items-center justify-center"
+           >
+             <i className="fas fa-sparkles text-xs"></i>
+           </button>
+           <button 
+             onClick={() => setShowFilters(!showFilters)}
+             className={`w-10 h-10 rounded-xl ${showFilters ? 'bg-amber-500 text-[#020617]' : 'bg-white/5 text-slate-500'} transition-all flex items-center justify-center border border-white/10`}
+           >
+             <i className="fas fa-sliders text-xs"></i>
+           </button>
+        </div>
+      </div>
+
+      {showFilters && (
+        <div className="glass p-6 rounded-[2rem] border border-white/10 animate-in slide-in-from-top-4 flex flex-wrap items-center gap-6">
+           <div className="flex flex-col gap-2">
+              <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Asset Category</span>
+              <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+                {['All', 'Pragia', 'Taxi'].map(t => (
+                  <button 
+                    key={t}
+                    onClick={() => setSearchConfig({...searchConfig, vehicleType: t as any})}
+                    className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase transition-all ${searchConfig.vehicleType === t ? 'bg-amber-500 text-[#020617]' : 'text-slate-500'}`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+           </div>
+
+           <div className="flex flex-col gap-2">
+              <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Sort Intelligence</span>
+              <select 
+                className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[9px] font-black uppercase text-white outline-none"
+                value={searchConfig.sortBy}
+                onChange={e => setSearchConfig({...searchConfig, sortBy: e.target.value as any})}
+              >
+                <option value="newest">Latest Posting</option>
+                <option value="price">Lowest Fare</option>
+                <option value="capacity">Most Seats</option>
+              </select>
+           </div>
+
+           {portalMode === 'passenger' && (
+             <div className="flex flex-col gap-2">
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Drop Type</span>
+                <div className="flex gap-2">
+                   <button 
+                     onClick={() => setSearchConfig({...searchConfig, isSolo: searchConfig.isSolo === true ? null : true})}
+                     className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase border transition-all ${searchConfig.isSolo === true ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/5 text-slate-500 border-white/10'}`}
+                   >
+                     Solo Only
+                   </button>
+                   <button 
+                     onClick={() => setSearchConfig({...searchConfig, isSolo: searchConfig.isSolo === false ? null : false})}
+                     className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase border transition-all ${searchConfig.isSolo === false ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-white/5 text-slate-500 border-white/10'}`}
+                   >
+                     Pools Only
+                   </button>
+                </div>
+             </div>
+           )}
+
+           <button 
+             onClick={() => setSearchConfig({ query: '', vehicleType: 'All', status: 'All', sortBy: 'newest', isSolo: null })}
+             className="ml-auto text-[8px] font-black text-rose-500 uppercase underline tracking-widest"
+           >
+             Reset Engine
+           </button>
         </div>
       )}
     </div>
@@ -1207,7 +1332,6 @@ const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string, m: 'log
   return (
     <div className="fixed inset-0 bg-[#020617] flex items-center justify-center p-6 z-[500]">
       <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 via-transparent to-amber-500/10 pointer-events-none"></div>
-      
       <div className="w-full max-w-md space-y-12 text-center relative z-10 animate-in fade-in zoom-in duration-500">
         <div className="space-y-6">
           <div className="w-24 h-24 bg-amber-500 rounded-[2.5rem] flex items-center justify-center text-[#020617] text-4xl shadow-2xl mx-auto shadow-amber-500/20">
@@ -1218,13 +1342,11 @@ const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string, m: 'log
             <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.4em] mt-3">Smart Transit Identity</p>
           </div>
         </div>
-
         <div className="glass p-10 rounded-[3.5rem] border border-white/10 space-y-6 shadow-2xl">
           <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 mb-2">
              <button onClick={() => setMode('login')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'login' ? 'bg-amber-500 text-[#020617]' : 'text-slate-500'}`}>Sign In</button>
              <button onClick={() => setMode('signup')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'signup' ? 'bg-amber-500 text-[#020617]' : 'text-slate-500'}`}>Sign Up</button>
           </div>
-
           <div className="space-y-4">
             {mode === 'signup' && (
               <div className="relative group animate-in slide-in-from-top-2">
@@ -1250,7 +1372,6 @@ const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string, m: 'log
                />
             </div>
           </div>
-
           <button 
             onClick={handleSubmit}
             disabled={loading || !phone}
@@ -1258,7 +1379,6 @@ const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string, m: 'log
           >
             {loading ? <i className="fas fa-spinner fa-spin mr-2"></i> : (mode === 'login' ? 'Verify Account' : 'Create NexRyde Profile')}
           </button>
-          
           <p className="text-[9px] font-medium text-slate-500 leading-relaxed max-w-[200px] mx-auto text-center">
             {mode === 'login' ? 'NexRyde will verify your identity across our secure database.' : 'Join the next generation of campus transit.'}
           </p>
@@ -1296,7 +1416,6 @@ const AiHelpDesk = ({ onClose, settings }: { onClose: () => void, settings: AppS
       User Question: ${userMsg}
       Keep answers concise and professional. Use emojis.`;
 
-      // Use generateContent for text task as per guidelines
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt
@@ -1431,7 +1550,7 @@ const AdminLogin = ({ onLogin }: any) => {
   );
 };
 
-const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onForceQualify, onCancel, drivers, search, settings, onShowQr, onShowAbout }: any) => {
+const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onForceQualify, onCancel, drivers, searchConfig, settings, onShowQr, onShowAbout }: any) => {
   const [showModal, setShowModal] = useState(false);
   const [joinModalNodeId, setJoinModalNodeId] = useState<string | null>(null);
   const [origin, setOrigin] = useState('');
@@ -1443,17 +1562,38 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
   const [aiInput, setAiInput] = useState('');
   const [aiProcessing, setAiProcessing] = useState(false);
 
+  // AUTH LOGIC FIX: Check both local state AND actual node data to determine active trips
   const myActiveNodes = useMemo(() => nodes.filter((n: any) => 
-    myRideIds.includes(n.id) && n.status !== 'completed'
-  ), [nodes, myRideIds]);
+    (myRideIds.includes(n.id) || n.leaderPhone === currentUser.phone || n.passengers.some((p:any) => p.phone === currentUser.phone))
+    && n.status !== 'completed'
+  ), [nodes, myRideIds, currentUser.phone]);
 
-  const filteredNodes = nodes.filter((n: any) => 
-    n.status !== 'completed' && 
-    !myRideIds.includes(n.id) &&
-    (n.destination.toLowerCase().includes(search.toLowerCase()) || 
-     n.origin.toLowerCase().includes(search.toLowerCase()) ||
-     n.leaderName.toLowerCase().includes(search.toLowerCase()))
-  );
+  // MARKETPLACE LOGIC FIX: Hide private Solo/Premium rides from the general traffic
+  const filteredNodes = useMemo(() => {
+    let result = nodes.filter((n: any) => 
+      n.status !== 'completed' && 
+      !myRideIds.includes(n.id) &&
+      n.leaderPhone !== currentUser.phone && // Don't show your own request in the market
+      !n.isSolo && // Solo rides are private
+      !n.isLongDistance && // Long distance requests are private dispatch only
+      (n.destination.toLowerCase().includes(searchConfig.query.toLowerCase()) || 
+       n.origin.toLowerCase().includes(searchConfig.query.toLowerCase()) ||
+       n.leaderName.toLowerCase().includes(searchConfig.query.toLowerCase()))
+    );
+
+    if (searchConfig.vehicleType !== 'All') {
+      result = result.filter(n => n.vehicleType === searchConfig.vehicleType || (n.vehicleType === undefined && searchConfig.vehicleType === 'Taxi'));
+    }
+
+    // Apply Sorting
+    result = [...result].sort((a, b) => {
+      if (searchConfig.sortBy === 'price') return a.farePerPerson - b.farePerPerson;
+      if (searchConfig.sortBy === 'capacity') return b.capacityNeeded - a.capacityNeeded;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    return result;
+  }, [nodes, myRideIds, searchConfig, currentUser.phone]);
 
   const handleAiFill = async () => {
     if (!aiInput.trim()) return;
@@ -1468,7 +1608,6 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
         "vehicleType": VehicleType
       }`;
 
-      // Call generateContent for JSON output
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: prompt,
@@ -1509,7 +1648,8 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
       farePerPerson: isLongDistance ? 0 : finalFare,
       createdAt: new Date().toISOString(),
       isSolo: isSolo,
-      isLongDistance: isLongDistance
+      isLongDistance: isLongDistance,
+      vehicleType: type
     };
 
     try {
@@ -1578,6 +1718,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
       <section className="space-y-6">
         <div className="flex items-center gap-4">
            <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Marketplace Traffic</h3>
+           {filteredNodes.length > 0 && <span className="px-3 py-1 bg-white/5 rounded-full text-[8px] font-black text-slate-500 uppercase">{filteredNodes.length} Matches</span>}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredNodes.length > 0 ? filteredNodes.map((node: any) => (
@@ -1585,12 +1726,13 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
           )) : (
             <div className="col-span-full py-12 text-center border-2 border-dashed border-white/5 rounded-[3rem]">
                <i className="fas fa-route text-slate-800 text-4xl mb-4"></i>
-               <p className="text-slate-600 font-black uppercase text-[10px] tracking-widest">No rides in this route yet</p>
+               <p className="text-slate-600 font-black uppercase text-[10px] tracking-widest">No pools forming at the moment</p>
             </div>
           )}
         </div>
       </section>
 
+      {/* Ride Creation Modal ... */}
       {showModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-sm:px-2 max-w-lg rounded-[2.5rem] p-5 sm:p-6 lg:p-8 space-y-4 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[90vh] no-scrollbar">
@@ -1598,7 +1740,6 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
               <h3 className="text-xl font-black italic tracking-tighter uppercase text-white leading-none">Request a Ride</h3>
               <p className="text-slate-400 text-[8px] font-black uppercase mt-1">NexRyde Economy or Express</p>
             </div>
-
             <div className="p-3 bg-indigo-600/10 border border-indigo-500/20 rounded-xl space-y-2">
                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-indigo-400 font-black text-[8px] uppercase tracking-widest">
@@ -1619,13 +1760,11 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
                  onChange={e => setAiInput(e.target.value)}
                />
             </div>
-
             <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
               <button onClick={() => {setIsSolo(false); setIsLongDistance(false);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${!isSolo && !isLongDistance ? 'bg-amber-500 text-[#020617]' : 'text-slate-500'}`}>Pool</button>
               <button onClick={() => {setIsSolo(true); setIsLongDistance(false);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${isSolo ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-500'}`}>Solo</button>
               <button onClick={() => {setIsSolo(false); setIsLongDistance(true);}} className={`flex-1 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${isLongDistance ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}>Premium</button>
             </div>
-
             <div className="space-y-3">
                <div className="grid grid-cols-2 gap-3">
                   <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Pickup" value={origin} onChange={e => setOrigin(e.target.value)} />
@@ -1641,7 +1780,6 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
                   </div>
                </div>
             </div>
-            
             <div className="flex gap-3 pt-2">
                <button onClick={() => setShowModal(false)} className="flex-1 py-4 bg-white/10 rounded-2xl font-black text-[10px] uppercase text-white">Cancel</button>
                <button onClick={createNode} className={`flex-[1.5] py-4 ${isLongDistance ? 'bg-indigo-600' : (isSolo ? 'bg-emerald-500' : 'bg-amber-500')} text-white rounded-2xl font-black text-[10px] uppercase shadow-xl hover:scale-105 transition-transform`}>
@@ -1672,26 +1810,69 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
   );
 };
 
+// VISUAL THEME REWRITE: Specialized card styling based on service tier
 const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNodeId, isPriority }: any) => {
   const driver = drivers.find((d: any) => d.id === node.assignedDriverId);
   const isOrganizer = currentUser?.phone === node.leaderPhone;
 
+  // Determine Tiers
+  const tier = node.isLongDistance ? 'premium' : (node.isSolo ? 'solo' : 'pool');
+  
+  const themeClasses = useMemo(() => {
+    if (tier === 'premium') return {
+      border: 'border-indigo-500/40 shadow-xl shadow-indigo-500/10',
+      accent: 'text-indigo-400',
+      badge: 'bg-indigo-600 text-white',
+      glow: 'bg-gradient-to-br from-indigo-950/40 to-transparent',
+      hero: 'fa-star-shooting'
+    };
+    if (tier === 'solo') return {
+      border: 'border-emerald-500/40 shadow-xl shadow-emerald-500/10',
+      accent: 'text-emerald-400',
+      badge: 'bg-emerald-600 text-white',
+      glow: 'bg-gradient-to-br from-emerald-950/40 to-transparent',
+      hero: 'fa-bolt-lightning'
+    };
+    return {
+      border: node.status === 'dispatched' ? 'border-amber-500/50 shadow-2xl' : 'border-white/5 hover:border-white/10',
+      accent: 'text-amber-500',
+      badge: 'bg-amber-500 text-[#020617]',
+      glow: '',
+      hero: 'fa-users'
+    };
+  }, [tier, node.status]);
+
   return (
-    <div className={`glass rounded-[2.5rem] p-8 border transition-all ${node.isLongDistance ? 'border-indigo-500/40 shadow-xl shadow-indigo-500/5' : (node.status === 'dispatched' ? (isPriority ? 'border-indigo-500 shadow-2xl shadow-indigo-500/20' : 'border-amber-500/30') : 'border-white/5 hover:border-white/10')} relative overflow-hidden`}>
+    <div className={`glass rounded-[2.5rem] p-8 border transition-all relative overflow-hidden ${themeClasses.border} ${themeClasses.glow}`}>
+      
+      {/* Background Hero Icon for Premium Tiers */}
+      {tier !== 'pool' && (
+        <i className={`fas ${themeClasses.hero} absolute right-[-20px] top-[-20px] text-[120px] opacity-[0.03] pointer-events-none rotate-12`}></i>
+      )}
+
       {isPriority && node.status === 'dispatched' && (
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 animate-pulse"></div>
+        <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${tier === 'premium' ? 'from-indigo-500 via-purple-500 to-indigo-500' : 'from-amber-500 via-orange-500 to-amber-500'} animate-pulse`}></div>
       )}
       
       <div className="flex justify-between items-start mb-6">
         <div className="flex gap-2">
-          <span className={`px-4 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest ${node.status === 'dispatched' ? 'bg-amber-500 text-[#020617]' : (node.isLongDistance ? 'bg-indigo-600 text-white' : 'bg-white/5 text-slate-400')}`}>{node.status}</span>
-          {node.isSolo && !node.isLongDistance && <span className="px-4 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Solo Drop</span>}
+          <span className={`px-4 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest ${themeClasses.badge}`}>
+            {node.status}
+          </span>
+          <span className={`px-4 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest bg-white/5 border border-white/10 text-slate-400`}>
+             {tier.toUpperCase()}
+          </span>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => shareNode(node)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-amber-500 hover:bg-amber-500 hover:text-[#020617] transition-all">
+          <button onClick={() => shareNode(node)} className={`w-8 h-8 rounded-full bg-white/5 flex items-center justify-center ${themeClasses.accent} hover:scale-110 transition-all`}>
             <i className="fas fa-share-nodes text-[10px]"></i>
           </button>
-          <p className="text-lg font-black text-emerald-400 leading-none">₵ {node.negotiatedTotalFare || (node.farePerPerson + '/p')}</p>
+          <div className="text-right">
+             <p className={`text-lg font-black ${themeClasses.accent} leading-none`}>
+               ₵ {node.negotiatedTotalFare || (node.farePerPerson + (tier === 'pool' ? '/p' : ''))}
+             </p>
+             {node.negotiatedTotalFare && <p className="text-[7px] font-black uppercase text-slate-600 mt-1">Negotiated Rate</p>}
+          </div>
         </div>
       </div>
 
@@ -1702,14 +1883,14 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
           <p className="text-white font-bold text-sm truncate uppercase">{node.origin}</p>
         </div>
         <div className="relative pl-6 border-l-2 border-white/5">
-          <div className="absolute left-[-5px] bottom-0 w-2 h-2 rounded-full bg-amber-500"></div>
+          <div className={`absolute left-[-5px] bottom-0 w-2 h-2 rounded-full ${themeClasses.accent.replace('text-', 'bg-')}`}></div>
           <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Drop-off</p>
           <p className="text-white font-black text-lg truncate uppercase">{node.destination}</p>
         </div>
       </div>
 
       <div className="space-y-6">
-        {!node.isSolo && !node.isLongDistance && (
+        {tier === 'pool' && (
           <div className="flex items-center justify-between">
             <div className="flex gap-2">
               {Array.from({ length: node.capacityNeeded }).map((_, i) => (
@@ -1721,8 +1902,20 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{node.passengers.length} / {node.capacityNeeded}</p>
           </div>
         )}
+        
+        {tier !== 'pool' && (
+           <div className="flex items-center gap-3 bg-white/5 p-4 rounded-2xl border border-white/10">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${themeClasses.accent} bg-white/5`}>
+                 <i className={`fas ${themeClasses.hero}`}></i>
+              </div>
+              <div>
+                 <p className="text-[9px] font-black uppercase text-slate-400 leading-none">Service Type</p>
+                 <p className="text-xs font-black text-white italic uppercase mt-1">{tier === 'solo' ? 'Express Solo Cabin' : 'Premium Long Distance'}</p>
+              </div>
+           </div>
+        )}
 
-        {node.status === 'forming' && !node.isSolo && !node.isLongDistance && (
+        {node.status === 'forming' && tier === 'pool' && (
           <div className="flex gap-2">
             <button onClick={() => setJoinModalNodeId(node.id)} className="flex-1 py-4 bg-white/5 border border-white/10 rounded-[1.5rem] font-black text-[10px] uppercase text-white hover:bg-white/10 transition-all">Claim Seat</button>
             {isOrganizer && (
@@ -1731,7 +1924,7 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
           </div>
         )}
 
-        {(node.status === 'forming' || node.status === 'qualified') && (node.isSolo || node.isLongDistance) && isOrganizer && (
+        {(node.status === 'forming' || node.status === 'qualified') && tier !== 'pool' && isOrganizer && (
            <button onClick={() => { if(confirm("Cancel this request?")) onCancel(node.id); }} className="w-full py-4 bg-rose-600/10 border border-rose-500/20 rounded-[1.5rem] font-black text-[10px] uppercase text-rose-500">Cancel Request</button>
         )}
 
@@ -1741,9 +1934,9 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
                <div className="flex items-center gap-3">
                   <div className="relative">
                     {driver.avatarUrl ? (
-                      <img src={driver.avatarUrl} className="w-12 h-12 rounded-full object-cover border-2 border-amber-500" alt="Driver" />
+                      <img src={driver.avatarUrl} className={`w-12 h-12 rounded-full object-cover border-2 ${tier === 'pool' ? 'border-amber-500' : 'border-indigo-500'}`} alt="Driver" />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-amber-500 border-2 border-amber-500">
+                      <div className={`w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center ${themeClasses.accent} border-2 ${tier === 'pool' ? 'border-amber-500' : 'border-indigo-500'}`}>
                         <i className="fas fa-user"></i>
                       </div>
                     )}
@@ -1753,13 +1946,13 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
                   </div>
                   <div>
                     <p className="text-white font-black italic text-sm">{driver.name}</p>
-                    <p className="text-[9px] font-black text-amber-500 uppercase">{driver.licensePlate}</p>
+                    <p className="text-[9px] font-black text-slate-500 uppercase">{driver.licensePlate}</p>
                   </div>
                </div>
                <a href={`tel:${driver.contact}`} className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-xs"><i className="fas fa-phone"></i></a>
             </div>
-
-            <div className={`p-6 ${isPriority ? 'bg-indigo-600' : 'bg-amber-500'} text-white rounded-[1.5rem] text-center shadow-xl flex flex-col items-center gap-4 relative overflow-hidden group`}>
+            
+            <div className={`p-6 rounded-[1.5rem] text-center shadow-xl flex flex-col items-center gap-4 relative overflow-hidden group ${tier === 'premium' ? 'bg-indigo-600' : 'bg-amber-500'} text-white`}>
                <div className="relative z-10">
                   <p className="text-[8px] font-black uppercase mb-1 opacity-80 tracking-[0.2em]">Your Ride PIN</p>
                   <p className="text-5xl font-black italic tracking-widest">{node.verificationCode}</p>
@@ -1772,8 +1965,9 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
                   />
                   <p className="text-[6px] font-black text-slate-500 uppercase mt-1 text-center">Partner Scan Only</p>
                </div>
-               {isPriority && <i className="fas fa-certificate absolute top-[-20px] right-[-20px] text-[80px] opacity-10 rotate-12"></i>}
+               {tier === 'premium' && <i className="fas fa-certificate absolute top-[-20px] right-[-20px] text-[80px] opacity-10 rotate-12"></i>}
             </div>
+
             {isOrganizer && (
               <button onClick={() => { if(confirm("Abort this trip assignment?")) onCancel(node.id); }} className="w-full py-3 bg-rose-600/10 border border-rose-500/20 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-rose-500">Abort Assignment</button>
             )}
@@ -1784,7 +1978,7 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
   );
 };
 
-const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes, dispatchedNodes, missions, allNodes, onJoinMission, onAccept, onVerify, onCancel, onRequestTopup, onRequestRegistration, search, settings }: any) => {
+const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes, dispatchedNodes, missions, allNodes, onJoinMission, onAccept, onVerify, onCancel, onRequestTopup, onRequestRegistration, searchConfig, settings }: any) => {
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [pin, setPin] = useState('');
   const [verifyCode, setVerifyCode] = useState('');
@@ -1809,7 +2003,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
 
       try {
         const base64 = compressed.split(',')[1];
-        // Multimodal content must use { parts: [...] } structure
         const response = await ai.models.generateContent({
           model: 'gemini-3-flash-preview',
           contents: {
@@ -1844,7 +2037,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
       const prompt = `Act as a logistics analyst for NexRyde. 
       Market Traffic: ${activeTraffic}
       Available Hotspots: ${missionLocs}
-      
       Strategically advise a partner on where to go for maximum profit. 
       Very short answer. Start with 'NexRyde Strategy:'.`;
 
@@ -1862,13 +2054,11 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
 
   useEffect(() => {
     let html5QrCode: any = null;
-    
     if (isScanning && activeMissionNodeId) {
       const timeout = setTimeout(async () => {
         try {
           html5QrCode = new (window as any).Html5Qrcode("qr-reader");
           const config = { fps: 15, qrbox: { width: 250, height: 250 } };
-          
           await html5QrCode.start(
             { facingMode: "environment" }, 
             config, 
@@ -1883,7 +2073,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
           setIsScanning(false);
         }
       }, 300);
-
       return () => {
         clearTimeout(timeout);
         if (html5QrCode && html5QrCode.isScanning) html5QrCode.stop().catch(console.error);
@@ -1901,7 +2090,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
             <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white">Partner Hub</h2>
             <p className="text-slate-500 text-[10px] font-black uppercase mt-1">Authorized NexRyde Partners Only</p>
         </div>
-        
         {selectedDriverId ? (
             <div className="w-full max-md glass p-10 rounded-[3rem] border border-white/10 space-y-8 animate-in zoom-in text-center">
                 <div className="flex justify-center mb-4">
@@ -1932,7 +2120,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
         ) : (
             <div className="flex flex-col items-center gap-8 w-full">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl">
-                {drivers.map((d: any) => (
+                {drivers.filter((d:any) => d.name.toLowerCase().includes(searchConfig.query.toLowerCase())).map((d: any) => (
                   <button key={d.id} onClick={() => setSelectedDriverId(d.id)} className="glass p-8 rounded-[2rem] border border-white/5 text-left transition-all hover:border-amber-500/50 group flex items-center gap-6">
                     {d.avatarUrl ? (
                       <img src={d.avatarUrl} className="w-12 h-12 rounded-full object-cover" />
@@ -1953,7 +2141,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
               </button>
             </div>
         )}
-
+        {/* Onboarding Modal ... */}
         {showRegModal && (
           <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
             <div className="glass-bright w-full max-sm:px-2 max-w-md rounded-[2.5rem] p-4 sm:p-6 space-y-4 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[95vh] no-scrollbar">
@@ -1961,7 +2149,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                   <h3 className="text-xl font-black italic tracking-tighter uppercase text-white leading-none">Partner Onboarding</h3>
                   <p className="text-indigo-400 text-[8px] font-black uppercase mt-1">Activation Fee: ₵{settings.registrationFee || '...'}</p>
                </div>
-               
                <div className="flex justify-center flex-col items-center gap-1">
                   <input type="file" id="portrait-upload" className="hidden" accept="image/*" onChange={handlePortraitUpload} />
                   <label htmlFor="portrait-upload" className={`w-16 h-16 rounded-full bg-white/5 border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-white/10 transition-all overflow-hidden relative ${portraitScanning ? 'border-indigo-500' : 'border-white/10'}`}>
@@ -1977,7 +2164,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                   </label>
                   {portraitScanning && <p className="text-[7px] font-black text-indigo-400 uppercase animate-pulse">AI Verification...</p>}
                </div>
-
                <div className="bg-indigo-600/10 p-3 rounded-xl border border-indigo-500/20 flex items-center justify-between">
                   <div className="text-left">
                     <p className="text-[7px] font-black text-slate-500 uppercase">Admin MoMo ID</p>
@@ -1986,7 +2172,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                   </div>
                   <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center text-white"><i className="fas fa-wallet text-sm"></i></div>
                </div>
-
                <div className="space-y-2.5">
                   <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Full Legal Name" value={regData.name || ''} onChange={e => setRegData({...regData, name: e.target.value})} />
                   <div className="grid grid-cols-2 gap-2.5">
@@ -2002,7 +2187,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                     <input className="w-full bg-white border border-emerald-500/30 rounded-xl px-4 py-3 outline-none font-black text-center text-emerald-600 text-xs" placeholder="Payment Ref" value={regData.momoReference || ''} onChange={e => setRegData({...regData, momoReference: e.target.value})} />
                   </div>
                </div>
-
                <div className="flex gap-3 pt-2">
                   <button onClick={() => setShowRegModal(false)} className="flex-1 py-4 bg-white/10 rounded-2xl font-black text-[10px] uppercase text-white">Abort</button>
                   <button onClick={() => { 
@@ -2017,6 +2201,11 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
       </div>
     );
   }
+
+  const filteredQualifiedNodes = qualifiedNodes.filter((n:any) => 
+    n.origin.toLowerCase().includes(searchConfig.query.toLowerCase()) ||
+    n.destination.toLowerCase().includes(searchConfig.query.toLowerCase())
+  );
 
   return (
     <div className="animate-in slide-in-from-bottom-8 space-y-12 pb-20">
@@ -2044,7 +2233,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
           <button onClick={onLogout} className="flex-1 sm:flex-none px-6 py-3 bg-rose-600/10 text-rose-500 rounded-xl text-[10px] font-black uppercase border border-rose-500/20">Sign Out</button>
         </div>
       </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-12">
            <section>
@@ -2057,16 +2245,14 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                   <i className={`fas fa-sparkles ${insightLoading ? 'animate-spin' : ''}`}></i> NexStrategy
                 </button>
               </div>
-
               {hubInsight && (
                 <div className="mb-6 p-4 bg-indigo-600 rounded-[1.5rem] border border-white/20 animate-in zoom-in text-white text-[11px] font-medium italic relative overflow-hidden text-center">
                   <i className="fas fa-lightbulb absolute right-4 top-1/2 -translate-y-1/2 text-4xl opacity-10"></i>
                   <p className="relative z-10">{hubInsight}</p>
                 </div>
               )}
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 {missions.filter(m => m.status === 'open').map(m => (
+                 {missions.filter(m => m.status === 'open' && m.location.toLowerCase().includes(searchConfig.query.toLowerCase())).map(m => (
                    <div key={m.id} className={`glass p-6 rounded-3xl border ${m.driversJoined.includes(activeDriver.id) ? 'border-emerald-500/30' : 'border-white/5'} space-y-4`}>
                       <div className="flex justify-between items-start">
                          <div className="flex items-center gap-2">
@@ -2085,11 +2271,10 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                  ))}
               </div>
            </section>
-
            <section>
               <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic mb-6">Ready for Dispatch</h3>
               <div className="space-y-4">
-                {qualifiedNodes.map((node: any) => (
+                {filteredQualifiedNodes.map((node: any) => (
                   <div key={node.id} className="glass rounded-[2rem] p-6 border transition-all flex flex-col md:flex-row items-center gap-6 border-white/5 hover:border-indigo-500/30">
                       <div className="flex-1">
                         <p className="font-black text-sm uppercase italic text-white">{node.origin} → {node.destination}</p>
@@ -2101,7 +2286,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
               </div>
            </section>
         </div>
-
         <div className="lg:col-span-4 space-y-6">
            <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic">Current Trip</h3>
            {dispatchedNodes.filter((n: any) => n.assignedDriverId === activeDriver.id).map((node: any) => (
@@ -2133,7 +2317,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
            ))}
         </div>
       </div>
-
+      {/* Driver Modals ... */}
       {isScanning && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl z-[200] flex items-center justify-center p-4">
            <div className="w-full max-lg space-y-8 animate-in zoom-in duration-300">
@@ -2157,7 +2341,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
            </div>
         </div>
       )}
-
       {showTopupModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-sm:px-4 max-w-md rounded-[2.5rem] p-8 space-y-8 animate-in zoom-in text-slate-900">
@@ -2165,7 +2348,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
               <h3 className="text-2xl font-black italic tracking-tighter uppercase text-white leading-none">Credit Acquisition</h3>
               <p className="text-slate-400 text-[10px] font-black uppercase mt-1">MoMo Verification Required</p>
             </div>
-            
             <div className="space-y-4">
                <div className="p-6 bg-amber-500/10 rounded-2xl border border-amber-500/20 text-center">
                   <p className="text-[9px] font-black text-amber-500 uppercase mb-1">NexRyde Billing ID</p>
@@ -2190,7 +2372,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
   );
 };
 
-const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onDeleteDriver, onCancelRide, onSettleRide, missions, onCreateMission, onDeleteMission, transactions, topupRequests, registrationRequests, onApproveTopup, onApproveRegistration, onLock, search, settings, onUpdateSettings, hubRevenue, adminEmail }: any) => {
+const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onDeleteDriver, onCancelRide, onSettleRide, missions, onCreateMission, onDeleteMission, transactions, topupRequests, registrationRequests, onApproveTopup, onApproveRegistration, onLock, searchConfig, settings, onUpdateSettings, hubRevenue, adminEmail }: any) => {
   const [showDriverModal, setShowDriverModal] = useState(false);
   const [showMissionModal, setShowMissionModal] = useState(false);
   const [newDriver, setNewDriver] = useState<Partial<Driver>>({ vehicleType: 'Pragia', pin: '' });
@@ -2200,7 +2382,13 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   useEffect(() => { setLocalSettings(settings); }, [settings]);
 
-  const filteredDrivers = drivers.filter((d: any) => d.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredDrivers = useMemo(() => {
+    let result = drivers.filter((d: any) => d.name.toLowerCase().includes(searchConfig.query.toLowerCase()) || d.licensePlate.toLowerCase().includes(searchConfig.query.toLowerCase()));
+    if (searchConfig.vehicleType !== 'All') {
+      result = result.filter(d => d.vehicleType === searchConfig.vehicleType);
+    }
+    return result;
+  }, [drivers, searchConfig]);
 
   const handleSettingImage = async (e: React.ChangeEvent<HTMLInputElement>, field: 'wallpaper' | 'about') => {
     const file = e.target.files?.[0];
@@ -2240,11 +2428,10 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
             <StatCard label="Qualified" value={nodes.filter((n:any) => n.status === 'qualified').length} icon="fa-bolt" color="text-emerald-400" />
             <StatCard label="Revenue" value={hubRevenue.toFixed(0)} icon="fa-money-bill" color="text-slate-400" isCurrency />
           </div>
-          
           <div className="glass rounded-[2rem] p-8 border border-white/5">
              <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-6">Live NexRyde Activity</h4>
              <div className="space-y-3">
-               {nodes.slice(0, 10).map((n: RideNode) => (
+               {nodes.filter((n:any) => n.origin.toLowerCase().includes(searchConfig.query.toLowerCase()) || n.destination.toLowerCase().includes(searchConfig.query.toLowerCase())).slice(0, 10).map((n: RideNode) => (
                  <div key={n.id} className="flex justify-between items-center bg-white/5 p-4 rounded-xl hover:bg-white/10 transition-all">
                     <div className="flex-1">
                       <p className="text-[11px] font-black text-white uppercase italic">{n.origin} → {n.destination}</p>
@@ -2298,7 +2485,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
 
       {activeTab === 'onboarding' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           {registrationRequests.filter((r:any)=>r.status==='pending').map((reg: any) => (
+           {registrationRequests.filter((r:any)=>r.status==='pending' && r.name.toLowerCase().includes(searchConfig.query.toLowerCase())).map((reg: any) => (
              <div key={reg.id} className="glass p-8 rounded-3xl border border-indigo-500/20 space-y-6 flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-start mb-4">
@@ -2326,12 +2513,6 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                 <button onClick={() => onApproveRegistration(reg.id)} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-indigo-500 mt-4 transition-all">Activate Partner</button>
              </div>
            ))}
-           {registrationRequests.filter((r:any)=>r.status==='pending').length === 0 && (
-             <div className="col-span-full py-20 text-center">
-                <i className="fas fa-id-card text-slate-800 text-4xl mb-4"></i>
-                <p className="text-slate-600 font-black uppercase text-[10px]">No pending onboarding requests</p>
-             </div>
-           )}
         </div>
       )}
 
@@ -2342,7 +2523,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
               <button onClick={() => setShowMissionModal(true)} className="px-6 py-3 bg-amber-500 text-[#020617] rounded-xl text-[9px] font-black uppercase shadow-xl">New Hotspot</button>
            </div>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {missions.map(m => (
+              {missions.filter(m => m.location.toLowerCase().includes(searchConfig.query.toLowerCase())).map(m => (
                 <div key={m.id} className="glass p-8 rounded-3xl border border-white/5 space-y-4 relative overflow-hidden group">
                    <div className="flex justify-between items-start">
                       <div>
@@ -2382,7 +2563,6 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
               <h3 className="text-xl font-black uppercase italic text-white leading-none">NexRyde Control</h3>
               <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-2">Global Logistics Engine Settings</p>
            </div>
-           
            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <section className="space-y-6">
                  <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Ride & Premium Pricing</h4>
@@ -2394,7 +2574,6 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                     <AdminInput label="Solo Premium (x)" value={localSettings.soloMultiplier} onChange={v => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
                  </div>
               </section>
-
               <section className="space-y-6">
                  <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Communication & Billing</h4>
                  <div className="space-y-4">
@@ -2404,105 +2583,10 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onD
                     <AdminInput label="Billing Name" value={localSettings.adminMomoName} onChange={v => setLocalSettings({...localSettings, adminMomoName: v})} />
                  </div>
               </section>
-
-              <section className="md:col-span-2 space-y-6">
-                 <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">NexRyde Experience & Portfolio</h4>
-                 <div className="space-y-4">
-                    <div className="space-y-2">
-                       <label className="text-[9px] font-black text-slate-600 uppercase">Experience Manifesto</label>
-                       <textarea className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-xs font-medium text-white h-32 outline-none focus:border-amber-500" value={localSettings.aboutMeText} onChange={e => setLocalSettings({...localSettings, aboutMeText: e.target.value})} />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                       <div className="space-y-4">
-                          <label className="text-[9px] font-black text-slate-600 uppercase">Brand Wallpaper</label>
-                          <input type="file" className="hidden" id="wallpaper-upload" onChange={e => handleSettingImage(e, 'wallpaper')} />
-                          <label htmlFor="wallpaper-upload" className="flex flex-col items-center justify-center aspect-video bg-white/5 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:bg-white/10 transition-all group overflow-hidden">
-                             {localSettings.appWallpaper ? <img src={localSettings.appWallpaper} className="w-full h-full object-cover" /> : <div className="text-center"><i className="fas fa-image text-2xl text-slate-700 mb-2"></i><p className="text-[8px] font-black uppercase text-slate-500">Update Brand Imagery</p></div>}
-                          </label>
-                       </div>
-                       <div className="space-y-4">
-                          <label className="text-[9px] font-black text-slate-600 uppercase">Gallery Assets</label>
-                          <input type="file" className="hidden" id="about-upload" onChange={e => handleSettingImage(e, 'about')} />
-                          <div className="grid grid-cols-3 gap-2">
-                             {localSettings.aboutMeImages.map((img, i) => (
-                               <div key={i} className="relative group aspect-square rounded-lg overflow-hidden border border-white/10">
-                                  <img src={img} className="w-full h-full object-cover" />
-                                  <button onClick={() => setLocalSettings({...localSettings, aboutMeImages: localSettings.aboutMeImages.filter((_, idx)=>idx!==i)})} className="absolute inset-0 bg-rose-600/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-all"><i className="fas fa-trash"></i></button>
-                               </div>
-                             ))}
-                             <label htmlFor="about-upload" className="aspect-square flex flex-col items-center justify-center bg-white/5 border-2 border-dashed border-white/10 rounded-lg cursor-pointer hover:bg-white/10"><i className="fas fa-plus text-slate-600"></i></label>
-                          </div>
-                       </div>
-                    </div>
-                 </div>
-              </section>
            </div>
-
            <div className="pt-8 border-t border-white/5 flex justify-end">
               <button onClick={() => onUpdateSettings(localSettings)} className="px-12 py-4 bg-amber-500 text-[#020617] rounded-2xl font-black text-xs uppercase shadow-xl hover:scale-105 transition-transform">Sync Ecosystem</button>
            </div>
-        </div>
-      )}
-
-      {pendingDeletionId && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-           <div className="glass-bright w-full max-sm:px-4 max-w-sm rounded-[2.5rem] p-10 space-y-8 animate-in zoom-in text-center">
-              <div className="w-16 h-16 bg-rose-600/10 border border-rose-500/20 rounded-full flex items-center justify-center text-rose-500 mx-auto">
-                 <i className="fas fa-user-slash text-2xl"></i>
-              </div>
-              <div className="space-y-2">
-                 <h3 className="text-xl font-black uppercase italic text-white leading-none">Deactivate Partner?</h3>
-                 <p className="text-[10px] font-black text-slate-500 uppercase">This will revoke all NexRyde terminal access immediately.</p>
-              </div>
-              <div className="flex gap-4">
-                 <button onClick={() => setPendingDeletionId(null)} className="flex-1 py-4 bg-white/5 rounded-xl font-black text-[10px] uppercase text-slate-400">Cancel</button>
-                 <button onClick={() => { onDeleteDriver(pendingDeletionId); setPendingDeletionId(null); }} className="flex-1 py-4 bg-rose-600 text-white rounded-xl font-black text-[10px] uppercase shadow-xl">Revoke Access</button>
-              </div>
-           </div>
-        </div>
-      )}
-
-      {showMissionModal && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
-          <div className="glass-bright w-full max-w-lg rounded-[2.5rem] p-8 space-y-8 animate-in zoom-in text-slate-900">
-            <h3 className="text-2xl font-black italic uppercase text-center text-white">Declare Hotspot</h3>
-            <div className="space-y-4">
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Hotspot Location Name" value={newMission.location} onChange={e => setNewMission({...newMission, location: e.target.value})} />
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Access Fee (₵)" type="number" value={newMission.entryFee} onChange={e => setNewMission({...newMission, entryFee: Number(e.target.value)})} />
-               <textarea className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-medium h-32" placeholder="Area Description & Rules" value={newMission.description} onChange={e => setNewMission({...newMission, description: e.target.value})} />
-            </div>
-            <div className="flex gap-4">
-               <button onClick={() => setShowMissionModal(false)} className="flex-1 py-4 bg-white/10 rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
-               <button onClick={() => { 
-                 if(!newMission.location || !newMission.description) { alert("All fields required."); return; }
-                 onCreateMission({ id: `MSN-${Date.now()}`, driversJoined: [], ...newMission, status: 'open', createdAt: new Date().toISOString() } as HubMission); 
-                 setShowMissionModal(false); 
-               }} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Deploy Hotspot</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showDriverModal && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
-          <div className="glass-bright w-full max-w-lg rounded-[2.5rem] p-8 lg:p-10 space-y-8 animate-in zoom-in text-slate-900">
-            <h3 className="text-2xl font-black italic uppercase text-center text-white">Register Partner Asset</h3>
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              if(!newDriver.name || !newDriver.contact || !newDriver.pin || !newDriver.licensePlate) { alert("All fields required."); return; }
-              onAddDriver(newDriver as Driver);
-              setShowDriverModal(false);
-            }} className="space-y-4">
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="Partner Full Name" onChange={e => setNewDriver({...newDriver, name: e.target.value})} />
-               <div className="grid grid-cols-2 gap-4">
-                  <select className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 outline-none font-bold" onChange={e => setNewDriver({...newDriver, vehicleType: e.target.value as VehicleType})}><option value="Pragia">Pragia</option><option value="Taxi">Taxi</option></select>
-                  <input className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 outline-none font-bold" placeholder="Asset Plate" onChange={e => setNewDriver({...newDriver, licensePlate: e.target.value})} />
-               </div>
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold" placeholder="WhatsApp Line" onChange={e => setNewDriver({...newDriver, contact: e.target.value})} />
-               <input className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-black text-center" placeholder="Partner Hub Password" onChange={e => setNewDriver({...newDriver, pin: e.target.value})} />
-               <div className="flex gap-4 pt-4"><button type="button" onClick={() => setShowDriverModal(false)} className="flex-1 py-4 bg-slate-100 rounded-xl font-black text-[10px] uppercase text-slate-400">Cancel</button><button type="submit" className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Create Partner</button></div>
-            </form>
-          </div>
         </div>
       )}
     </div>
