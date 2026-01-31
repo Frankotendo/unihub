@@ -35,6 +35,7 @@ interface Passenger {
   id: string;
   name: string;
   phone: string;
+  verificationCode?: string;
 }
 
 interface HubMission {
@@ -319,6 +320,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
   const [createMode, setCreateMode] = useState(false);
   const [newNode, setNewNode] = useState<Partial<RideNode>>({ origin: '', destination: '', vehicleType: 'Pragia', isSolo: false });
   const [fareEstimate, setFareEstimate] = useState(0);
+  const [expandedQr, setExpandedQr] = useState<string | null>(null);
 
   // Filter logic
   const filteredNodes = nodes.filter((n: RideNode) => {
@@ -397,7 +399,11 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
        {myRides.length > 0 && (
          <div className="space-y-4">
             <h3 className="text-xs font-black uppercase text-slate-500 tracking-widest px-2">My Active Trips</h3>
-            {myRides.map((node: RideNode) => (
+            {myRides.map((node: RideNode) => {
+              const myPassengerInfo = node.passengers.find(p => p.phone === currentUser.phone);
+              const myPin = myPassengerInfo?.verificationCode || node.verificationCode;
+
+              return (
               <div key={node.id} className="glass p-6 rounded-[2rem] border border-indigo-500/30 bg-indigo-900/10 relative overflow-hidden">
                  <div className="flex justify-between items-start mb-4 relative z-10">
                     <div>
@@ -414,10 +420,18 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
                     </div>
                  </div>
                  
-                 {node.assignedDriverId && node.verificationCode && (
-                    <div className="bg-black/30 p-4 rounded-xl mb-4 flex justify-between items-center">
-                       <span className="text-[10px] font-bold text-slate-400 uppercase">Your PIN</span>
-                       <span className="text-xl font-black text-white tracking-[0.5em]">{node.verificationCode}</span>
+                 {node.assignedDriverId && myPin && (
+                    <div className="bg-black/30 p-4 rounded-xl mb-4 flex items-center justify-between gap-4">
+                       <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Ride PIN</p>
+                          <p className="text-2xl font-black text-white tracking-[0.2em]">{myPin}</p>
+                          <button onClick={() => setExpandedQr(myPin)} className="mt-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[9px] font-black uppercase flex items-center gap-2 border border-white/10 transition-colors">
+                             <i className="fas fa-expand"></i> Show QR
+                          </button>
+                       </div>
+                       <div onClick={() => setExpandedQr(myPin)} className="bg-white p-2 rounded-lg cursor-pointer hover:scale-105 transition-transform">
+                          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${myPin}`} className="w-20 h-20" alt="Ride QR" />
+                       </div>
                     </div>
                  )}
 
@@ -431,7 +445,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
                     )}
                  </div>
               </div>
-            ))}
+            )})}
          </div>
        )}
 
@@ -475,6 +489,26 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
              ))}
           </div>
        </div>
+
+       {expandedQr && (
+         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-center justify-center p-6" onClick={() => setExpandedQr(null)}>
+            <div className="bg-white p-8 rounded-[2.5rem] w-full max-w-sm text-center animate-in zoom-in relative" onClick={e => e.stopPropagation()}>
+               <button onClick={() => setExpandedQr(null)} className="absolute top-4 right-4 w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200"><i className="fas fa-times"></i></button>
+               <h3 className="text-2xl font-black uppercase text-[#020617] mb-2">Scan Me</h3>
+               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-6">Present to Partner</p>
+               <div className="bg-[#020617] p-2 rounded-2xl inline-block mb-6 shadow-2xl">
+                 <div className="bg-white p-2 rounded-xl">
+                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${expandedQr}`} className="w-full aspect-square" alt="Large QR" />
+                 </div>
+               </div>
+               <div className="mb-6">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Confirmation PIN</p>
+                  <p className="text-5xl font-black text-[#020617] tracking-[0.5em]">{expandedQr}</p>
+               </div>
+               <p className="text-[10px] font-bold text-rose-500 uppercase">Only show when ready to board</p>
+            </div>
+         </div>
+       )}
     </div>
   );
 };
@@ -912,23 +946,35 @@ const App: React.FC = () => {
       return;
     }
 
+    // Generate node-level fallback code
     const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
     
+    // Generate individual codes for each passenger
+    const updatedPassengers = node.passengers.map(p => ({
+        ...p,
+        verificationCode: Math.floor(1000 + Math.random() * 9000).toString()
+    }));
+
     await supabase.from('unihub_nodes').update({ 
       status: 'dispatched', 
       assignedDriverId: driverId, 
-      verificationCode,
+      verificationCode, // Keep fallback
+      passengers: updatedPassengers, // Store individual codes
       negotiatedTotalFare: customFare || node?.negotiatedTotalFare
     }).eq('id', nodeId);
 
-    alert(customFare ? `Premium trip accepted at ₵${customFare}!` : "Ride accepted! Verification code synced.");
+    alert(customFare ? `Premium trip accepted at ₵${customFare}!` : "Ride accepted! Verification codes synced.");
   };
 
   const verifyRide = async (nodeId: string, code: string) => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
 
-    if (node.verificationCode === code) {
+    // Check master code OR passenger codes
+    const isMasterCode = node.verificationCode === code;
+    const passengerMatch = node.passengers.find(p => p.verificationCode === code);
+
+    if (isMasterCode || passengerMatch) {
       const driver = drivers.find(d => d.id === node.assignedDriverId);
       if (!driver) {
         alert("Verification error: Partner record not found.");
@@ -952,7 +998,12 @@ const App: React.FC = () => {
           }])
         ]);
         removeRideFromMyList(nodeId);
-        alert(`Ride verified! Commission of ₵${totalCommission.toFixed(2)} deducted.`);
+        
+        const successMsg = passengerMatch 
+            ? `Ride Verified! Passenger ${passengerMatch.name} confirmed. Commission deducted.` 
+            : `Ride verified! Commission of ₵${totalCommission.toFixed(2)} deducted.`;
+        
+        alert(successMsg);
       } catch (err: any) {
         console.error("Verification deduction error:", err);
         alert("Error deducting credits. Contact Admin.");
@@ -969,10 +1020,17 @@ const App: React.FC = () => {
     try {
       if (node.status === 'dispatched' && node.assignedDriverId) {
         const resetStatus = (node.isSolo || node.isLongDistance) ? 'qualified' : (node.passengers.length >= 4 ? 'qualified' : 'forming');
+        // Clear verifications on reset
+        const resetPassengers = node.passengers.map(p => {
+            const { verificationCode, ...rest } = p;
+            return rest;
+        });
+
         const { error: resetErr } = await supabase.from('unihub_nodes').update({ 
           status: resetStatus, 
           assignedDriverId: null, 
-          verificationCode: null 
+          verificationCode: null,
+          passengers: resetPassengers
         }).eq('id', nodeId);
         
         if (resetErr) throw resetErr;
