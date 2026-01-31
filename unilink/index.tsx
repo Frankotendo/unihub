@@ -149,6 +149,29 @@ const shareHub = async () => {
   }
 };
 
+const shareNode = async (node: RideNode) => {
+  const seatsLeft = node.capacityNeeded - node.passengers.length;
+  const message = node.isLongDistance 
+    ? `🚀 *NexRyde Premium Ride!* \n📍 *From:* ${node.origin}\n📍 *To:* ${node.destination}\n🚕 *Partners invited to bid!*`
+    : node.isSolo 
+    ? `🚀 *NexRyde Solo Drop!* \n📍 *Route:* ${node.origin} → ${node.destination}\n🚕 *Express Partner* needed!`
+    : `🚀 *NexRyde Group Alert!*\n📍 *Route:* ${node.origin} → ${node.destination}\n👥 *Seats Left:* ${seatsLeft}\n💰 *Price:* ₵${node.farePerPerson}/p\n\nJoin my trip on NexRyde! 👇\n${window.location.origin}`;
+
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: 'NexRyde Update',
+        text: message,
+        url: window.location.origin
+      });
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+    }
+  } catch (err) {
+    console.log('Trip share failed', err);
+  }
+};
+
 const compressImage = (file: File, quality = 0.7, maxWidth = 800): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -212,6 +235,7 @@ const App: React.FC = () => {
     isSolo: null
   });
 
+  // Track user's own rides locally
   const [myRideIds, setMyRideIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('nexryde_my_rides_v1');
@@ -275,6 +299,12 @@ const App: React.FC = () => {
 
       if (sData) {
         setSettings(sData as AppSettings);
+        const currentMsg = sData.hub_announcement || '';
+        if (currentMsg !== sessionStorage.getItem('nexryde_last_announcement')) {
+          setDismissedAnnouncement(null);
+          sessionStorage.removeItem('nexryde_dismissed_announcement');
+          sessionStorage.setItem('nexryde_last_announcement', currentMsg);
+        }
       }
       if (nData) setNodes(nData);
       if (dData) setDrivers(dData);
@@ -775,6 +805,7 @@ const App: React.FC = () => {
     setViewMode(mode);
   };
 
+  // --- GATEWAY CHECK ---
   if (!currentUser) {
     return <HubGateway onIdentify={handleGlobalUserAuth} />;
   }
@@ -793,6 +824,7 @@ const App: React.FC = () => {
         <div className="absolute inset-0 bg-[#020617]/70 pointer-events-none z-0"></div>
       )}
 
+      {/* NexRyde Announcement Bar */}
       {settings.hub_announcement && !dismissedAnnouncement && (
         <div className="fixed top-0 left-0 right-0 z-[400] bg-gradient-to-r from-amber-600 to-rose-600 px-4 py-3 flex items-center justify-between shadow-2xl animate-in slide-in-from-top duration-500 border-b border-white/10">
            <div className="flex items-center gap-3 overflow-hidden">
@@ -814,6 +846,7 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* Desktop Sidebar */}
       <nav className="hidden lg:flex w-72 glass border-r border-white/5 flex-col p-8 space-y-10 z-50">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-4">
@@ -901,6 +934,7 @@ const App: React.FC = () => {
         </div>
       </nav>
 
+      {/* Mobile Bottom Nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-20 bg-[#020617]/90 backdrop-blur-xl border-t border-white/5 z-[100] flex items-center justify-around px-4">
         <MobileNavItem active={viewMode === 'passenger'} icon="fa-user-graduate" label="Ride" onClick={() => safeSetViewMode('passenger')} />
         <MobileNavItem active={viewMode === 'driver'} icon="fa-id-card-clip" label="Drive" onClick={() => safeSetViewMode('driver')} />
@@ -916,6 +950,7 @@ const App: React.FC = () => {
         <MobileNavItem active={false} icon="fa-info-circle" label="About" onClick={() => setShowAboutModal(true)} />
       </nav>
 
+      {/* Main Content */}
       <main className={`flex-1 overflow-y-auto p-4 lg:p-10 pb-24 lg:pb-10 no-scrollbar z-10 relative transition-all duration-500 ${settings.hub_announcement && !dismissedAnnouncement ? 'pt-24 lg:pt-28' : 'pt-4 lg:pt-10'}`}>
         <div className="max-w-6xl mx-auto space-y-4 lg:space-y-6">
           
@@ -1021,6 +1056,7 @@ const App: React.FC = () => {
         </div>
       </main>
 
+      {/* NexRyde Assistant */}
       <button 
         onClick={() => setShowAiHelp(true)}
         className="fixed bottom-24 right-4 lg:bottom-12 lg:right-12 w-14 h-14 bg-gradient-to-tr from-indigo-600 to-purple-500 rounded-full shadow-2xl flex items-center justify-center text-white text-xl z-[100] hover:scale-110 transition-transform animate-bounce-slow"
@@ -1029,9 +1065,111 @@ const App: React.FC = () => {
       </button>
 
       {showAiHelp && <AiHelpDesk onClose={() => setShowAiHelp(false)} settings={settings} />}
+
+      {/* Modals ... (Qr, About, Help) */}
+      {showQrModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+           <div className="glass-bright w-full max-w-sm rounded-[3rem] p-8 space-y-6 animate-in zoom-in text-center border border-white/10">
+              <div className="space-y-1">
+                <h3 className="text-xl font-black italic uppercase tracking-tighter text-white leading-none">NexRyde Code</h3>
+                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Scan to access the platform</p>
+              </div>
+              <div className="bg-white p-4 rounded-[2rem] shadow-2xl">
+                 <img 
+                   src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(window.location.origin)}&bgcolor=ffffff&color=020617&format=svg`} 
+                   className="w-full aspect-square"
+                   alt="NexRyde QR"
+                 />
+              </div>
+              <div className="flex gap-3">
+                 <button onClick={() => setShowQrModal(false)} className="flex-1 py-3 bg-white/5 rounded-xl font-black text-[9px] uppercase text-slate-400">Close</button>
+                 <button onClick={shareHub} className="flex-1 py-3 bg-amber-500 text-[#020617] rounded-xl font-black text-[9px] uppercase shadow-xl">Share</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {showAboutModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+           <div className="glass-bright w-full max-w-2xl rounded-[2.5rem] p-6 lg:p-10 space-y-6 animate-in zoom-in border border-white/10 overflow-y-auto max-h-[90vh] no-scrollbar">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                   <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shadow-xl">
+                      <i className="fas fa-info-circle text-lg"></i>
+                   </div>
+                   <div>
+                      <h3 className="text-xl font-black italic uppercase tracking-tighter text-white leading-none">NexRyde Manifesto</h3>
+                      <p className="text-[9px] font-black text-emerald-400 uppercase tracking-widest mt-0.5">Mission & Ethics</p>
+                   </div>
+                </div>
+                <button onClick={() => setShowAboutModal(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-500 hover:text-white transition-all">
+                   <i className="fas fa-times"></i>
+                </button>
+              </div>
+              {settings.aboutMeImages.length > 0 && (
+                <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+                   {settings.aboutMeImages.map((img, i) => (
+                     <div key={i} className="min-w-[240px] h-[160px] rounded-[1.5rem] overflow-hidden border border-white/10 shadow-xl shrink-0">
+                        <img src={img} className="w-full h-full object-cover" alt="NexRyde Portfolio" />
+                     </div>
+                   ))}
+                </div>
+              )}
+              <div className="space-y-4">
+                 <div className="p-6 bg-white/5 rounded-[2rem] border border-white/10 relative overflow-hidden">
+                    <p className="text-xs lg:text-sm font-medium italic text-slate-300 leading-relaxed whitespace-pre-wrap">{settings.aboutMeText}</p>
+                 </div>
+                 <div className="grid grid-cols-2 gap-3">
+                    <a href={`https://wa.me/${settings.whatsappNumber}`} target="_blank" className="flex flex-col items-center gap-2 p-4 bg-white/5 border border-white/10 rounded-[1.5rem] hover:bg-emerald-600/10 transition-all">
+                       <i className="fab fa-whatsapp text-emerald-500 text-xl"></i>
+                       <span className="text-[8px] font-black uppercase text-slate-500">Support</span>
+                    </a>
+                    <button onClick={shareHub} className="flex flex-col items-center gap-2 p-4 bg-white/5 border border-white/10 rounded-[1.5rem] hover:bg-amber-600/10 transition-all">
+                       <i className="fas fa-share-nodes text-amber-500 text-xl"></i>
+                       <span className="text-[8px] font-black uppercase text-slate-500">Share</span>
+                    </button>
+                 </div>
+              </div>
+              <div className="pt-4 text-center">
+                 <button onClick={() => setShowAboutModal(false)} className="px-10 py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl">Close</button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {showHelpModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+          <div className="glass-bright w-full max-w-3xl rounded-[2.5rem] p-6 lg:p-10 space-y-8 animate-in zoom-in border border-white/10 overflow-y-auto max-h-[90vh] no-scrollbar">
+             <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                   <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-xl">
+                      <i className="fas fa-graduation-cap"></i>
+                   </div>
+                   <div>
+                      <h3 className="text-xl font-black italic uppercase tracking-tighter text-white leading-none">NexRyde Help</h3>
+                      <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mt-0.5">Standards v1.2</p>
+                   </div>
+                </div>
+                <button onClick={() => setShowHelpModal(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-slate-500 hover:text-white transition-all">
+                   <i className="fas fa-times text-xs"></i>
+                </button>
+             </div>
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <HelpSection icon="fa-user-graduate" title="Rider Guide" color="text-amber-500" points={["Request: Pooled (4 seats max) or Solo.","Ride PIN: Your 4-digit code. Share only at safe arrival.","Organizer: Only the creator can cancel a trip."]} />
+                <HelpSection icon="fa-id-card-clip" title="Partner Guide" color="text-indigo-400" points={["Hotspots: Zones for high volume.","Credits: Required to accept trips.","Verification: PIN or QR scan to complete."]} />
+                <HelpSection icon="fa-shield-check" title="Safety" color="text-emerald-400" points={["Identity: Clear portraits required.","Safety: Built-in detail sharing.","Support: Direct line for disputes."]} />
+             </div>
+             <div className="pt-4 flex justify-center">
+                <button onClick={() => setShowHelpModal(false)} className="px-10 py-3 bg-white/5 border border-white/10 rounded-xl font-black text-[10px] uppercase text-white hover:bg-white/10 transition-all">Acknowledge</button>
+             </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+// --- SEARCH HUB COMPONENT ---
 
 const SearchHub = ({ searchConfig, setSearchConfig, portalMode }: { searchConfig: SearchConfig, setSearchConfig: any, portalMode: PortalMode }) => {
   const [showFilters, setShowFilters] = useState(false);
@@ -1063,7 +1201,7 @@ const SearchHub = ({ searchConfig, setSearchConfig, portalMode }: { searchConfig
         <i className={`fas ${aiParsing ? 'fa-spinner fa-spin text-amber-500' : 'fa-search text-slate-500'} absolute left-5 top-1/2 -translate-y-1/2`}></i>
         <input 
           type="text" 
-          placeholder={portalMode === 'admin' ? "Search partners..." : "Search for routes..."} 
+          placeholder={portalMode === 'admin' ? "Search partners..." : "Find rides..."} 
           className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-28 text-sm font-bold text-white outline-none focus:border-amber-500 transition-all placeholder:text-slate-700"
           value={searchConfig.query}
           onChange={(e) => setSearchConfig({...searchConfig, query: e.target.value})}
@@ -1099,6 +1237,8 @@ const SearchHub = ({ searchConfig, setSearchConfig, portalMode }: { searchConfig
     </div>
   );
 };
+
+// --- AUTH GATEWAY ---
 
 const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string, m: 'login' | 'signup') => void }) => {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -1140,6 +1280,8 @@ const HubGateway = ({ onIdentify }: { onIdentify: (u: string, p: string, m: 'log
   );
 };
 
+// --- AI COMPONENTS ---
+
 const AiHelpDesk = ({ onClose, settings }: { onClose: () => void, settings: AppSettings }) => {
   const [messages, setMessages] = useState<{ role: 'user' | 'bot', text: string }[]>([
     { role: 'bot', text: "Hello! NexRyde Assistant here. How can I help?" }
@@ -1154,7 +1296,7 @@ const AiHelpDesk = ({ onClose, settings }: { onClose: () => void, settings: AppS
     setInput('');
     setLoading(true);
     try {
-      const prompt = `You are NexRyde Support AI. Admin MoMo: ${settings.adminMomo}. Question: ${userMsg}. Keep it short and use emojis.`;
+      const prompt = `You are NexRyde Support AI. Admin MoMo: ${settings.adminMomo}. Fares: Pragia ₵${settings.farePerPragia}, Taxi ₵${settings.farePerTaxi}. Question: ${userMsg}. Keep it short and use emojis.`;
       const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
       setMessages(prev => [...prev, { role: 'bot', text: response.text || "I'm offline." }]);
     } catch (err) {
@@ -1192,6 +1334,25 @@ const AiHelpDesk = ({ onClose, settings }: { onClose: () => void, settings: AppS
     </div>
   );
 };
+
+// --- HELPER COMPONENTS ---
+
+const HelpSection = ({ icon, title, points, color }: any) => (
+  <div className="space-y-3">
+     <div className="flex items-center gap-2">
+        <i className={`fas ${icon} ${color} text-xs`}></i>
+        <h4 className="font-black uppercase text-[10px] text-slate-300">{title}</h4>
+     </div>
+     <ul className="space-y-2">
+        {points.map((p: string, i: number) => (
+           <li key={i} className="flex items-start gap-2">
+              <span className="w-1 h-1 rounded-full bg-slate-700 mt-1.5 shrink-0"></span>
+              <p className="text-[10px] font-medium text-slate-400 leading-relaxed italic">{p}</p>
+           </li>
+        ))}
+     </ul>
+  </div>
+);
 
 const NavItem = ({ active, icon, label, onClick, badge }: any) => (
   <button onClick={onClick} className={`w-full flex items-center justify-between px-6 py-4 rounded-2xl transition-all ${active ? 'bg-amber-500 text-[#020617] shadow-xl' : 'text-slate-400 hover:bg-white/5'}`}>
@@ -1243,26 +1404,16 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onC
   const [aiInput, setAiInput] = useState('');
   const [aiProcessing, setAiProcessing] = useState(false);
 
-  // My Trips: Always visible, not affected by search bar
-  const myActiveNodes = useMemo(() => nodes.filter((n: any) => 
-    (myRideIds.includes(n.id) || n.leaderPhone === currentUser.phone || n.passengers.some((p:any) => p.phone === currentUser.phone)) && 
-    n.status !== 'completed'
-  ), [nodes, myRideIds, currentUser.phone]);
+  const myActiveNodes = useMemo(() => nodes.filter((n: any) => (myRideIds.includes(n.id) || n.leaderPhone === currentUser.phone || n.passengers.some((p:any) => p.phone === currentUser.phone)) && n.status !== 'completed'), [nodes, myRideIds, currentUser.phone]);
 
-  // Marketplace: Sanitized list, affected by search
   const filteredNodes = useMemo(() => {
-    let result = nodes.filter((n: any) => 
-      n.status !== 'completed' && 
-      n.status !== 'dispatched' && // Dispatched rides vanish from public view
-      !myRideIds.includes(n.id) && 
-      n.leaderPhone !== currentUser.phone && 
-      !n.isSolo && // Solo stays private
-      !n.isLongDistance && // Long Distance stays private
-      (n.destination.toLowerCase().includes(searchConfig.query.toLowerCase()) || 
-       n.origin.toLowerCase().includes(searchConfig.query.toLowerCase()))
-    );
-    if (searchConfig.vehicleType !== 'All') result = result.filter(n => n.vehicleType === searchConfig.vehicleType);
-    result = [...result].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    let result = nodes.filter((n: any) => n.status !== 'completed' && !myRideIds.includes(n.id) && n.leaderPhone !== currentUser.phone && !n.isSolo && !n.isLongDistance && (n.destination.toLowerCase().includes(searchConfig.query.toLowerCase()) || n.origin.toLowerCase().includes(searchConfig.query.toLowerCase())));
+    if (searchConfig.vehicleType !== 'All') result = result.filter(n => n.vehicleType === searchConfig.vehicleType || (n.vehicleType === undefined && searchConfig.vehicleType === 'Taxi'));
+    result = [...result].sort((a, b) => {
+      if (searchConfig.sortBy === 'price') return a.farePerPerson - b.farePerPerson;
+      if (searchConfig.sortBy === 'capacity') return b.capacityNeeded - a.capacityNeeded;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
     return result;
   }, [nodes, myRideIds, searchConfig, currentUser.phone]);
 
@@ -1270,7 +1421,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onC
     if (!aiInput.trim()) return;
     setAiProcessing(true);
     try {
-      const prompt = `Parse campus ride: "${aiInput}". JSON: { "origin": string, "destination": string, "isSolo": boolean, "vehicleType": string }`;
+      const prompt = `Parse this campus ride request into JSON: "${aiInput}". Return JSON: { "origin": string, "destination": string, "isSolo": boolean, "vehicleType": string }`;
       const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
       const data = JSON.parse(response.text || '{}');
       if (data.origin) setOrigin(data.origin);
@@ -1278,7 +1429,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onC
       if (data.isSolo !== undefined) setIsSolo(data.isSolo);
       if (data.vehicleType) setType(data.vehicleType);
       setAiInput('');
-    } catch (err) {} finally { setAiProcessing(false); }
+    } catch (err) { alert("AI couldn't parse that."); } finally { setAiProcessing(false); }
   };
 
   const createNode = async () => {
@@ -1292,11 +1443,11 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onC
       passengers: [{ id: 'P-LEAD', name: currentUser.username, phone: currentUser.phone }],
       status: (isSolo || isLongDistance) ? 'qualified' : 'forming',
       leaderName: currentUser.username, leaderPhone: currentUser.phone,
-      farePerPerson: finalFare,
+      farePerPerson: isLongDistance ? 0 : finalFare,
       createdAt: new Date().toISOString(),
       isSolo, isLongDistance, vehicleType: type
     };
-    try { await onAddNode(node); setShowModal(false); setOrigin(''); setDest(''); setIsSolo(false); } catch (err) {}
+    try { await onAddNode(node); setShowModal(false); setOrigin(''); setDest(''); setIsSolo(false); setIsLongDistance(false); } catch (err) {}
   };
 
   return (
@@ -1317,10 +1468,10 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onC
 
       {myActiveNodes.length > 0 && (
         <section className="space-y-4">
-           <h3 className="text-[9px] font-black uppercase tracking-widest text-indigo-400">My Active Trips</h3>
+           <h3 className="text-[9px] font-black uppercase tracking-widest text-indigo-400">My Trips</h3>
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
              {myActiveNodes.map((node: any) => (
-                <RideCard key={node.id} currentUser={currentUser} node={node} drivers={drivers} onJoin={onJoin} onCancel={onCancel} setJoinModalNodeId={setJoinModalNodeId} />
+                <RideCard key={node.id} currentUser={currentUser} node={node} drivers={drivers} onJoin={onJoin} onCancel={onCancel} setJoinModalNodeId={setJoinModalNodeId} isPriority />
              ))}
            </div>
         </section>
@@ -1331,10 +1482,11 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onC
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredNodes.length > 0 ? filteredNodes.map((node: any) => (
             <RideCard key={node.id} currentUser={currentUser} node={node} drivers={drivers} onJoin={onJoin} onCancel={onCancel} setJoinModalNodeId={setJoinModalNodeId} />
-          )) : <div className="col-span-full py-10 text-center border border-dashed border-white/5 rounded-[2rem] text-slate-600 font-black uppercase text-[10px]">No visible pools available</div>}
+          )) : <div className="col-span-full py-10 text-center border border-dashed border-white/5 rounded-[2rem] text-slate-600 font-black uppercase text-[10px]">No active pools</div>}
         </div>
       </section>
 
+      {/* Creation Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-w-md rounded-[2rem] p-6 space-y-4 animate-in zoom-in overflow-y-auto max-h-[90vh] no-scrollbar">
@@ -1348,8 +1500,8 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onC
               <button onClick={() => {setIsSolo(true); setIsLongDistance(false);}} className={`flex-1 py-2 rounded-md text-[8px] font-black uppercase transition-all ${isSolo ? 'bg-emerald-500 text-white' : 'text-slate-500'}`}>Solo</button>
             </div>
             <div className="space-y-2.5">
-               <div className="grid grid-cols-2 gap-2"><input className="w-full bg-white rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900" placeholder="Pickup" value={origin} onChange={e => setOrigin(e.target.value)} /><input className="w-full bg-white rounded-xl px-4 py-2.5 text-xs font-bold text-slate-900" placeholder="Drop-off" value={dest} onChange={e => setDest(e.target.value)} /></div>
-               <select className="w-full bg-white rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900" value={type} onChange={e => setType(e.target.value as VehicleType)}><option value="Pragia">Economy (Pragia)</option><option value="Taxi">Standard (Taxi)</option></select>
+               <div className="grid grid-cols-2 gap-2"><input className="w-full bg-white rounded-xl px-4 py-2.5 text-xs font-bold" placeholder="Pickup" value={origin} onChange={e => setOrigin(e.target.value)} /><input className="w-full bg-white rounded-xl px-4 py-2.5 text-xs font-bold" placeholder="Drop-off" value={dest} onChange={e => setDest(e.target.value)} /></div>
+               <select className="w-full bg-white rounded-xl px-3 py-2.5 text-xs font-bold" value={type} onChange={e => setType(e.target.value as VehicleType)}><option value="Pragia">Economy (Pragia)</option><option value="Taxi">Standard (Taxi)</option></select>
             </div>
             <div className="flex gap-2 pt-2"><button onClick={() => setShowModal(false)} className="flex-1 py-3 bg-white/5 rounded-xl font-black text-[9px] uppercase text-white">Abort</button><button onClick={createNode} className="flex-1 py-3 bg-amber-500 text-[#020617] rounded-xl font-black text-[9px] uppercase shadow-xl">Post</button></div>
           </div>
@@ -1369,12 +1521,10 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onC
   );
 };
 
-const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNodeId }: any) => {
+const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNodeId, isPriority }: any) => {
   const driver = drivers.find((d: any) => d.id === node.assignedDriverId);
   const isOrganizer = currentUser?.phone === node.leaderPhone;
-  const isMember = node.passengers.some((p: any) => p.phone === currentUser.phone);
   const tier = node.isLongDistance ? 'premium' : (node.isSolo ? 'solo' : 'pool');
-  
   const theme = useMemo(() => {
     if (tier === 'premium') return { border: 'border-indigo-500/30', accent: 'text-indigo-400', badge: 'bg-indigo-600 text-white' };
     if (tier === 'solo') return { border: 'border-emerald-500/30', accent: 'text-emerald-400', badge: 'bg-emerald-600 text-white' };
@@ -1392,12 +1542,10 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
         <div className="flex items-center gap-2"><div className={`w-1.5 h-1.5 rounded-full ${theme.accent.replace('text-', 'bg-')}`}></div><p className="text-[11px] font-black text-white truncate uppercase">{node.destination}</p></div>
       </div>
       <div className="space-y-4">
-        {tier === 'pool' && node.status === 'forming' && !isMember && (
+        {tier === 'pool' && node.status === 'forming' && (
           <div className="flex items-center justify-between"><div className="flex gap-1">{Array.from({ length: node.capacityNeeded }).map((_, i) => (<div key={i} className={`w-8 h-8 rounded-lg border flex items-center justify-center text-[8px] ${node.passengers[i] ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400' : 'bg-white/5 border-white/10 text-slate-800'}`}><i className={`fas ${node.passengers[i] ? 'fa-user' : 'fa-chair'}`}></i></div>))}</div><button onClick={() => setJoinModalNodeId(node.id)} className="px-4 py-2 bg-white/5 text-[8px] font-black uppercase rounded-lg">Join</button></div>
         )}
-        
-        {/* Verification Logic: ONLY visible to trip members */}
-        {node.status === 'dispatched' && driver && isMember && (
+        {node.status === 'dispatched' && driver && (
           <div className="space-y-3 animate-in zoom-in">
             <div className="flex items-center gap-3 bg-white/5 p-3 rounded-xl"><img src={driver.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${driver.name}`} className="w-8 h-8 rounded-full border border-white/10" /><div className="flex-1"><p className="text-[10px] font-black text-white italic truncate">{driver.name}</p><p className="text-[8px] text-slate-500 uppercase">{driver.licensePlate}</p></div><a href={`tel:${driver.contact}`} className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white"><i className="fas fa-phone text-[10px]"></i></a></div>
             <div className={`p-4 rounded-2xl text-center shadow-xl flex flex-col items-center gap-2 ${tier === 'premium' ? 'bg-indigo-600' : 'bg-amber-500'} text-white`}>
@@ -1407,19 +1555,24 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
             </div>
           </div>
         )}
-        
         {isOrganizer && node.status !== 'completed' && <button onClick={() => { if(confirm("Cancel ride?")) onCancel(node.id); }} className="w-full py-2.5 bg-rose-600/5 text-rose-500 rounded-lg text-[8px] font-black uppercase border border-rose-500/10">Abort Ride</button>}
       </div>
     </div>
   );
 };
 
-const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes, dispatchedNodes, registrationRequests, onRequestRegistration, searchConfig, settings, onAccept, onVerify }: any) => {
+const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes, dispatchedNodes, missions, allNodes, onJoinMission, onUpdateVicinity, onAccept, onVerify, onCancel, onRequestTopup, onRequestRegistration, searchConfig, settings }: any) => {
   const [selectedDriverId, setSelectedDriverId] = useState<string | null>(null);
   const [pin, setPin] = useState('');
   const [verifyCode, setVerifyCode] = useState('');
+  const [showTopupModal, setShowTopupModal] = useState(false);
   const [showRegModal, setShowRegModal] = useState(false);
+  const [topupAmount, setTopupAmount] = useState('');
+  const [momoRef, setMomoRef] = useState('');
   const [regData, setRegData] = useState<Partial<RegistrationRequest>>({ vehicleType: 'Pragia' });
+  const [isScanning, setIsScanning] = useState(false);
+  const [activeMissionNodeId, setActiveMissionNodeId] = useState<string | null>(null);
+  const [vicinityInput, setVicinityInput] = useState(activeDriver?.currentVicinity || '');
   const [portraitScanning, setPortraitScanning] = useState(false);
 
   const handlePortraitUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1430,10 +1583,10 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
       setRegData({ ...regData, avatarUrl: compressed });
       try {
         const base64 = compressed.split(',')[1];
-        const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: { parts: [{ text: "Verify portrait and extract plate JSON: { \"isPortrait\": boolean, \"licensePlate\": string | null }" }, { inlineData: { mimeType: "image/jpeg", data: base64 } }] }, config: { responseMimeType: "application/json" } });
+        const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: { parts: [{ text: "Extract license plate and verify if human portrait. JSON: { \"isPortrait\": boolean, \"licensePlate\": string | null }" }, { inlineData: { mimeType: "image/jpeg", data: base64 } }] }, config: { responseMimeType: "application/json" } });
         const visionData = JSON.parse(response.text || '{}');
         if (visionData.licensePlate) setRegData(prev => ({ ...prev, licensePlate: visionData.licensePlate }));
-        if (!visionData.isPortrait) { alert("Portrait not detected."); setRegData(prev => ({ ...prev, avatarUrl: undefined })); }
+        if (!visionData.isPortrait) { alert("Photo invalid."); setRegData(prev => ({ ...prev, avatarUrl: undefined })); }
       } catch (err) {} finally { setPortraitScanning(false); }
     }
   };
@@ -1465,28 +1618,28 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
     <div className="animate-in slide-in-from-bottom-8 space-y-8 pb-10">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-indigo-500/5 p-5 rounded-[2rem] border border-indigo-500/10">
         <div className="flex items-center gap-4"><img src={activeDriver.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${activeDriver.name}`} className="w-12 h-12 rounded-xl object-cover border border-amber-500" /><div><h2 className="text-xl font-black text-white italic">{activeDriver.name}</h2><p className="text-[9px] font-black text-amber-500 uppercase">Balance: ₵ {activeDriver.walletBalance.toFixed(2)}</p></div></div>
-        <div className="flex gap-2"><button onClick={onLogout} className="px-5 py-2.5 bg-rose-600/10 text-rose-500 rounded-xl text-[9px] font-black uppercase border border-rose-500/10">Logout</button></div>
+        <div className="flex gap-2"><button onClick={() => setShowTopupModal(true)} className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase">Top-Up</button><button onClick={onLogout} className="px-5 py-2.5 bg-rose-600/10 text-rose-500 rounded-xl text-[9px] font-black uppercase border border-rose-500/10">Logout</button></div>
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8 space-y-6">
            <section className="space-y-4">
-              <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-500">Qualified Trips</h3>
-              {qualifiedNodes.length > 0 ? qualifiedNodes.map((node: any) => (
+              <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-500">Ready Trips</h3>
+              {qualifiedNodes.map((node: any) => (
                 <div key={node.id} className="glass rounded-2xl p-4 border border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex-1 text-[10px] font-black text-white uppercase italic">{node.origin} → {node.destination} ({node.passengers.length} pax)</div>
-                    <button onClick={() => onAccept(node.id, activeDriver.id)} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase">Accept Ride</button>
+                    <div className="flex-1 text-[10px] font-black text-white uppercase italic">{node.origin} → {node.destination}</div>
+                    <button onClick={() => onAccept(node.id, activeDriver.id)} className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase">Accept</button>
                 </div>
-              )) : <p className="text-center py-10 text-[10px] uppercase font-black text-slate-600">No trips waiting for partners</p>}
+              ))}
            </section>
         </div>
         <div className="lg:col-span-4 space-y-4">
-           <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-500">Ongoing Mission</h3>
+           <h3 className="text-[9px] font-black uppercase tracking-widest text-slate-500">Current Assignment</h3>
            {dispatchedNodes.filter((n: any) => n.assignedDriverId === activeDriver.id).map((node: any) => (
               <div key={node.id} className="glass rounded-2xl p-6 border border-amber-500/20 text-center space-y-4">
                  <p className="text-[10px] font-black text-white uppercase truncate">{node.origin} to {node.destination}</p>
                  <input className="w-full bg-[#0f172a] border border-white/10 rounded-xl px-4 py-3 text-center text-3xl font-black text-white outline-none" placeholder="0000" maxLength={4} value={verifyCode} onChange={e => setVerifyCode(e.target.value)} />
-                 <button onClick={() => onVerify(node.id, verifyCode)} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase">Verify Arrival</button>
+                 <button onClick={() => onVerify(node.id, verifyCode)} className="w-full py-3 bg-emerald-600 text-white rounded-xl font-black text-[9px] uppercase">Finish</button>
               </div>
            ))}
         </div>
@@ -1495,13 +1648,14 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
   );
 };
 
-const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, searchConfig, settings, onUpdateSettings, hubRevenue, onLock }: any) => {
+const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, onAddDriver, onDeleteDriver, onCancelRide, onSettleRide, missions, onCreateMission, onDeleteMission, transactions, topupRequests, registrationRequests, onApproveTopup, onApproveRegistration, onLock, searchConfig, settings, onUpdateSettings, hubRevenue }: any) => {
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   useEffect(() => { setLocalSettings(settings); }, [settings]);
   return (
     <div className="animate-in slide-in-from-bottom-8 space-y-6 pb-10">
       <div className="flex bg-white/5 p-0.5 rounded-xl border border-white/10 overflow-x-auto no-scrollbar">
          <TabBtn active={activeTab === 'monitor'} label="Stats" onClick={() => setActiveTab('monitor')} />
+         <TabBtn active={activeTab === 'fleet'} label="Partners" onClick={() => setActiveTab('fleet')} />
          <TabBtn active={activeTab === 'settings'} label="Setup" onClick={() => setActiveTab('settings')} />
          <button onClick={onLock} className="px-4 py-2 text-rose-500"><i className="fas fa-lock text-xs"></i></button>
       </div>
@@ -1511,6 +1665,7 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, searchConfig, se
           <StatCard label="Trips" value={nodes.filter((n:any)=>n.status!=='completed').length} icon="fa-route" color="text-amber-400" />
           <StatCard label="Partners" value={drivers.length} icon="fa-users" color="text-indigo-400" />
           <StatCard label="Rev" value={hubRevenue.toFixed(0)} icon="fa-money-bill" color="text-emerald-400" isCurrency />
+          <StatCard label="Onboarding" value={registrationRequests.filter((r:any)=>r.status==='pending').length} icon="fa-plus" color="text-rose-400" />
         </div>
       )}
 
@@ -1518,9 +1673,10 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, searchConfig, se
         <div className="glass rounded-[2rem] p-8 border border-white/5 space-y-8">
            <h3 className="text-xl font-black text-white uppercase italic">Hub Setup</h3>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <AdminInput label="COMMISSION" value={localSettings.commissionPerSeat} onChange={v => setLocalSettings({...localSettings, commissionPerSeat: Number(v)})} />
               <AdminInput label="PRAGIA FARE" value={localSettings.farePerPragia} onChange={v => setLocalSettings({...localSettings, farePerPragia: Number(v)})} />
               <AdminInput label="TAXI FARE" value={localSettings.farePerTaxi} onChange={v => setLocalSettings({...localSettings, farePerTaxi: Number(v)})} />
-              <AdminInput label="SOLO MULTIPLIER" value={localSettings.soloMultiplier} onChange={v => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
+              <AdminInput label="REG FEE" value={localSettings.registrationFee} onChange={v => setLocalSettings({...localSettings, registrationFee: Number(v)})} />
            </div>
            <button onClick={() => onUpdateSettings(localSettings)} className="w-full py-4 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-xl">Save Changes</button>
         </div>
@@ -1529,8 +1685,8 @@ const AdminPortal = ({ activeTab, setActiveTab, nodes, drivers, searchConfig, se
   );
 };
 
-const TabBtn = ({ active, label, onClick }: any) => (
-  <button onClick={onClick} className={`px-5 py-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}>{label}</button>
+const TabBtn = ({ active, label, onClick, count }: any) => (
+  <button onClick={onClick} className={`px-5 py-3 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap relative ${active ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}>{label} {count !== undefined && count > 0 && <span className="ml-1 bg-rose-500 text-white text-[7px] px-1.5 py-0.5 rounded-full ring-2 ring-[#020617]">{count}</span>}</button>
 );
 
 const StatCard = ({ label, value, icon, color, isCurrency }: any) => (
@@ -1553,4 +1709,5 @@ if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<App />);
 }
+
 
