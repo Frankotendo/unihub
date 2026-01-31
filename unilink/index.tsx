@@ -92,7 +92,7 @@ interface TopupRequest {
 interface RegistrationRequest {
   id: string;
   name: string;
-  vehicleType: VehicleType;
+  vehicle_type: VehicleType;
   licensePlate: string;
   contact: string;
   pin: string;
@@ -289,7 +289,7 @@ const App: React.FC = () => {
       ] = await Promise.all([
         supabase.from('unihub_settings').select('*').single(),
         supabase.from('unihub_nodes').select('*').order('createdAt', { ascending: false }),
-        supabase.from('unihub_drivers').select('*'),
+        supabase.from('unihub_drivers').select('*').order('name', { ascending: true }),
         supabase.from('unihub_missions').select('*').order('createdAt', { ascending: false }),
         supabase.from('unihub_topups').select('*').order('timestamp', { ascending: false }),
         supabase.from('unihub_transactions').select('*').order('timestamp', { ascending: false }),
@@ -659,7 +659,7 @@ const App: React.FC = () => {
     const newDriver: Driver = {
       id: `DRV-${Date.now()}`,
       name: reg.name,
-      vehicle_type: reg.vehicleType,
+      vehicle_type: reg.vehicle_type,
       licensePlate: reg.licensePlate,
       contact: reg.contact,
       pin: reg.pin,
@@ -693,10 +693,10 @@ const App: React.FC = () => {
     alert("Application rejected.");
   };
 
-  const registerDriver = async (d: Omit<Driver, 'id' | 'walletBalance' | 'rating' | 'status' | 'vehicle_type'> & { vehicleType: VehicleType }) => {
+  const registerDriver = async (d: Omit<Driver, 'id' | 'walletBalance' | 'rating' | 'status' | 'vehicle_type'> & { vehicle_type: VehicleType }) => {
     const newDriver: Driver = {
       name: d.name,
-      vehicle_type: d.vehicleType,
+      vehicle_type: d.vehicle_type,
       licensePlate: d.licensePlate,
       contact: d.contact,
       pin: d.pin,
@@ -1071,7 +1071,6 @@ const App: React.FC = () => {
 
       {showAiHelp && <AiHelpDesk onClose={() => setShowAiHelp(false)} settings={settings} />}
 
-      {/* Rest of modals remain unchanged ... */}
       {showQrModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-sm:px-4 max-w-sm rounded-[3rem] p-10 space-y-8 animate-in zoom-in text-center border border-white/10">
@@ -1749,7 +1748,6 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
         </div>
       </section>
 
-      {/* Ride Creation Modal ... */}
       {showModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
           <div className="glass-bright w-full max-sm:px-2 max-w-lg rounded-[2.5rem] p-5 sm:p-6 lg:p-8 space-y-4 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[90vh] no-scrollbar">
@@ -1827,7 +1825,6 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
   );
 };
 
-// VISUAL THEME REWRITE: Specialized card styling based on service tier
 const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNodeId, isPriority }: any) => {
   const driver = drivers.find((d: any) => d.id === node.assignedDriverId);
   const isOrganizer = currentUser?.phone === node.leaderPhone;
@@ -1862,7 +1859,6 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
   return (
     <div className={`glass rounded-[2.5rem] p-8 border transition-all relative overflow-hidden ${themeClasses.border} ${themeClasses.glow}`}>
       
-      {/* Background Hero Icon for Premium Tiers */}
       {tier !== 'pool' && (
         <i className={`fas ${themeClasses.hero} absolute right-[-20px] top-[-20px] text-[120px] opacity-[0.03] pointer-events-none rotate-12`}></i>
       )}
@@ -2003,7 +1999,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
   const [showRegModal, setShowRegModal] = useState(false);
   const [topupAmount, setTopupAmount] = useState('');
   const [momoRef, setMomoRef] = useState('');
-  const [regData, setRegData] = useState<Partial<RegistrationRequest>>({ vehicleType: 'Pragia' });
+  const [regData, setRegData] = useState<Partial<RegistrationRequest>>({ vehicle_type: 'Pragia' });
   const [isScanning, setIsScanning] = useState(false);
   const [activeMissionNodeId, setActiveMissionNodeId] = useState<string | null>(null);
 
@@ -2158,7 +2154,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
               </button>
             </div>
         )}
-        {/* Onboarding Modal ... */}
         {showRegModal && (
           <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
             <div className="glass-bright w-full max-sm:px-2 max-w-md rounded-[2.5rem] p-4 sm:p-6 space-y-4 animate-in zoom-in text-slate-900 overflow-y-auto max-h-[95vh] no-scrollbar">
@@ -2192,7 +2187,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                <div className="space-y-2.5">
                   <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="Full Legal Name" value={regData.name || ''} onChange={e => setRegData({...regData, name: e.target.value})} />
                   <div className="grid grid-cols-2 gap-2.5">
-                    <select className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none font-bold text-xs" value={regData.vehicleType || 'Pragia'} onChange={e => setRegData({...regData, vehicleType: e.target.value as VehicleType})}>
+                    <select className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 outline-none font-bold text-xs" value={regData.vehicle_type || 'Pragia'} onChange={e => setRegData({...regData, vehicle_type: e.target.value as VehicleType})}>
                        <option value="Pragia">Economy (Pragia)</option>
                        <option value="Taxi">Standard (Taxi)</option>
                     </select>
@@ -2200,7 +2195,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                   </div>
                   <input className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-bold text-xs" placeholder="WhatsApp Contact" value={regData.contact || ''} onChange={e => setRegData({...regData, contact: e.target.value})} />
                   <div className="grid grid-cols-2 gap-2.5">
-                    <input type="password" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-black text-center text-xs" placeholder="Hub Password" value={regData.pin || ''} onChange={e => setRegData({...regData, pin: e.target.value})} />
+                    <input type="password" class="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none font-black text-center text-xs" placeholder="Hub Password" value={regData.pin || ''} onChange={e => setRegData({...regData, pin: e.target.value})} />
                     <input className="w-full bg-white border border-emerald-500/30 rounded-xl px-4 py-3 outline-none font-black text-center text-emerald-600 text-xs" placeholder="Payment Ref" value={regData.momoReference || ''} onChange={e => setRegData({...regData, momoReference: e.target.value})} />
                   </div>
                </div>
@@ -2233,7 +2228,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
               <img src={activeDriver.avatarUrl} className="w-16 h-16 rounded-2xl object-cover border border-amber-500 shadow-xl" />
             ) : (
               <div className="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center text-[#020617] shadow-xl">
-                <i className={`fas ${activeDriver.vehicleType === 'Pragia' ? 'fa-motorcycle' : 'fa-taxi'} text-2xl`}></i>
+                <i className={`fas ${activeDriver.vehicle_type === 'Pragia' ? 'fa-motorcycle' : 'fa-taxi'} text-2xl`}></i>
               </div>
             )}
             <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-[10px] text-white ring-2 ring-[#020617]">
@@ -2269,7 +2264,7 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
                 </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 {missions.filter(m => m.status === 'open' && m.location.toLowerCase().includes(searchConfig.query.toLowerCase())).map(m => (
+                 {missions.filter((m:any) => m.status === 'open' && m.location.toLowerCase().includes(searchConfig.query.toLowerCase())).map((m:any) => (
                    <div key={m.id} className={`glass p-6 rounded-3xl border ${m.driversJoined.includes(activeDriver.id) ? 'border-emerald-500/30' : 'border-white/5'} space-y-4`}>
                       <div className="flex justify-between items-start">
                          <div className="flex items-center gap-2">
@@ -2334,7 +2329,6 @@ const DriverPortal = ({ drivers, activeDriver, onLogin, onLogout, qualifiedNodes
            ))}
         </div>
       </div>
-      {/* Driver Modals ... */}
       {isScanning && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl z-[200] flex items-center justify-center p-4">
            <div className="w-full max-md space-y-8 animate-in zoom-in duration-300">
@@ -2516,7 +2510,7 @@ const AdminPortal = ({
                        )}
                        <div className="flex-1">
                           <h4 className="text-lg font-black text-white italic leading-none">{r.name}</h4>
-                          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mt-2">{r.vehicleType} | {r.licensePlate}</p>
+                          <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mt-2">{r.vehicle_type || r.vehicleType} | {r.licensePlate}</p>
                           <p className="text-[10px] text-slate-500 font-bold mt-1">WA: {r.contact}</p>
                        </div>
                     </div>
@@ -2619,29 +2613,26 @@ const AdminPortal = ({
            </div>
            
            <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
-              {/* FARES */}
               <section className="space-y-8">
                  <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-[0.4em]">FARES</h4>
                  <div className="space-y-6">
-                    <AdminInput label="COMM (C)" value={localSettings.commissionPerSeat} onChange={v => setLocalSettings({...localSettings, commissionPerSeat: Number(v)})} />
-                    <AdminInput label="REG FEE (C)" value={localSettings.registrationFee} onChange={v => setLocalSettings({...localSettings, registrationFee: Number(v)})} />
-                    <AdminInput label="PRAGIA (C)" value={localSettings.farePerPragia} onChange={v => setLocalSettings({...localSettings, farePerPragia: Number(v)})} />
-                    <AdminInput label="TAXI (C)" value={localSettings.farePerTaxi} onChange={v => setLocalSettings({...localSettings, farePerTaxi: Number(v)})} />
+                    <AdminInput label="COMM (C)" value={localSettings.commissionPerSeat} onChange={(v: string) => setLocalSettings({...localSettings, commissionPerSeat: Number(v)})} />
+                    <AdminInput label="REG FEE (C)" value={localSettings.registrationFee} onChange={(v: string) => setLocalSettings({...localSettings, registrationFee: Number(v)})} />
+                    <AdminInput label="PRAGIA (C)" value={localSettings.farePerPragia} onChange={(v: string) => setLocalSettings({...localSettings, farePerPragia: Number(v)})} />
+                    <AdminInput label="TAXI (C)" value={localSettings.farePerTaxi} onChange={(v: string) => setLocalSettings({...localSettings, farePerTaxi: Number(v)})} />
                  </div>
               </section>
 
-              {/* PAYMENT & LOGIC */}
               <section className="space-y-8">
                  <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">PAYMENT & LOGIC</h4>
                  <div className="space-y-6">
-                    <AdminInput label="MOMO" value={localSettings.adminMomo} onChange={v => setLocalSettings({...localSettings, adminMomo: v})} />
-                    <AdminInput label="WHATSAPP" value={localSettings.whatsappNumber} onChange={v => setLocalSettings({...localSettings, whatsappNumber: v})} />
-                    <AdminInput label="SOLO MULTI (X)" value={localSettings.soloMultiplier} onChange={v => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
-                    <AdminInput label="HUB ANNOUNCEMENT" value={localSettings.hub_announcement || ''} onChange={v => setLocalSettings({...localSettings, hub_announcement: v})} />
+                    <AdminInput label="MOMO" value={localSettings.adminMomo} onChange={(v: string) => setLocalSettings({...localSettings, adminMomo: v})} />
+                    <AdminInput label="WHATSAPP" value={localSettings.whatsappNumber} onChange={(v: string) => setLocalSettings({...localSettings, whatsappNumber: v})} />
+                    <AdminInput label="SOLO MULTI (X)" value={localSettings.soloMultiplier} onChange={(v: string) => setLocalSettings({...localSettings, soloMultiplier: Number(v)})} />
+                    <AdminInput label="HUB ANNOUNCEMENT" value={localSettings.hub_announcement || ''} onChange={(v: string) => setLocalSettings({...localSettings, hub_announcement: v})} />
                  </div>
               </section>
 
-              {/* VISUALS & INFO */}
               <section className="space-y-8">
                  <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em]">VISUALS & INFO</h4>
                  <div className="space-y-6">
@@ -2707,8 +2698,8 @@ const AdminPortal = ({
            <div className="glass-bright w-full max-w-md rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in text-white">
               <h3 className="text-xl font-black italic uppercase text-center">Deploy Hub Hotspot</h3>
               <div className="space-y-4">
-                 <AdminInput label="LOCATION NAME" value={newMission.location} onChange={v => setNewMission({...newMission, location: v})} />
-                 <AdminInput label="ENTRY FEE (₵)" value={newMission.entryFee} type="number" onChange={v => setNewMission({...newMission, entryFee: Number(v)})} />
+                 <AdminInput label="LOCATION NAME" value={newMission.location} onChange={(v: string) => setNewMission({...newMission, location: v})} />
+                 <AdminInput label="ENTRY FEE (₵)" value={newMission.entryFee} type="number" onChange={(v: string) => setNewMission({...newMission, entryFee: Number(v)})} />
                  <div className="space-y-2">
                     <label className="text-[8px] font-black text-slate-500 uppercase">STRATEGY DESCRIPTION</label>
                     <textarea 
@@ -2731,10 +2722,10 @@ const AdminPortal = ({
             <div className="glass-bright w-full max-w-md rounded-[2.5rem] p-8 space-y-6 animate-in zoom-in text-white">
                <h3 className="text-xl font-black italic uppercase text-center">Manual Partner Entry</h3>
                <div className="space-y-4">
-                  <AdminInput label="FULL NAME" value={newDriver.name || ''} onChange={v => setNewDriver({...newDriver, name: v})} />
-                  <AdminInput label="LICENSE PLATE" value={newDriver.licensePlate || ''} onChange={v => setNewDriver({...newDriver, licensePlate: v})} />
-                  <AdminInput label="CONTACT" value={newDriver.contact || ''} onChange={v => setNewDriver({...newDriver, contact: v})} />
-                  <AdminInput label="PIN" value={newDriver.pin || ''} type="password" onChange={v => setNewDriver({...newDriver, pin: v})} />
+                  <AdminInput label="FULL NAME" value={newDriver.name || ''} onChange={(v: string) => setNewDriver({...newDriver, name: v})} />
+                  <AdminInput label="LICENSE PLATE" value={newDriver.licensePlate || ''} onChange={(v: string) => setNewDriver({...newDriver, licensePlate: v})} />
+                  <AdminInput label="CONTACT" value={newDriver.contact || ''} onChange={(v: string) => setNewDriver({...newDriver, contact: v})} />
+                  <AdminInput label="PIN" value={newDriver.pin || ''} type="password" onChange={(v: string) => setNewDriver({...newDriver, pin: v})} />
                   <div className="grid grid-cols-2 gap-4">
                      <div className="space-y-2">
                         <label className="text-[8px] font-black text-slate-500 uppercase">ASSET TYPE</label>
@@ -2755,7 +2746,7 @@ const AdminPortal = ({
 
       {pendingDeletionId && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-           <div className="glass-bright w-full max-w-sm rounded-[2.5rem] p-8 space-y-8 animate-in zoom-in text-center">
+           <div className="glass-bright w-full max-sm:px-4 max-w-sm rounded-[2.5rem] p-8 space-y-8 animate-in zoom-in text-center">
               <div className="w-20 h-20 bg-rose-600/10 rounded-[2rem] flex items-center justify-center text-rose-500 mx-auto border border-rose-500/20">
                  <i className="fas fa-user-slash text-3xl"></i>
               </div>
