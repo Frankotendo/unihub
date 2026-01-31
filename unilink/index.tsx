@@ -1282,26 +1282,8 @@ const SearchHub = ({ searchConfig, setSearchConfig, portalMode }: { searchConfig
               </select>
            </div>
 
-           {portalMode === 'passenger' && (
-             <div className="flex flex-col gap-2">
-                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Drop Type</span>
-                <div className="flex gap-2">
-                   <button 
-                     onClick={() => setSearchConfig({...searchConfig, isSolo: searchConfig.isSolo === true ? null : true})}
-                     className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase border transition-all ${searchConfig.isSolo === true ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white/5 text-slate-500 border-white/10'}`}
-                   >
-                     Solo Only
-                   </button>
-                   <button 
-                     onClick={() => setSearchConfig({...searchConfig, isSolo: searchConfig.isSolo === false ? null : false})}
-                     className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase border transition-all ${searchConfig.isSolo === false ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-white/5 text-slate-500 border-white/10'}`}
-                   >
-                     Pools Only
-                   </button>
-                </div>
-             </div>
-           )}
-
+           {/* REMOVED: 'Drop Type' (Solo/Pool) selector for passengers since market is strictly pools */}
+           
            <button 
              onClick={() => setSearchConfig({ query: '', vehicleType: 'All', status: 'All', sortBy: 'newest', isSolo: null })}
              className="ml-auto text-[8px] font-black text-rose-500 uppercase underline tracking-widest"
@@ -1569,13 +1551,14 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
   ), [nodes, myRideIds, currentUser.phone]);
 
   // MARKETPLACE LOGIC FIX: Hide private Solo/Premium rides from the general traffic
+  // STRICTLY only show pools that I am NOT already in.
   const filteredNodes = useMemo(() => {
     let result = nodes.filter((n: any) => 
-      n.status === 'forming' && // FIX: Only show forming pools. Dispatched/qualified/completed are private.
-      !myRideIds.includes(n.id) &&
-      n.leaderPhone !== currentUser.phone && // Don't show your own request in the market
-      !n.isSolo && // Solo rides are private
-      !n.isLongDistance && // Long distance requests are private dispatch only
+      n.status === 'forming' &&
+      !n.isSolo && // STRICT: Never show Solo rides in the pool marketplace
+      !n.isLongDistance && // STRICT: Never show Premium rides in the pool marketplace
+      n.leaderPhone !== currentUser.phone && // Not my ride
+      !n.passengers.some((p:any) => p.phone === currentUser.phone) && // I am not currently a passenger in this ride
       (n.destination.toLowerCase().includes(searchConfig.query.toLowerCase()) || 
        n.origin.toLowerCase().includes(searchConfig.query.toLowerCase()) ||
        n.leaderName.toLowerCase().includes(searchConfig.query.toLowerCase()))
@@ -1593,7 +1576,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onF
     });
 
     return result;
-  }, [nodes, myRideIds, searchConfig, currentUser.phone]);
+  }, [nodes, searchConfig, currentUser.phone]);
 
   const handleAiFill = async () => {
     if (!aiInput.trim()) return;
@@ -1817,7 +1800,7 @@ const RideCard = ({ currentUser, node, drivers, onJoin, onCancel, setJoinModalNo
   
   // Security Check: Is the current user actually in this ride?
   const isParticipant = useMemo(() => {
-    return node.passengers.some((p: any) => p.phone === currentUser?.phone);
+    return currentUser && node.passengers.some((p: any) => p.phone === currentUser.phone);
   }, [node.passengers, currentUser]);
 
   // Determine Tiers
