@@ -124,6 +124,7 @@ interface AppSettings {
   aboutMeText: string;
   aboutMeImages: string[]; // Base64 strings
   appWallpaper?: string; // Base64 string
+  appLogo?: string; // Base64 string for custom logo
   registrationFee: number;
   hub_announcement?: string;
   // AdSense Config
@@ -138,7 +139,7 @@ interface AppSettings {
 const shareHub = async () => {
   const shareData = {
     title: 'NexRyde Dispatch',
-    text: 'Join the smartest ride-sharing platform on campus! Form groups, save costs, and move fast.',
+    text: 'Join the smartest ride-sharing platform! Form groups, save costs, and move fast.',
     url: window.location.origin,
   };
 
@@ -322,7 +323,7 @@ const AdGate = ({ onUnlock, label, settings }: { onUnlock: () => void, label: st
   );
 };
 
-const HubGateway = ({ onIdentify }: { onIdentify: (username: string, phone: string, mode: 'login' | 'signup') => void }) => {
+const HubGateway = ({ onIdentify, settings }: { onIdentify: (username: string, phone: string, mode: 'login' | 'signup') => void, settings: AppSettings }) => {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [username, setUsername] = useState('');
   const [phone, setPhone] = useState('');
@@ -332,11 +333,15 @@ const HubGateway = ({ onIdentify }: { onIdentify: (username: string, phone: stri
       <div className="absolute inset-0 bg-gradient-to-tr from-indigo-900/20 to-purple-900/20"></div>
       <div className="glass-bright w-full max-w-md p-8 rounded-[3rem] border border-white/10 relative z-10 animate-in zoom-in duration-500">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-tr from-amber-400 to-orange-500 rounded-2xl mx-auto flex items-center justify-center shadow-2xl shadow-orange-500/20 mb-4">
-             <i className="fas fa-route text-[#020617] text-3xl"></i>
-          </div>
+          {settings.appLogo ? (
+            <img src={settings.appLogo} className="w-24 h-24 object-contain mx-auto mb-4 drop-shadow-2xl" alt="Logo" />
+          ) : (
+            <div className="w-16 h-16 bg-gradient-to-tr from-amber-400 to-orange-500 rounded-2xl mx-auto flex items-center justify-center shadow-2xl shadow-orange-500/20 mb-4">
+               <i className="fas fa-route text-[#020617] text-3xl"></i>
+            </div>
+          )}
           <h1 className="text-3xl font-black italic uppercase tracking-tighter text-white">NexRyde</h1>
-          <p className="text-xs font-black text-amber-500 uppercase tracking-widest mt-2">Campus Transit Network</p>
+          <p className="text-xs font-black text-amber-500 uppercase tracking-widest mt-2">Transit Excellence</p>
         </div>
 
         <div className="space-y-4">
@@ -874,6 +879,7 @@ const App: React.FC = () => {
     aboutMeText: "Welcome to NexRyde Logistics.",
     aboutMeImages: [],
     appWallpaper: "",
+    appLogo: "",
     registrationFee: 20.00,
     hub_announcement: "",
     // Default AdSense keys (fallback/example)
@@ -1494,7 +1500,7 @@ const App: React.FC = () => {
 
   // --- GATEWAY CHECK ---
   if (!currentUser) {
-    return <HubGateway onIdentify={handleGlobalUserAuth} />;
+    return <HubGateway onIdentify={handleGlobalUserAuth} settings={settings} />;
   }
 
   return (
@@ -1535,9 +1541,13 @@ const App: React.FC = () => {
       <nav className="hidden lg:flex w-72 glass border-r border-white/5 flex-col p-8 space-y-10 z-50">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center shadow-xl">
-              <i className="fas fa-route text-[#020617] text-xl"></i>
-            </div>
+            {settings.appLogo ? (
+              <img src={settings.appLogo} className="w-12 h-12 object-contain rounded-xl bg-white/5 p-1 border border-white/10" alt="Logo" />
+            ) : (
+              <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center shadow-xl">
+                <i className="fas fa-route text-[#020617] text-xl"></i>
+              </div>
+            )}
             <div>
               <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none text-white">NexRyde</h1>
               <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mt-1">Transit Excellence</p>
@@ -2212,13 +2222,15 @@ function AdminPortal({
     setEditSettings(settings);
   }, [settings]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'appWallpaper' | 'aboutMeImages') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'appWallpaper' | 'aboutMeImages' | 'appLogo') => {
     const file = e.target.files?.[0];
     if (file) {
       try {
         const compressed = await compressImage(file, 0.6, 800);
         if (field === 'appWallpaper') {
           setEditSettings({ ...editSettings, appWallpaper: compressed });
+        } else if (field === 'appLogo') {
+          setEditSettings({ ...editSettings, appLogo: compressed });
         } else {
           setEditSettings({ ...editSettings, aboutMeImages: [...(editSettings.aboutMeImages || []), compressed] });
         }
@@ -2384,6 +2396,13 @@ function AdminPortal({
                    <div className="space-y-4">
                       <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Visuals</h3>
                       <div>
+                         <label className="text-[8px] text-slate-500 uppercase font-bold mb-1 block">App Logo</label>
+                         <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'appLogo')} className="hidden" id="logo-upload" />
+                         <label htmlFor="logo-upload" className="w-full h-20 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all bg-center bg-contain bg-no-repeat mb-4" style={editSettings.appLogo ? {backgroundImage: `url(${editSettings.appLogo})`} : {}}>
+                            {!editSettings.appLogo && <><i className="fas fa-camera text-slate-500 mb-1"></i><span className="text-[8px] font-bold text-slate-600 uppercase">Upload Logo</span></>}
+                         </label>
+                         {editSettings.appLogo && <button onClick={() => setEditSettings({...editSettings, appLogo: ''})} className="text-[8px] text-rose-500 uppercase font-bold underline mb-4">Remove Logo</button>}
+
                          <label className="text-[8px] text-slate-500 uppercase font-bold mb-1 block">App Wallpaper</label>
                          <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'appWallpaper')} className="hidden" id="wallpaper-upload" />
                          <label htmlFor="wallpaper-upload" className="w-full h-20 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all bg-center bg-cover" style={editSettings.appWallpaper ? {backgroundImage: `url(${editSettings.appWallpaper})`} : {}}>
