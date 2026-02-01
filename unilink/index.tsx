@@ -212,29 +212,6 @@ const shareHub = async () => {
   }
 };
 
-const shareNode = async (node: RideNode) => {
-  const seatsLeft = node.capacityNeeded - node.passengers.length;
-  const message = node.isLongDistance 
-    ? `🚀 *NexRyde Premium Ride!* \n📍 *From:* ${node.origin}\n📍 *To:* ${node.destination}\n🚕 *Partners invited to bid!*`
-    : node.isSolo 
-    ? `🚀 *NexRyde Solo Drop!* \n📍 *Route:* ${node.origin} → ${node.destination}\n🚕 *Express Partner* needed!`
-    : `🚀 *NexRyde Group Alert!*\n📍 *Route:* ${node.origin} → ${node.destination}\n👥 *Seats Left:* ${seatsLeft}\n💰 *Price:* ₵${node.farePerPerson}/p\n\nJoin my trip on NexRyde! 👇\n${window.location.origin}`;
-
-  try {
-    if (navigator.share) {
-      await navigator.share({
-        title: 'NexRyde Update',
-        text: message,
-        url: window.location.origin
-      });
-    } else {
-      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
-    }
-  } catch (err) {
-    console.log('Trip share failed', err);
-  }
-};
-
 const compressImage = (file: File, quality = 0.6, maxWidth = 800): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1450,7 +1427,7 @@ const DriverPortal = ({
   const isShuttle = activeDriver?.vehicleType === 'Shuttle';
   const estimatedCapacity = parseInt(broadcastData.seats) || 0;
   const commissionRate = settings?.commissionPerSeat || 0;
-  const requiredBalanceForBroadcast = isShuttle ? (estimatedCapacity * commissionRate) : 0; // Only strictly enforce for shuttles pre-broadcast
+  const requiredBalanceForBroadcast = isShuttle ? (estimatedCapacity * commissionRate) : 0; 
   const canAffordBroadcast = activeDriver ? (activeDriver.walletBalance >= requiredBalanceForBroadcast) : false;
 
   if (!activeDriver) {
@@ -1717,11 +1694,11 @@ const DriverPortal = ({
                           <input value={broadcastData.note} onChange={e => setBroadcastData({...broadcastData, note: e.target.value})} placeholder="Note (e.g. Leaving in 5 mins)" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" />
                           
                           {/* Anti-Cheat Warning */}
-                          {isShuttle && !canAffordBroadcast && (
+                          {isShuttle && (
                              <div className="p-4 bg-rose-500/10 rounded-xl border border-rose-500/20 text-center">
-                                <p className="text-[10px] font-black text-rose-500 uppercase mb-1">Insufficient Wallet Balance</p>
+                                <p className="text-[10px] font-black text-rose-500 uppercase mb-1">Prepayment Required</p>
                                 <p className="text-[9px] text-slate-400">
-                                   To prevent fraud, you must have at least <b>₵{requiredBalanceForBroadcast.toFixed(2)}</b> in your wallet to broadcast {broadcastData.seats} seats.
+                                   Shuttle commission (₵{(estimatedCapacity * commissionRate).toFixed(2)}) is deducted <b>immediately</b> upon broadcast to reserve slots.
                                 </p>
                              </div>
                           )}
@@ -1731,7 +1708,7 @@ const DriverPortal = ({
                             disabled={!canAffordBroadcast && isShuttle}
                             className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all ${!canAffordBroadcast && isShuttle ? 'bg-white/5 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
                           >
-                             Broadcast Route
+                             {(!canAffordBroadcast && isShuttle) ? 'Insufficient Funds' : 'Broadcast Route'}
                           </button>
                       </div>
                   </div>
@@ -2620,55 +2597,75 @@ const App: React.FC = () => {
       if (node.assignedDriverId) {
         // REFUND LOGIC
         const driver = drivers.find(d => d.id === node.assignedDriverId);
-        // Only refund if dispatched (paid)
+        const isShuttle = node.vehicleType === 'Shuttle';
+        
+        // Handle refund for dispatched rides
         if (driver && node.status === 'dispatched') {
-             const totalCommission = settings.commissionPerSeat * node.passengers.length;
+             // For Shuttles that broadcasted, refund based on capacity. 
+             // For accepted rides (rare for shuttle but possible) or other cars, refund based on pax.
+             const isBroadcast = node.leaderPhone === driver.contact;
+             let refundAmount = 0;
+             
+             if (isShuttle && isBroadcast) {
+                 refundAmount = node.capacityNeeded * settings.commissionPerSeat;
+             } else {
+                 refundAmount = settings.commissionPerSeat * node.passengers.length;
+             }
+
              await Promise.all([
                  supabase.from('unihub_drivers').update({ 
-                     walletBalance: driver.walletBalance + totalCommission 
+                     walletBalance: driver.walletBalance + refundAmount 
                  }).eq('id', driver.id),
                  supabase.from('unihub_transactions').insert([{
                     id: `TX-REFUND-${Date.now()}`,
                     driverId: driver.id,
-                    amount: totalCommission,
+                    amount: refundAmount,
                     type: 'topup',
                     timestamp: new Date().toLocaleString()
                  }])
              ]);
         }
 
-        // If it was a broadcast, delete it completely. If it was an accepted ride, reset it.
-        // We can distinguish: broadcast nodes usually have leaderName same as driver or no passengers initially.
-        // Or cleaner: If assignedDriverId was set at creation, we delete. But we don't have that flag.
-        // Simplification: If driver cancels, we delete the broadcast if it's forming/qualified, or reset if dispatched?
-        // Let's just reset standard rides and delete broadcasts if empty.
-        
-        if (node.status === 'forming' && node.passengers.length === 0) {
+        // Handle refund/cancel for forming broadcast
+        const isBroadcast = node.leaderPhone === driver?.contact;
+        if (isBroadcast || (node.status === 'forming' && node.passengers.length === 0)) {
+            // If dispatched, we handled refund above. If forming/qualified, we handle here.
+            if (node.status !== 'dispatched') {
+                if (isShuttle && isBroadcast && driver) {
+                     const refundAmount = node.capacityNeeded * settings.commissionPerSeat;
+                     await Promise.all([
+                        supabase.from('unihub_drivers').update({ walletBalance: driver.walletBalance + refundAmount }).eq('id', driver.id),
+                        supabase.from('unihub_transactions').insert([{
+                            id: `TX-REFUND-PRE-${Date.now()}`,
+                            driverId: driver.id,
+                            amount: refundAmount,
+                            type: 'topup',
+                            timestamp: new Date().toLocaleString()
+                        }])
+                    ]);
+                }
+            }
+
             await supabase.from('unihub_nodes').delete().eq('id', nodeId);
-            alert("Broadcast cancelled.");
+            alert("Trip cancelled" + (isShuttle && isBroadcast ? " and commission refunded." : "."));
             return;
         }
 
+        // Reset logic for regular rides
         const resetStatus = (node.isSolo || node.isLongDistance) ? 'qualified' : (node.passengers.length >= 4 ? 'qualified' : 'forming');
         const resetPassengers = node.passengers.map(p => {
             const { verificationCode, ...rest } = p;
             return rest;
         });
 
-        // Check if I am the leader (Broadcast case)
-        if (node.leaderPhone === driver?.contact) {
-            await supabase.from('unihub_nodes').delete().eq('id', nodeId);
-            alert("Trip cancelled and removed.");
-        } else {
-            const { error: resetErr } = await supabase.from('unihub_nodes').update({ 
-              status: resetStatus, 
-              assignedDriverId: null, 
-              verificationCode: null,
-              passengers: resetPassengers
-            }).eq('id', nodeId);
-            if (resetErr) throw resetErr;
-            alert("Trip assignment reset. Commission refunded.");
-        }
+        const { error: resetErr } = await supabase.from('unihub_nodes').update({ 
+            status: resetStatus, 
+            assignedDriverId: null, 
+            verificationCode: null,
+            passengers: resetPassengers
+        }).eq('id', nodeId);
+        if (resetErr) throw resetErr;
+        alert("Trip assignment reset. Commission refunded.");
 
       } else {
         const { error: deleteErr } = await supabase.from('unihub_nodes').delete().eq('id', nodeId);
@@ -2696,6 +2693,15 @@ const App: React.FC = () => {
           return;
       }
 
+      // --- NEW LOGIC: Shuttle Prepayment ---
+      const isShuttle = driver?.vehicleType === 'Shuttle';
+      const commissionAmount = isShuttle ? (capacity * settings.commissionPerSeat) : 0;
+      
+      if (isShuttle && (driver?.walletBalance || 0) < commissionAmount) {
+         alert(`Insufficient Wallet Balance. Shuttle broadcasts require prepaid commission of ₵${commissionAmount.toFixed(2)}.`);
+         return;
+      }
+
       const node: RideNode = {
           id: `NODE-DRV-${Date.now()}`,
           origin: data.origin,
@@ -2712,10 +2718,30 @@ const App: React.FC = () => {
           driverNote: data.note
       };
       
-      const { error } = await supabase.from('unihub_nodes').insert([node]);
-      if(error) alert(error.message);
-      else { 
-          alert("Route broadcasted to passengers!"); 
+      try {
+          // --- DEDUCT UPFRONT FOR SHUTTLES ---
+          if (isShuttle && driver) {
+             const { error } = await supabase.from('unihub_drivers').update({ walletBalance: driver.walletBalance - commissionAmount }).eq('id', driver.id);
+             if (error) throw error;
+             
+             await supabase.from('unihub_transactions').insert([{
+                id: `TX-COMM-PRE-${Date.now()}`,
+                driverId: driver.id,
+                amount: commissionAmount,
+                type: 'commission',
+                timestamp: new Date().toLocaleString()
+             }]);
+          }
+
+          const { error } = await supabase.from('unihub_nodes').insert([node]);
+          if(error) {
+             // In a real app, we would rollback transaction here
+             throw error;
+          }
+          
+          alert(isShuttle ? `Route broadcasted! ₵${commissionAmount.toFixed(2)} commission prepaid.` : "Route broadcasted to passengers!"); 
+      } catch(e: any) {
+          alert("Broadcast failed: " + e.message);
       }
   };
 
@@ -2729,11 +2755,15 @@ const App: React.FC = () => {
         return;
     }
 
+    const isShuttle = node.vehicleType === 'Shuttle';
     const totalCommission = settings.commissionPerSeat * node.passengers.length;
     
-    if (driver.walletBalance < totalCommission) {
-        alert(`Insufficient funds. Need ₵${totalCommission} for ${node.passengers.length} passengers.`);
-        return;
+    // Only check and deduct funds if NOT shuttle (shuttles paid upfront based on capacity)
+    if (!isShuttle) {
+        if (driver.walletBalance < totalCommission) {
+            alert(`Insufficient funds. Need ₵${totalCommission} for ${node.passengers.length} passengers.`);
+            return;
+        }
     }
 
     const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
@@ -2742,23 +2772,33 @@ const App: React.FC = () => {
         verificationCode: Math.floor(1000 + Math.random() * 9000).toString()
     }));
 
-    await Promise.all([
+    // Use any[] to accommodate Supabase PostgrestBuilder which is thenable but not strictly a Promise
+    const updates: any[] = [
         supabase.from('unihub_nodes').update({
             status: 'dispatched',
             verificationCode,
             passengers: updatedPassengers,
-        }).eq('id', nodeId),
-        supabase.from('unihub_drivers').update({
-            walletBalance: driver.walletBalance - totalCommission
-        }).eq('id', driver.id),
-        supabase.from('unihub_transactions').insert([{
-             id: `TX-COMM-${Date.now()}`,
-             driverId: driver.id,
-             amount: totalCommission,
-             type: 'commission',
-             timestamp: new Date().toLocaleString()
-        }])
-    ]);
+        }).eq('id', nodeId)
+    ];
+
+    if (!isShuttle) {
+        updates.push(
+            supabase.from('unihub_drivers').update({
+                walletBalance: driver.walletBalance - totalCommission
+            }).eq('id', driver.id)
+        );
+        updates.push(
+            supabase.from('unihub_transactions').insert([{
+                 id: `TX-COMM-${Date.now()}`,
+                 driverId: driver.id,
+                 amount: totalCommission,
+                 type: 'commission',
+                 timestamp: new Date().toLocaleString()
+            }])
+        );
+    }
+
+    await Promise.all(updates);
     alert("Trip started! Passengers notified with codes.");
   };
 
