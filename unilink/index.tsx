@@ -2040,6 +2040,11 @@ const AdminPortal = ({
               </div>
 
               <div>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">WhatsApp Support Number</label>
+                  <input value={localSettings.whatsappNumber} onChange={e => setLocalSettings({...localSettings, whatsappNumber: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold" placeholder="e.g. 23324..." />
+              </div>
+
+              <div>
                   <label className="text-[9px] font-bold text-slate-500 uppercase">System Announcement</label>
                   <textarea value={localSettings.hub_announcement || ''} onChange={e => setLocalSettings({...localSettings, hub_announcement: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs h-20" placeholder="Broadcast message..." />
               </div>
@@ -3381,7 +3386,7 @@ const App: React.FC = () => {
                     <p className="text-sm lg:text-base font-medium italic text-slate-300 leading-relaxed relative z-10 whitespace-pre-wrap">{settings.aboutMeText}</p>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
-                    <a href={`https://wa.me/${settings.whatsappNumber}`} target="_blank" className="flex flex-col items-center gap-3 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-emerald-600/10 hover:border-emerald-500/30 transition-all group">
+                    <a href={`https://wa.me/${settings.whatsappNumber.replace(/[^0-9]/g, '')}`} target="_blank" className="flex flex-col items-center gap-3 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-emerald-600/10 hover:border-emerald-500/30 transition-all group">
                        <i className="fab fa-whatsapp text-emerald-500 text-2xl group-hover:scale-110 transition-transform"></i>
                        <span className="text-[9px] font-black uppercase text-slate-500">Partner Support</span>
                     </a>
