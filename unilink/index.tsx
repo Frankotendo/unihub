@@ -1429,9 +1429,8 @@ const DriverPortal = ({
   settings,
   onUpdateStatus 
 }: any) => {
-  const [loginId, setLoginId] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPin, setLoginPin] = useState('');
-  const [driverSearch, setDriverSearch] = useState(''); // New Search State
   const [isScanning, setIsScanning] = useState<string | null>(null);
   const [showManualEntry, setShowManualEntry] = useState(false);
   
@@ -1457,13 +1456,6 @@ const DriverPortal = ({
   const commissionRate = settings?.commissionPerSeat || 0;
   const requiredBalanceForBroadcast = isShuttle ? (estimatedCapacity * commissionRate) : 0; 
   const canAffordBroadcast = activeDriver ? (activeDriver.walletBalance >= requiredBalanceForBroadcast) : false;
-
-  // Filtered Drivers for Login
-  const filteredDrivers = drivers.filter((d: Driver) => 
-     d.name.toLowerCase().includes(driverSearch.toLowerCase()) || 
-     d.contact.includes(driverSearch) ||
-     d.licensePlate.toLowerCase().includes(driverSearch.toLowerCase())
-  );
 
   if (!activeDriver) {
       if (regMode) {
@@ -1528,47 +1520,48 @@ const DriverPortal = ({
                 <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1">Authorized Personnel Only</p>
              </div>
              
-             {/* Smart Driver Search */}
-             {!loginId ? (
-                <div className="space-y-3">
-                   <div className="relative">
-                      <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
-                      <input 
+             {/* Manual Driver Login */}
+             <div className="space-y-4 animate-in slide-in-from-right">
+                <div className="text-left space-y-3">
+                   <div>
+                       <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Partner ID</label>
+                       <input 
                          type="text" 
-                         value={driverSearch} 
-                         onChange={e => setDriverSearch(e.target.value)} 
-                         placeholder="Search Name or Phone" 
-                         className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white font-bold outline-none text-xs focus:border-indigo-500 transition-colors" 
-                      />
+                         value={loginIdentifier} 
+                         onChange={e => setLoginIdentifier(e.target.value)} 
+                         placeholder="Phone Number or Exact Name" 
+                         className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs focus:border-indigo-500 transition-colors" 
+                       />
                    </div>
-                   <div className="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                      {filteredDrivers.map((d: Driver) => (
-                         <div key={d.id} onClick={() => setLoginId(d.id)} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 cursor-pointer hover:bg-white/10 transition-colors text-left">
-                            <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-black text-white shrink-0">
-                               {d.name.substring(0,2).toUpperCase()}
-                            </div>
-                            <div className="overflow-hidden">
-                               <p className="text-xs font-bold text-white truncate">{d.name}</p>
-                               <p className="text-[9px] text-slate-400 truncate">{d.licensePlate} • {d.vehicleType}</p>
-                            </div>
-                         </div>
-                      ))}
-                      {filteredDrivers.length === 0 && <p className="text-[10px] text-slate-500 py-2">No partners found.</p>}
+                   <div>
+                       <label className="text-[10px] font-black uppercase text-slate-500 ml-2">Security PIN</label>
+                       <input 
+                         type="password" 
+                         maxLength={4} 
+                         value={loginPin} 
+                         onChange={e => setLoginPin(e.target.value)} 
+                         placeholder="4-Digit PIN" 
+                         className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs text-center tracking-widest focus:border-indigo-500" 
+                       />
                    </div>
                 </div>
-             ) : (
-                <div className="space-y-4 animate-in slide-in-from-right">
-                   <div className="flex items-center gap-3 p-3 bg-indigo-600/20 border border-indigo-500/30 rounded-xl text-left">
-                       <div className="flex-1">
-                          <p className="text-[9px] font-black uppercase text-indigo-300">Selected Profile</p>
-                          <p className="text-sm font-bold text-white truncate">{drivers.find((d:Driver) => d.id === loginId)?.name}</p>
-                       </div>
-                       <button onClick={() => { setLoginId(''); setLoginPin(''); }} className="text-[10px] text-white bg-white/10 px-2 py-1 rounded-lg">Change</button>
-                   </div>
-                   <input type="password" maxLength={4} value={loginPin} onChange={e => setLoginPin(e.target.value)} placeholder="Enter 4-digit PIN" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs text-center tracking-widest focus:border-indigo-500" />
-                   <button onClick={() => onLogin(loginId, loginPin)} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl">Authenticate</button>
-                </div>
-             )}
+                
+                <button onClick={() => {
+                   // Search for driver
+                   const driver = drivers.find((d: Driver) => 
+                      d.contact === loginIdentifier || 
+                      d.name.toLowerCase() === loginIdentifier.toLowerCase()
+                   );
+                   
+                   if (driver) {
+                       onLogin(driver.id, loginPin);
+                   } else {
+                       alert("Partner not found. Please check credentials.");
+                   }
+                }} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-500 transition-all">
+                   Access Terminal
+                </button>
+             </div>
              
              <div className="pt-4 border-t border-white/5">
                 <button onClick={() => setRegMode(true)} className="text-[9px] font-black text-slate-500 uppercase hover:text-white transition-colors">Join the Fleet</button>
@@ -1879,6 +1872,8 @@ const DriverPortal = ({
   );
 };
 
+// ... (AdminPortal remains the same)
+
 const AdminPortal = ({ 
   activeTab, 
   setActiveTab, 
@@ -2034,6 +2029,7 @@ const AdminPortal = ({
            </div>
        )}
 
+       {/* ... Finance, Config, Missions, Rides tabs are similar ... */}
        {activeTab === 'finance' && (
            <div className="space-y-6">
                <div className="space-y-2">
@@ -2305,6 +2301,7 @@ const App: React.FC = () => {
   const [showQrModal, setShowQrModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
+  const [showMenuModal, setShowMenuModal] = useState(false);
   const [showAiHelp, setShowAiHelp] = useState(false);
   const [isNewUser, setIsNewUser] = useState(() => !localStorage.getItem('nexryde_seen_welcome_v1'));
   const [isSyncing, setIsSyncing] = useState(true);
@@ -2520,6 +2517,8 @@ const App: React.FC = () => {
       setCurrentUser(null);
     }
   };
+
+  // ... (Other functions like joinMission, joinNode, etc. remain unchanged)
 
   const joinMission = async (missionId: string, driverId: string) => {
     const mission = missions.find(m => m.id === missionId);
@@ -3150,10 +3149,6 @@ const App: React.FC = () => {
        if (newNode.destination) {
          setCreateMode(true);
          setTimeout(() => {
-            // We need to trigger the submit function inside PassengerPortal?
-            // Since we lifted submit logic partly...
-            // Let's implement submit here or move handleSubmit to App completely.
-            // Moving handleSubmit to App is cleaner.
             const baseFare = newNode.vehicleType === 'Taxi' ? settings.farePerTaxi : settings.farePerPragia;
             const finalFare = newNode.isSolo ? baseFare * settings.soloMultiplier : baseFare;
             
@@ -3174,8 +3169,6 @@ const App: React.FC = () => {
                 createdAt: new Date().toISOString()
             };
             
-            // To avoid duplication with PassengerPortal handleSubmit, we just call the add function directly
-            // But we need to update state and close modal
             supabase.from('unihub_nodes').insert([node]).then(({error}) => {
                 if(!error) {
                     addRideToMyList(node.id);
@@ -3352,7 +3345,7 @@ const App: React.FC = () => {
             badge={isAdminAuthenticated && pendingRequestsCount > 0 ? pendingRequestsCount : undefined}
           />
         )}
-        <MobileNavItem active={false} icon="fa-info-circle" label="About" onClick={() => setShowAboutModal(true)} />
+        <MobileNavItem active={showMenuModal} icon="fa-bars" label="Menu" onClick={() => setShowMenuModal(true)} />
       </nav>
 
       <main className={`flex-1 overflow-y-auto p-4 lg:p-12 pb-24 lg:pb-12 no-scrollbar z-10 relative transition-all duration-500 ${settings.hub_announcement && !dismissedAnnouncement ? 'pt-24 lg:pt-28' : 'pt-4 lg:pt-12'}`}>
@@ -3488,6 +3481,39 @@ const App: React.FC = () => {
       {showAiAd && <AdGate onUnlock={handleAiUnlock} label="Launch AI Assistant" settings={settings} />}
       {showAiHelp && <AiHelpDesk onClose={() => setShowAiHelp(false)} settings={settings} />}
 
+      {showMenuModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex items-end sm:items-center justify-center p-4 animate-in slide-in-from-bottom-10 fade-in">
+           <div className="glass-bright w-full max-w-sm rounded-[2.5rem] p-6 space-y-6 border border-white/10 relative">
+              <button onClick={() => setShowMenuModal(false)} className="absolute top-6 right-6 w-8 h-8 bg-white/5 rounded-full flex items-center justify-center text-slate-500 hover:text-white"><i className="fas fa-times"></i></button>
+              
+              <div className="flex items-center gap-4">
+                 <div className="w-14 h-14 bg-gradient-to-tr from-amber-500 to-orange-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                    <i className="fas fa-user-circle text-2xl"></i>
+                 </div>
+                 <div>
+                    <h3 className="text-xl font-black text-white italic uppercase">{currentUser?.username || 'Guest'}</h3>
+                    <p className="text-xs text-slate-400">{currentUser?.phone}</p>
+                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                 <button onClick={() => { setShowMenuModal(false); setShowQrModal(true); }} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center gap-2 hover:bg-white/10">
+                    <i className="fas fa-qrcode text-xl text-indigo-400"></i>
+                    <span className="text-[10px] font-black uppercase text-slate-300">My Code</span>
+                 </button>
+                 <button onClick={() => { setShowMenuModal(false); setShowAboutModal(true); }} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center gap-2 hover:bg-white/10">
+                    <i className="fas fa-info-circle text-xl text-emerald-400"></i>
+                    <span className="text-[10px] font-black uppercase text-slate-300">About App</span>
+                 </button>
+              </div>
+
+              <button onClick={() => { setShowMenuModal(false); handleLogout(); }} className="w-full py-4 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center gap-2">
+                 <i className="fas fa-power-off"></i> Sign Out
+              </button>
+           </div>
+        </div>
+      )}
+
       {showQrModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-sm:px-4 max-w-sm rounded-[3rem] p-10 space-y-8 animate-in zoom-in text-center border border-white/10">
@@ -3510,6 +3536,7 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* About Modal (Existing implementation remains) */}
       {showAboutModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-w-2xl rounded-[3rem] p-8 lg:p-12 space-y-8 animate-in zoom-in border border-white/10 overflow-y-auto max-h-[90vh] no-scrollbar">
