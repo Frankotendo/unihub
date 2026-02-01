@@ -66,6 +66,7 @@ interface RideNode {
   isLongDistance?: boolean;
   negotiatedTotalFare?: number;
   vehicleType?: VehicleType; 
+  driverNote?: string;
 }
 
 interface Driver {
@@ -222,7 +223,6 @@ const InlineAd = ({ className, settings }: { className?: string, settings: AppSe
     if (settings.adSenseStatus !== 'active' || !settings.adSenseClientId || !settings.adSenseSlotId) return;
 
     try {
-      // Corrected: prevent double push if ad is already loaded
       if (adRef.current && adRef.current.innerHTML !== "") {
          return; 
       }
@@ -263,12 +263,9 @@ const AdGate = ({ onUnlock, label, settings }: { onUnlock: () => void, label: st
       setTimeLeft(prev => prev > 0 ? prev - 1 : 0);
     }, 1000);
 
-    // Initialize AdSense
     if (settings.adSenseStatus === 'active' && settings.adSenseClientId && settings.adSenseSlotId) {
       try {
-        // Corrected: prevent double push if ad is already loaded
         if (adRef.current && adRef.current.innerHTML !== "") {
-           // Ad already loaded, do nothing
         } else {
             setTimeout(() => {
                try {
@@ -463,7 +460,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
   });
 
   const myRides = nodes.filter((n: RideNode) => myRideIds.includes(n.id));
-  const availableRides = filteredNodes.filter((n: RideNode) => n.status !== 'completed' && !myRideIds.includes(n.id));
+  const availableRides = filteredNodes.filter((n: RideNode) => n.status !== 'completed' && n.status !== 'dispatched' && !myRideIds.includes(n.id));
 
   // Fare estimation effect
   useEffect(() => {
@@ -607,11 +604,11 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
                  )}
 
                  <div className="flex gap-2">
-                    {node.status === 'forming' && node.passengers.length > 1 && (
+                    {node.status === 'forming' && node.passengers.length > 1 && !node.assignedDriverId && (
                        <button onClick={() => onForceQualify(node.id)} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-[9px] uppercase">Go Now (Pay Extra)</button>
                     )}
                     <button onClick={() => onLeave(node.id, currentUser.phone)} className="flex-1 py-3 bg-white/5 hover:bg-rose-500/20 hover:text-rose-500 text-slate-400 rounded-xl font-black text-[9px] uppercase transition-all">Leave</button>
-                    {node.leaderPhone === currentUser.phone && (
+                    {node.leaderPhone === currentUser.phone && !node.assignedDriverId && (
                        <button onClick={() => onCancel(node.id)} className="w-10 flex items-center justify-center bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all"><i className="fas fa-trash text-xs"></i></button>
                     )}
                  </div>
@@ -634,34 +631,59 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
           <h3 className="text-xs font-black uppercase text-slate-500 tracking-widest px-2 mb-4">Community Rides</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              {availableRides.length === 0 && <p className="text-slate-600 text-xs font-bold uppercase col-span-full text-center py-8">No matching rides found.</p>}
-             {availableRides.map((node: RideNode, index: number) => (
+             {availableRides.map((node: RideNode, index: number) => {
+               const isPartnerOffer = node.assignedDriverId && (node.status === 'forming' || node.status === 'qualified');
+               const seatsLeft = Math.max(0, node.capacityNeeded - node.passengers.length);
+               
+               return (
                <React.Fragment key={node.id}>
-                <div className="glass p-6 rounded-[2rem] border border-white/5 hover:border-white/10 transition-all">
+                <div className={`glass p-6 rounded-[2rem] border transition-all ${isPartnerOffer ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/10' : 'border-white/5 hover:border-white/10'}`}>
                    <div className="flex justify-between items-start mb-4">
                       <div>
-                         <span className="px-2 py-1 bg-white/10 rounded-md text-[8px] font-black uppercase text-slate-300">{node.vehicleType}</span>
+                         <div className="flex gap-2 items-center mb-1">
+                             <span className="px-2 py-1 bg-white/10 rounded-md text-[8px] font-black uppercase text-slate-300">{node.vehicleType}</span>
+                             {isPartnerOffer && <span className="px-2 py-1 bg-emerald-500 rounded-md text-[8px] font-black uppercase text-[#020617] animate-pulse">Partner Offer</span>}
+                         </div>
                          <h4 className="text-base font-black text-white mt-1">{node.destination}</h4>
                          <p className="text-[10px] text-slate-400 uppercase">From: {node.origin}</p>
+                         {node.driverNote && <p className="text-[9px] text-emerald-400 font-bold mt-1">"{node.driverNote}"</p>}
                       </div>
                       <div className="text-right">
                          <p className="text-lg font-black text-amber-500">₵{node.farePerPerson}</p>
                          <p className="text-[9px] font-bold text-slate-500 uppercase">{node.passengers.length}/{node.capacityNeeded} Seats</p>
                       </div>
                    </div>
-                   <div className="flex items-center gap-2 mb-4">
-                      {node.passengers.map((p, i) => (
-                         <div key={i} className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-[8px] font-bold text-white border border-[#020617]" title={p.name}>{p.name[0]}</div>
-                      ))}
-                      {[...Array(Math.max(0, node.capacityNeeded - node.passengers.length))].map((_, i) => (
-                         <div key={i} className="w-6 h-6 rounded-full bg-white/5 border border-white/10 border-dashed"></div>
-                      ))}
+                   <div className="flex items-center gap-2 mb-4 overflow-hidden">
+                      {node.capacityNeeded > 5 ? (
+                         <div className="flex gap-2 w-full">
+                            <div className="flex-1 bg-white/5 p-2 rounded-xl text-center border border-white/5">
+                               <p className="text-lg font-black text-white">{seatsLeft}</p>
+                               <p className="text-[8px] font-bold text-slate-500 uppercase">Seats Left</p>
+                            </div>
+                            <div className="flex-1 bg-white/5 p-2 rounded-xl text-center border border-white/5">
+                               <p className="text-lg font-black text-white">{node.passengers.length}</p>
+                               <p className="text-[8px] font-bold text-slate-500 uppercase">Joined</p>
+                            </div>
+                         </div>
+                      ) : (
+                        <>
+                          {node.passengers.map((p, i) => (
+                             <div key={i} className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-[8px] font-bold text-white border border-[#020617]" title={p.name}>{p.name[0]}</div>
+                          ))}
+                          {[...Array(seatsLeft)].map((_, i) => (
+                             <div key={i} className="w-6 h-6 rounded-full bg-white/5 border border-white/10 border-dashed"></div>
+                          ))}
+                        </>
+                      )}
                    </div>
-                   <button onClick={() => onJoin(node.id, currentUser.username, currentUser.phone)} className="w-full py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-black text-[10px] uppercase transition-all">Join Ride</button>
+                   <button onClick={() => onJoin(node.id, currentUser.username, currentUser.phone)} className={`w-full py-3 rounded-xl font-black text-[10px] uppercase transition-all ${isPartnerOffer ? 'bg-emerald-500 text-white shadow-lg hover:scale-[1.02]' : 'bg-white/5 hover:bg-white/10 text-white'}`}>
+                      {isPartnerOffer ? 'Join Instantly' : 'Join Ride'}
+                   </button>
                 </div>
                 {/* Insert Ad after every 3rd item */}
                 {(index + 1) % 3 === 0 && <InlineAd className="col-span-1" settings={settings} />}
                </React.Fragment>
-             ))}
+             )})}
           </div>
        </div>
 
@@ -1125,8 +1147,14 @@ const App: React.FC = () => {
     const node = nodes.find(n => n.id === nodeId);
     if (node && node.passengers.length < node.capacityNeeded) {
       const newPassengers = [...node.passengers, { id: `P-${Date.now()}`, name, phone }];
+      // Logic for status: if filled, keep as is unless it's passenger-led.
+      // If driver-led, status can stay forming or qualified until dispatched.
+      // Standard logic: if capacity met -> qualified.
       const isQualified = newPassengers.length >= node.capacityNeeded;
-      const updatedStatus = isQualified ? 'qualified' : 'forming';
+      let updatedStatus: NodeStatus = node.status;
+      if (isQualified && node.status === 'forming') {
+          updatedStatus = 'qualified';
+      }
       
       await supabase.from('unihub_nodes').update({ 
         passengers: newPassengers, 
@@ -1142,9 +1170,6 @@ const App: React.FC = () => {
     if (!node) return;
     
     const newPassengers = node.passengers.filter(p => p.phone !== phone);
-    // If leader leaves, and there are others, next one becomes leader? For simplicity, if leader leaves, warn them to cancel.
-    // Here we implement basic passenger leaving.
-    const isQualified = newPassengers.length >= node.capacityNeeded;
     const updatedStatus = newPassengers.length < node.capacityNeeded && node.status === 'qualified' ? 'forming' : node.status;
 
     await supabase.from('unihub_nodes').update({ 
@@ -1163,31 +1188,27 @@ const App: React.FC = () => {
     const node = nodes.find(n => n.id === nodeId);
     if (!driver || !node) return;
 
-    // RULE: One active ride at a time
-    const activeRide = nodes.find(n => n.assignedDriverId === driverId && n.status === 'dispatched');
+    // RULE: One active ride at a time (exclude completed). 
+    // If I am broadcasting (assignedDriverId set, status forming/qualified), I cannot accept another.
+    const activeRide = nodes.find(n => n.assignedDriverId === driverId && n.status !== 'completed');
     if (activeRide) {
-        alert("Please complete your current active ride before accepting a new one.");
+        alert("Please complete your current active ride or broadcast before accepting a new one.");
         return;
     }
 
     const totalCommission = settings.commissionPerSeat * node.passengers.length;
 
-    // Check Balance
     if (driver.walletBalance < totalCommission) {
       alert(`Insufficient Credits! You need at least ₵${totalCommission.toFixed(2)} to accept this ride.`);
       return;
     }
 
-    // Generate node-level fallback code
     const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
-    
-    // Generate individual codes for each passenger
     const updatedPassengers = node.passengers.map(p => ({
         ...p,
         verificationCode: Math.floor(1000 + Math.random() * 9000).toString()
     }));
 
-    // UPFRONT DEDUCTION LOGIC
     try {
         await Promise.all([
             supabase.from('unihub_nodes').update({ 
@@ -1220,12 +1241,10 @@ const App: React.FC = () => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
 
-    // Check master code OR passenger codes
     const isMasterCode = node.verificationCode === code;
     const passengerMatch = node.passengers.find(p => p.verificationCode === code);
 
     if (isMasterCode || passengerMatch) {
-      // Driver verification logic - NO DEDUCTION HERE (already pre-paid)
       try {
         await supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId);
         removeRideFromMyList(nodeId);
@@ -1249,10 +1268,11 @@ const App: React.FC = () => {
     if (!node) return;
 
     try {
-      if (node.status === 'dispatched' && node.assignedDriverId) {
+      if (node.assignedDriverId) {
         // REFUND LOGIC
         const driver = drivers.find(d => d.id === node.assignedDriverId);
-        if (driver) {
+        // Only refund if dispatched (paid)
+        if (driver && node.status === 'dispatched') {
              const totalCommission = settings.commissionPerSeat * node.passengers.length;
              await Promise.all([
                  supabase.from('unihub_drivers').update({ 
@@ -1262,28 +1282,45 @@ const App: React.FC = () => {
                     id: `TX-REFUND-${Date.now()}`,
                     driverId: driver.id,
                     amount: totalCommission,
-                    type: 'topup', // Use 'topup' type for refund credit
+                    type: 'topup',
                     timestamp: new Date().toLocaleString()
                  }])
              ]);
         }
 
+        // If it was a broadcast, delete it completely. If it was an accepted ride, reset it.
+        // We can distinguish: broadcast nodes usually have leaderName same as driver or no passengers initially.
+        // Or cleaner: If assignedDriverId was set at creation, we delete. But we don't have that flag.
+        // Simplification: If driver cancels, we delete the broadcast if it's forming/qualified, or reset if dispatched?
+        // Let's just reset standard rides and delete broadcasts if empty.
+        
+        if (node.status === 'forming' && node.passengers.length === 0) {
+            await supabase.from('unihub_nodes').delete().eq('id', nodeId);
+            alert("Broadcast cancelled.");
+            return;
+        }
+
         const resetStatus = (node.isSolo || node.isLongDistance) ? 'qualified' : (node.passengers.length >= 4 ? 'qualified' : 'forming');
-        // Clear verifications on reset
         const resetPassengers = node.passengers.map(p => {
             const { verificationCode, ...rest } = p;
             return rest;
         });
 
-        const { error: resetErr } = await supabase.from('unihub_nodes').update({ 
-          status: resetStatus, 
-          assignedDriverId: null, 
-          verificationCode: null,
-          passengers: resetPassengers
-        }).eq('id', nodeId);
-        
-        if (resetErr) throw resetErr;
-        alert("Trip assignment reset. Commission refunded to partner.");
+        // Check if I am the leader (Broadcast case)
+        if (node.leaderPhone === driver?.contact) {
+            await supabase.from('unihub_nodes').delete().eq('id', nodeId);
+            alert("Trip cancelled and removed.");
+        } else {
+            const { error: resetErr } = await supabase.from('unihub_nodes').update({ 
+              status: resetStatus, 
+              assignedDriverId: null, 
+              verificationCode: null,
+              passengers: resetPassengers
+            }).eq('id', nodeId);
+            if (resetErr) throw resetErr;
+            alert("Trip assignment reset. Commission refunded.");
+        }
+
       } else {
         const { error: deleteErr } = await supabase.from('unihub_nodes').delete().eq('id', nodeId);
         if (deleteErr) throw deleteErr;
@@ -1294,6 +1331,79 @@ const App: React.FC = () => {
       console.error("Cancellation error:", err);
       alert("Failed to process request: " + (err.message || "Unknown error"));
     }
+  };
+
+  const handleBroadcast = async (data: any) => {
+      if (!activeDriverId) return;
+      const driver = drivers.find(d => d.id === activeDriverId);
+      
+      const activeRide = nodes.find(n => n.assignedDriverId === activeDriverId && n.status !== 'completed');
+      if (activeRide) { alert("You already have an active/broadcasting trip."); return; }
+
+      const node: RideNode = {
+          id: `NODE-DRV-${Date.now()}`,
+          origin: data.origin,
+          destination: data.destination,
+          capacityNeeded: parseInt(data.seats),
+          passengers: [],
+          status: 'forming',
+          leaderName: driver?.name || 'Partner',
+          leaderPhone: driver?.contact || '',
+          farePerPerson: data.fare,
+          createdAt: new Date().toISOString(),
+          assignedDriverId: activeDriverId,
+          vehicleType: driver?.vehicleType,
+          driverNote: data.note
+      };
+      
+      const { error } = await supabase.from('unihub_nodes').insert([node]);
+      if(error) alert(error.message);
+      else { 
+          alert("Route broadcasted to passengers!"); 
+      }
+  };
+
+  const handleStartBroadcast = async (nodeId: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    const driver = drivers.find(d => d.id === activeDriverId);
+    if (!node || !driver) return;
+    
+    if (node.passengers.length === 0) {
+        alert("Cannot start trip with 0 passengers.");
+        return;
+    }
+
+    const totalCommission = settings.commissionPerSeat * node.passengers.length;
+    
+    if (driver.walletBalance < totalCommission) {
+        alert(`Insufficient funds. Need ₵${totalCommission} for ${node.passengers.length} passengers.`);
+        return;
+    }
+
+    const verificationCode = Math.floor(1000 + Math.random() * 9000).toString();
+    const updatedPassengers = node.passengers.map(p => ({
+        ...p,
+        verificationCode: Math.floor(1000 + Math.random() * 9000).toString()
+    }));
+
+    await Promise.all([
+        supabase.from('unihub_nodes').update({
+            status: 'dispatched',
+            verificationCode,
+            passengers: updatedPassengers,
+        }).eq('id', nodeId),
+        supabase.from('unihub_drivers').update({
+            walletBalance: driver.walletBalance - totalCommission
+        }).eq('id', driver.id),
+        supabase.from('unihub_transactions').insert([{
+             id: `TX-COMM-${Date.now()}`,
+             driverId: driver.id,
+             amount: totalCommission,
+             type: 'commission',
+             timestamp: new Date().toLocaleString()
+        }])
+    ]);
+    alert("Trip started! Passengers notified with codes.");
   };
 
   const settleNode = async (nodeId: string) => {
@@ -1746,6 +1856,8 @@ const App: React.FC = () => {
               allNodes={nodes}
               onJoinMission={joinMission}
               onAccept={acceptRide}
+              onBroadcast={handleBroadcast}
+              onStartBroadcast={handleStartBroadcast}
               onVerify={verifyRide}
               onCancel={cancelRide}
               onRequestTopup={requestTopup}
@@ -1990,6 +2102,8 @@ function DriverPortal({
   allNodes, 
   onJoinMission, 
   onAccept, 
+  onBroadcast,
+  onStartBroadcast,
   onVerify, 
   onCancel, 
   onRequestTopup, 
@@ -2008,6 +2122,9 @@ function DriverPortal({
   const [showScanner, setShowScanner] = useState(false);
   const [missionGate, setMissionGate] = useState<string | null>(null);
 
+  // Broadcast State
+  const [broadcastData, setBroadcastData] = useState({ origin: '', destination: '', seats: 3, note: '' });
+
   useEffect(() => {
     setRegData(prev => ({ ...prev, amount: settings.registrationFee }));
   }, [settings.registrationFee]);
@@ -2019,7 +2136,6 @@ function DriverPortal({
   };
 
   const handleScan = (code: string) => {
-    // If the scanned code is a URL (from QR server), extract the data param, otherwise assume it's the raw code
     let pin = code;
     try {
       const url = new URL(code);
@@ -2061,6 +2177,16 @@ function DriverPortal({
       return;
     }
     onRequestRegistration(regData);
+  };
+
+  const submitBroadcast = () => {
+      if(!broadcastData.origin || !broadcastData.destination) return alert("Origin and Destination required");
+      const baseFare = activeDriver.vehicleType === 'Taxi' ? settings.farePerTaxi : settings.farePerPragia;
+      onBroadcast({
+          ...broadcastData,
+          fare: baseFare
+      });
+      setActiveTab('active');
   };
 
   if (!activeDriver) {
@@ -2120,11 +2246,19 @@ function DriverPortal({
     );
   }
 
-  const myRides = dispatchedNodes.filter((n: any) => n.assignedDriverId === activeDriver.id);
+  // Active Dispatched Rides (Accepted by driver OR Broadcasted by driver and Dispatched)
+  const myDispatchedRides = dispatchedNodes.filter((n: any) => n.assignedDriverId === activeDriver.id);
+  // Active Broadcasting Rides (Created by driver, still forming)
+  const myBroadcasts = allNodes.filter((n: any) => n.assignedDriverId === activeDriver.id && (n.status === 'forming' || n.status === 'qualified'));
+  
   const marketRides = qualifiedNodes.filter((n: any) => 
+    !n.assignedDriverId &&
     (searchConfig.vehicleType === 'All' || n.vehicleType === searchConfig.vehicleType) &&
     (n.origin.toLowerCase().includes(searchConfig.query.toLowerCase()) || n.destination.toLowerCase().includes(searchConfig.query.toLowerCase()))
   );
+
+  // Dynamic max seats based on vehicle
+  const maxSeats = activeDriver.vehicleType === 'Pragia' ? 3 : (activeDriver.vehicleType === 'Taxi' ? 4 : 18);
 
   return (
     <div className="space-y-6">
@@ -2134,12 +2268,12 @@ function DriverPortal({
        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-emerald-500/10 p-4 rounded-3xl border border-emerald-500/20"><p className="text-[9px] font-black text-emerald-400 uppercase">Wallet</p><p className="text-xl font-black text-white">₵ {activeDriver.walletBalance.toFixed(2)}</p></div>
           <div className="bg-indigo-500/10 p-4 rounded-3xl border border-indigo-500/20"><p className="text-[9px] font-black text-indigo-400 uppercase">Rating</p><p className="text-xl font-black text-white">{activeDriver.rating} ★</p></div>
-          <div className="bg-amber-500/10 p-4 rounded-3xl border border-amber-500/20"><p className="text-[9px] font-black text-amber-500 uppercase">Active Job</p><p className="text-xl font-black text-white">{myRides.length > 0 ? 'On Route' : 'Idle'}</p></div>
+          <div className="bg-amber-500/10 p-4 rounded-3xl border border-amber-500/20"><p className="text-[9px] font-black text-amber-500 uppercase">Active Job</p><p className="text-xl font-black text-white">{myDispatchedRides.length > 0 || myBroadcasts.length > 0 ? 'Busy' : 'Idle'}</p></div>
        </div>
 
        <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar">
-          {['market', 'active', 'missions', 'wallet'].map(tab => (
-             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>{tab} {tab === 'active' && myRides.length > 0 && `(${myRides.length})`}</button>
+          {['market', 'broadcast', 'active', 'missions', 'wallet'].map(tab => (
+             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>{tab} {(tab === 'active' && (myDispatchedRides.length + myBroadcasts.length) > 0) && `(${myDispatchedRides.length + myBroadcasts.length})`}</button>
           ))}
        </div>
 
@@ -2157,10 +2291,10 @@ function DriverPortal({
                       <div className="space-y-2 mb-4"><div className="flex gap-2 text-sm font-bold text-white"><i className="fas fa-location-dot mt-1 text-slate-500"></i> {node.origin}</div><div className="flex gap-2 text-sm font-bold text-white"><i className="fas fa-flag-checkered mt-1 text-slate-500"></i> {node.destination}</div></div>
                       <button 
                         onClick={() => { if(confirm(`Accept trip near ${node.origin}?`)) onAccept(node.id, activeDriver.id); }} 
-                        disabled={myRides.length > 0}
-                        className={`w-full py-3 rounded-xl font-black text-[10px] uppercase shadow-lg hover:scale-[1.02] transition-transform ${myRides.length > 0 ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-amber-500 text-[#020617]'}`}
+                        disabled={(myDispatchedRides.length + myBroadcasts.length) > 0}
+                        className={`w-full py-3 rounded-xl font-black text-[10px] uppercase shadow-lg hover:scale-[1.02] transition-transform ${(myDispatchedRides.length + myBroadcasts.length) > 0 ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-amber-500 text-[#020617]'}`}
                       >
-                          {myRides.length > 0 ? 'Complete Active Job First' : 'Accept Ride'}
+                          {(myDispatchedRides.length + myBroadcasts.length) > 0 ? 'Complete Active Job First' : 'Accept Ride'}
                       </button>
                    </div>
                    {/* Insert Ad after every 3rd item */}
@@ -2169,24 +2303,100 @@ function DriverPortal({
                 ))}
              </div>
           )}
+
+          {activeTab === 'broadcast' && (
+             <div className="glass p-8 rounded-[2rem] border border-white/10 space-y-6 max-w-lg mx-auto">
+                 <div className="text-center">
+                    <h3 className="text-xl font-black italic uppercase text-white">Broadcast Route</h3>
+                    <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mt-1">Let passengers find you</p>
+                 </div>
+                 <div className="space-y-3">
+                    <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-indigo-500 text-xs" placeholder="Starting Point (e.g. Main Gate)" value={broadcastData.origin} onChange={e => setBroadcastData({...broadcastData, origin: e.target.value})} />
+                    <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-indigo-500 text-xs" placeholder="Destination (e.g. Casford)" value={broadcastData.destination} onChange={e => setBroadcastData({...broadcastData, destination: e.target.value})} />
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                             <label className="text-[8px] font-bold text-slate-500 uppercase ml-1">Seats (Max {maxSeats})</label>
+                             <input 
+                               type="number" 
+                               min="1" 
+                               max={maxSeats} 
+                               value={broadcastData.seats} 
+                               onChange={e => setBroadcastData({...broadcastData, seats: Math.min(maxSeats, Math.max(1, parseInt(e.target.value) || 0))})}
+                               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-indigo-500 text-xs mt-1" 
+                             />
+                        </div>
+                        <div>
+                            <label className="text-[8px] font-bold text-slate-500 uppercase ml-1">Note (Optional)</label>
+                            <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-indigo-500 text-xs mt-1" placeholder="e.g. Leaving in 5m" value={broadcastData.note} onChange={e => setBroadcastData({...broadcastData, note: e.target.value})} />
+                        </div>
+                    </div>
+                    <button onClick={submitBroadcast} disabled={(myDispatchedRides.length + myBroadcasts.length) > 0} className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-[10px] uppercase shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                       {(myDispatchedRides.length + myBroadcasts.length) > 0 ? 'Finish Active Job First' : 'Broadcast Availability'}
+                    </button>
+                 </div>
+             </div>
+          )}
           
           {activeTab === 'active' && (
-             <div className="space-y-4">
-                {myRides.length === 0 && <p className="text-center text-slate-500 py-10 font-black uppercase text-[10px]">No active jobs</p>}
-                {myRides.map((node: any) => (
+             <div className="space-y-6">
+                {(myDispatchedRides.length === 0 && myBroadcasts.length === 0) && <p className="text-center text-slate-500 py-10 font-black uppercase text-[10px]">No active jobs</p>}
+                
+                {/* Driver Broadcasts (Forming) */}
+                {myBroadcasts.map((node: any) => (
+                    <div key={node.id} className="glass p-6 rounded-[2rem] border border-emerald-500/50 relative overflow-hidden">
+                        <div className="flex justify-between items-center mb-4">
+                             <div>
+                                <span className="px-2 py-1 bg-emerald-500 text-[#020617] rounded-md text-[8px] font-black uppercase">Broadcasting</span>
+                                <h3 className="text-lg font-black text-white mt-1">{node.destination}</h3>
+                             </div>
+                             <div className="text-right">
+                                <p className="text-xl font-black text-white">{node.passengers.length}/{node.capacityNeeded}</p>
+                                <p className="text-[9px] text-slate-400 font-bold uppercase">Passengers Joined</p>
+                             </div>
+                        </div>
+                        <div className="bg-white/5 p-4 rounded-xl mb-4 space-y-2">
+                             {node.passengers.length === 0 && <p className="text-center text-slate-500 text-[10px] italic">Waiting for passengers...</p>}
+                             {node.passengers.map((p: any, i: number) => (
+                                 <div key={i} className="flex justify-between items-center text-xs text-white border-b border-white/5 last:border-0 pb-2 last:pb-0">
+                                     <span>{p.name}</span>
+                                     <span className="text-slate-400">{p.phone}</span>
+                                 </div>
+                             ))}
+                        </div>
+                        <div className="flex gap-2">
+                             <button onClick={() => onCancel(node.id)} className="flex-1 py-3 bg-rose-500/10 text-rose-500 rounded-xl font-black text-[10px] uppercase hover:bg-rose-500 hover:text-white transition-all">Cancel Route</button>
+                             <button onClick={() => onStartBroadcast(node.id)} className="flex-[2] py-3 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase shadow-lg disabled:opacity-50" disabled={node.passengers.length === 0}>Start Trip & Dispatch</button>
+                        </div>
+                    </div>
+                ))}
+
+                {/* Dispatched Rides */}
+                {myDispatchedRides.map((node: any) => (
                    <div key={node.id} className="glass p-6 rounded-[2rem] border border-indigo-500/30 bg-indigo-900/10">
-                      <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-black italic uppercase text-white">Current Trip</h3><a href={`tel:${node.leaderPhone}`} className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white"><i className="fas fa-phone"></i></a></div>
+                      <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-black italic uppercase text-white">In Progress</h3>
+                      <div className="flex gap-2">
+                        {node.passengers.map((p: any, i: number) => (
+                            <a key={i} href={`tel:${p.phone}`} className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white text-xs"><i className="fas fa-phone"></i></a>
+                        ))}
+                      </div>
+                      </div>
                       <div className="bg-black/20 p-4 rounded-xl mb-4 space-y-2">
-                         <div className="flex justify-between text-xs font-bold text-slate-300"><span>Passenger:</span> <span className="text-white">{node.leaderName}</span></div>
-                         <div className="flex justify-between text-xs font-bold text-slate-300"><span>Route:</span> <span className="text-white">{node.origin} → {node.destination}</span></div>
-                         <div className="flex justify-between text-xs font-bold text-slate-300"><span>Fare:</span> <span className="text-emerald-400">₵ {node.negotiatedTotalFare || (node.farePerPerson * node.passengers.length)}</span></div>
+                         <div className="flex justify-between text-xs font-bold text-slate-300"><span>To:</span> <span className="text-white">{node.destination}</span></div>
+                         <div className="flex justify-between text-xs font-bold text-slate-300"><span>Collect:</span> <span className="text-emerald-400">₵ {node.negotiatedTotalFare || (node.farePerPerson * node.passengers.length)}</span></div>
+                         <div className="grid grid-cols-2 gap-2 mt-2">
+                             {node.passengers.map((p: any, i: number) => (
+                                 <div key={i} className="bg-white/5 p-2 rounded-lg text-[10px] text-slate-300">
+                                     {p.name} <span className="text-indigo-400 block font-black tracking-widest">{p.verificationCode}</span>
+                                 </div>
+                             ))}
+                         </div>
                       </div>
                       <div className="flex gap-2">
                          <button onClick={() => setShowScanner(true)} className="w-12 bg-white/10 rounded-xl flex items-center justify-center text-white border border-white/10 hover:bg-white/20"><i className="fas fa-qrcode"></i></button>
                          <input className="flex-1 bg-white/10 border border-white/10 rounded-xl p-3 text-center text-white font-black tracking-[0.5em] outline-none focus:border-indigo-500" placeholder="PIN" maxLength={4} value={verifyCode} onChange={e => setVerifyCode(e.target.value.trim())} />
                       </div>
                       <div className="flex gap-2 mt-3">
-                         <button onClick={() => { if(confirm("Cancel job? Commission will be refunded, but rating may be affected.")) onCancel(node.id); }} className="flex-1 py-3 bg-rose-500/10 text-rose-500 rounded-xl font-black text-[10px] uppercase">Cancel & Refund</button>
+                         <button onClick={() => { if(confirm("Cancel job? Commission will be refunded, but rating may be affected.")) onCancel(node.id); }} className="flex-1 py-3 bg-rose-500/10 text-rose-500 rounded-xl font-black text-[10px] uppercase">Cancel</button>
                          <button onClick={() => onVerify(node.id, verifyCode)} className="flex-[2] py-3 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase shadow-lg">Verify Complete</button>
                       </div>
                    </div>
