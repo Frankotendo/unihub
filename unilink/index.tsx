@@ -2318,7 +2318,7 @@ const App: React.FC = () => {
   const [showAiHelp, setShowAiHelp] = useState(false);
   const [isNewUser, setIsNewUser] = useState(() => !localStorage.getItem('nexryde_seen_welcome_v1'));
   const [isSyncing, setIsSyncing] = useState(true);
-  const [dismissedAnnouncement, setDismissedAnnouncement] = useState(() => sessionStorage.getItem('nexryde_dismissed_announcement'));
+  const [dismissedAnnouncement, setDismissedAnnouncement] = useState(() => localStorage.getItem('nexryde_dismissed_announcement'));
   
   // Ad states for global AI feature
   const [showAiAd, setShowAiAd] = useState(false);
@@ -2382,10 +2382,11 @@ const App: React.FC = () => {
       if (sData) {
         setSettings(prev => ({ ...prev, ...sData }));
         const currentMsg = sData.hub_announcement || '';
-        if (currentMsg !== sessionStorage.getItem('nexryde_last_announcement')) {
+        // LOGIC FIX: Use localStorage to persist dismissal across sessions
+        if (currentMsg !== localStorage.getItem('nexryde_last_announcement')) {
           setDismissedAnnouncement(null);
-          sessionStorage.removeItem('nexryde_dismissed_announcement');
-          sessionStorage.setItem('nexryde_last_announcement', currentMsg);
+          localStorage.removeItem('nexryde_dismissed_announcement');
+          localStorage.setItem('nexryde_last_announcement', currentMsg);
         }
       }
       if (nData) setNodes(nData);
@@ -3062,7 +3063,9 @@ const App: React.FC = () => {
 
   const updateGlobalSettings = async (newSettings: AppSettings) => {
     const { id, ...data } = newSettings;
-    await supabase.from('unihub_settings').upsert({ id: 1, ...data });
+    // LOGIC FIX: Ensure existing ID is respected to prevent duplicate rows
+    const targetId = id || 1;
+    await supabase.from('unihub_settings').upsert({ id: targetId, ...data });
     alert("Settings Updated Successfully!");
   };
 
@@ -3116,7 +3119,8 @@ const App: React.FC = () => {
 
   const handleDismissAnnouncement = () => {
     setDismissedAnnouncement('true');
-    sessionStorage.setItem('nexryde_dismissed_announcement', 'true');
+    // LOGIC FIX: Use localStorage to persist dismissal across sessions
+    localStorage.setItem('nexryde_dismissed_announcement', 'true');
   };
 
   const safeSetViewMode = (mode: PortalMode) => {
