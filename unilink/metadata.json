@@ -1,9 +1,9 @@
-
 {
-  "name": "UniHub Dispatch",
-  "description": "Secure campus ride-sharing and node management with manual MoMo credit release, custom admin key vault, and driver PIN authentication.",
+  "name": "NexRyde Dispatch",
+  "description": "Premium campus logistics platform with secure partner onboarding, ride pooling, and marketplace hubs.",
   "requestFramePermissions": [
     "geolocation",
-    "camera"
+    "camera",
+    "microphone"
   ]
 }
