@@ -437,12 +437,13 @@ const GlobalVoiceOrb = ({
     } else if (mode === 'public') {
        systemInstruction = `${ghanaianPersona}
        You are helping a new user Log In or Sign Up.
-       If they say "My name is X" or "My phone is Y", use the tool 'fill_auth_details' to fill the form for them.
+       CRITICAL: Use the tool 'fill_auth_details' IMMEDIATELY when the user provides ANY piece of information (phone, name, or pin). 
+       Do not wait for the full form to be described. Call the tool incrementally.
        Encourage them to join NexRyde.`;
        tools = [
          {
            name: 'fill_auth_details',
-           description: 'Fill the login/signup form for the user.',
+           description: 'Fill the login/signup form for the user. Call this even with partial info.',
            parameters: {
              type: Type.OBJECT,
              properties: {
@@ -457,18 +458,18 @@ const GlobalVoiceOrb = ({
       // Passenger
       systemInstruction = `${ghanaianPersona}
       You help students find rides.
-      If a user says "I want to go to [Place]", call 'fill_ride_form' immediately.
+      CRITICAL: If a user says "I want to go to [Place]", call 'fill_ride_form' IMMEDIATELY to update the screen with the destination. Do not wait for pickup location.
       If they say "Confirm" or "Call the driver", call 'confirm_ride'.
       Pricing: Pragia ₵${contextData.settings.farePerPragia}, Taxi ₵${contextData.settings.farePerTaxi}.
       `;
       tools = [
         { 
           name: 'fill_ride_form', 
-          description: 'Fill the ride request form with origin, destination, and vehicle type.',
+          description: 'Fill the ride request form. Call this immediately with available fields.',
           parameters: {
              type: Type.OBJECT,
              properties: { 
-               origin: { type: Type.STRING, description: "Pickup point (optional, default to 'Current Location')" },
+               origin: { type: Type.STRING, description: "Pickup point (optional)" },
                destination: { type: Type.STRING, description: "Dropoff point" },
                vehicleType: { type: Type.STRING, enum: ['Pragia', 'Taxi', 'Shuttle'] },
                isSolo: { type: Type.BOOLEAN, description: "True for solo/express ride, False for pool." }
@@ -542,6 +543,17 @@ const GlobalVoiceOrb = ({
               for (const fc of msg.toolCall.functionCalls) {
                  let result: any = { result: "Done" };
                  
+                 // --- HELPER: Clean undefined args ---
+                 const cleanArgs = (args: any) => {
+                    const clean: any = {};
+                    for (const key in args) {
+                        if (args[key] !== undefined && args[key] !== null) {
+                            clean[key] = args[key];
+                        }
+                    }
+                    return clean;
+                 };
+                 
                  // --- DRIVER TOOLS ---
                  if (fc.name === 'update_status' && actions.onUpdateStatus) {
                     const s = (fc.args as any).status;
@@ -560,32 +572,30 @@ const GlobalVoiceOrb = ({
                  
                  // --- ADMIN TOOLS ---
                  } else if (fc.name === 'analyze_security_threats') {
-                    // Simulated Security Logic
-                    result = { 
-                        status: "Safe",
-                        analysis: "System Nominal.",
-                        action: "None."
-                    };
+                    result = { status: "Safe", analysis: "System Nominal.", action: "None." };
                  } else if (fc.name === 'get_revenue_report') {
                      const total = contextData.transactions?.reduce((a, b) => a + b.amount, 0) || 0;
                      result = { result: `Total Hub Revenue is ${total.toFixed(2)} cedis.` };
                  } else if (fc.name === 'system_health_check') {
-                     result = { 
-                         result: `Active Drivers: ${contextData.drivers.length}. Total Rides: ${contextData.nodes.length}. Pending Approvals: ${contextData.pendingRequests}.`
-                     };
+                     result = { result: `Active Drivers: ${contextData.drivers.length}. Total Rides: ${contextData.nodes.length}. Pending: ${contextData.pendingRequests}.` };
 
                  // --- PASSENGER / PUBLIC TOOLS ---
                  } else if (fc.name === 'fill_ride_form' && actions.onFillRideForm) {
-                     const { origin, destination, vehicleType, isSolo } = (fc.args as any);
-                     actions.onFillRideForm({ origin, destination, vehicleType, isSolo });
-                     result = { result: `Form filled. Destination: ${destination}, Vehicle: ${vehicleType || 'Pragia'}. Ask user to confirm.` };
+                     const safeArgs = cleanArgs(fc.args);
+                     // If destination provided, we imply a form fill
+                     if (safeArgs.destination || safeArgs.origin) {
+                         actions.onFillRideForm(safeArgs);
+                         result = { result: `Form updated. Destination: ${safeArgs.destination || 'Unset'}, Origin: ${safeArgs.origin || 'Unset'}. Ask for missing details.` };
+                     } else {
+                         result = { result: "No location data found in request." };
+                     }
                  } else if (fc.name === 'confirm_ride' && actions.onConfirmRide) {
                      actions.onConfirmRide();
                      result = { result: "Ride confirmed and requested." };
                  } else if (fc.name === 'fill_auth_details' && actions.onFillAuth) {
-                     const { phone, username, pin } = (fc.args as any);
-                     actions.onFillAuth({ phone, username, pin });
-                     result = { result: `Auth form filled for ${phone}.` };
+                     const safeArgs = cleanArgs(fc.args);
+                     actions.onFillAuth(safeArgs);
+                     result = { result: `Auth form updated with provided details.` };
                  } else if (fc.name === 'check_pricing') {
                      result = { result: `Pragia: ${contextData.settings.farePerPragia}. Taxi: ${contextData.settings.farePerTaxi}.` };
                  }
@@ -1679,6 +1689,345 @@ const DriverPortal = ({
   );
 };
 
+const AdminPortal = ({ 
+  activeTab, 
+  setActiveTab, 
+  nodes, 
+  drivers, 
+  onAddDriver, 
+  onDeleteDriver, 
+  onCancelRide, 
+  onSettleRide, 
+  missions, 
+  onCreateMission, 
+  onDeleteMission, 
+  transactions, 
+  topupRequests, 
+  registrationRequests, 
+  onApproveTopup, 
+  onRejectTopup, 
+  onApproveRegistration, 
+  onRejectRegistration, 
+  onLock, 
+  settings, 
+  onUpdateSettings, 
+  hubRevenue, 
+  adminEmail 
+}: any) => {
+  const [newMission, setNewMission] = useState({ location: '', description: '', entryFee: 5 });
+  const [newDriver, setNewDriver] = useState({ name: '', contact: '', vehicleType: 'Pragia', licensePlate: '', pin: '1234' });
+  const [localSettings, setLocalSettings] = useState(settings);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
+
+  const handleSaveSettings = async () => {
+      setIsSaving(true);
+      await onUpdateSettings(localSettings);
+      setIsSaving(false);
+  };
+
+  const handleImageUpload = async (e: any, field: 'appLogo' | 'appWallpaper') => {
+      const file = e.target.files[0];
+      if(file) {
+          const base64 = await compressImage(file);
+          setLocalSettings({...localSettings, [field]: base64});
+      }
+  };
+  
+  const handlePortfolioUpload = async (e: any) => {
+      const files = Array.from(e.target.files);
+      const newImages = await Promise.all(files.map((f: any) => compressImage(f)));
+      setLocalSettings({...localSettings, aboutMeImages: [...(localSettings.aboutMeImages || []), ...newImages]});
+  };
+
+  return (
+    <div className="space-y-6">
+       {/* Admin Header */}
+       <div className="glass p-6 rounded-[2.5rem] border border-white/10 flex justify-between items-center">
+          <div>
+             <h2 className="text-xl font-black italic uppercase text-white">Command Center</h2>
+             <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest">{adminEmail}</p>
+          </div>
+          <button onClick={onLock} className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-500 hover:text-rose-500 hover:bg-white/10 transition-all">
+             <i className="fas fa-lock"></i>
+          </button>
+       </div>
+
+       {/* Navigation */}
+       <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar">
+          {['monitor', 'drivers', 'rides', 'finance', 'missions', 'config'].map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>
+                 {tab}
+              </button>
+          ))}
+       </div>
+
+       {activeTab === 'monitor' && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+             <div className="glass p-6 rounded-[2rem] border border-white/5">
+                <p className="text-[9px] font-bold text-slate-500 uppercase">Total Revenue</p>
+                <p className="text-2xl font-black text-white">₵ {hubRevenue.toFixed(2)}</p>
+             </div>
+             <div className="glass p-6 rounded-[2rem] border border-white/5">
+                <p className="text-[9px] font-bold text-slate-500 uppercase">Active Drivers</p>
+                <p className="text-2xl font-black text-emerald-400">{drivers.filter((d:any) => d.status === 'online').length} / {drivers.length}</p>
+             </div>
+             <div className="glass p-6 rounded-[2rem] border border-white/5">
+                <p className="text-[9px] font-bold text-slate-500 uppercase">Active Rides</p>
+                <p className="text-2xl font-black text-amber-500">{nodes.filter((n:any) => n.status !== 'completed').length}</p>
+             </div>
+             <div className="glass p-6 rounded-[2rem] border border-white/5">
+                <p className="text-[9px] font-bold text-slate-500 uppercase">Pending Regs</p>
+                <p className="text-2xl font-black text-indigo-400">{registrationRequests.filter((r:any) => r.status === 'pending').length}</p>
+             </div>
+          </div>
+       )}
+       
+       {activeTab === 'drivers' && (
+           <div className="space-y-6">
+               <div className="glass p-6 rounded-[2rem] border border-white/10">
+                  <h3 className="text-sm font-black text-white uppercase mb-4">Add Partner</h3>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                     <input value={newDriver.name} onChange={e => setNewDriver({...newDriver, name: e.target.value})} placeholder="Name" className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-bold outline-none" />
+                     <input value={newDriver.contact} onChange={e => setNewDriver({...newDriver, contact: e.target.value})} placeholder="Phone" className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-bold outline-none" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mb-4">
+                     <select value={newDriver.vehicleType} onChange={e => setNewDriver({...newDriver, vehicleType: e.target.value})} className="bg-white/5 border border-white/10 rounded-xl px-2 py-2 text-white text-xs font-bold outline-none">
+                        <option value="Pragia">Pragia</option>
+                        <option value="Taxi">Taxi</option>
+                        <option value="Shuttle">Shuttle</option>
+                     </select>
+                     <input value={newDriver.licensePlate} onChange={e => setNewDriver({...newDriver, licensePlate: e.target.value})} placeholder="Plate" className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-bold outline-none" />
+                     <input value={newDriver.pin} onChange={e => setNewDriver({...newDriver, pin: e.target.value})} placeholder="PIN" className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-bold outline-none" />
+                  </div>
+                  <button onClick={() => { onAddDriver(newDriver); setNewDriver({ name: '', contact: '', vehicleType: 'Pragia', licensePlate: '', pin: '1234' }); }} className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-[9px] uppercase transition-all">Manually Register Driver</button>
+               </div>
+
+               <div className="space-y-2">
+                   {drivers.map((d: any) => (
+                       <div key={d.id} className="glass p-4 rounded-2xl flex justify-between items-center border border-white/5">
+                           <div>
+                               <p className="text-sm font-black text-white">{d.name}</p>
+                               <p className="text-[10px] text-slate-400 font-bold">{d.vehicleType} • {d.licensePlate}</p>
+                           </div>
+                           <div className="flex items-center gap-4">
+                               <span className={`text-[9px] font-black uppercase ${d.status === 'online' ? 'text-emerald-500' : 'text-slate-500'}`}>{d.status}</span>
+                               <button onClick={() => onDeleteDriver(d.id)} className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white flex items-center justify-center transition-all"><i className="fas fa-trash text-xs"></i></button>
+                           </div>
+                       </div>
+                   ))}
+               </div>
+           </div>
+       )}
+
+       {activeTab === 'finance' && (
+           <div className="space-y-6">
+               <div className="space-y-2">
+                  <h3 className="text-xs font-black uppercase text-slate-500 tracking-widest px-2">Pending Topups</h3>
+                  {topupRequests.filter((r:any) => r.status === 'pending').length === 0 && <p className="text-center text-slate-600 text-xs py-4">No pending requests.</p>}
+                  {topupRequests.filter((r:any) => r.status === 'pending').map((r: any) => (
+                      <div key={r.id} className="glass p-4 rounded-2xl flex justify-between items-center border border-indigo-500/30">
+                          <div>
+                              <p className="text-sm font-black text-white">₵ {r.amount}</p>
+                              <p className="text-[10px] text-slate-400 font-bold">Ref: {r.momoReference}</p>
+                          </div>
+                          <div className="flex gap-2">
+                             <button onClick={() => onApproveTopup(r.id)} className="px-4 py-2 bg-emerald-500 text-[#020617] rounded-lg text-[9px] font-black uppercase">Approve</button>
+                             <button onClick={() => onRejectTopup(r.id)} className="px-4 py-2 bg-rose-500/10 text-rose-500 rounded-lg text-[9px] font-black uppercase">Reject</button>
+                          </div>
+                      </div>
+                  ))}
+               </div>
+
+               <div className="space-y-2">
+                  <h3 className="text-xs font-black uppercase text-slate-500 tracking-widest px-2">Pending Registrations</h3>
+                  {registrationRequests.filter((r:any) => r.status === 'pending').length === 0 && <p className="text-center text-slate-600 text-xs py-4">No pending applications.</p>}
+                  {registrationRequests.filter((r:any) => r.status === 'pending').map((r: any) => (
+                      <div key={r.id} className="glass p-4 rounded-2xl border border-indigo-500/30">
+                          <div className="flex justify-between items-start mb-2">
+                             <div>
+                                <p className="text-sm font-black text-white">{r.name}</p>
+                                <p className="text-[10px] text-slate-400 font-bold">{r.vehicleType} • {r.contact}</p>
+                             </div>
+                             <div className="text-right">
+                                <p className="text-sm font-black text-emerald-400">Paid: ₵ {r.amount}</p>
+                                <p className="text-[10px] text-slate-500 font-bold">Ref: {r.momoReference}</p>
+                             </div>
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                             <button onClick={() => onApproveRegistration(r.id)} className="flex-1 py-2 bg-emerald-500 text-[#020617] rounded-lg text-[9px] font-black uppercase">Approve Partner</button>
+                             <button onClick={() => onRejectRegistration(r.id)} className="flex-1 py-2 bg-rose-500/10 text-rose-500 rounded-lg text-[9px] font-black uppercase">Reject</button>
+                          </div>
+                      </div>
+                  ))}
+               </div>
+           </div>
+       )}
+
+       {activeTab === 'config' && (
+           <div className="glass p-8 rounded-[2.5rem] border border-white/10 space-y-6">
+              <div>
+                  <h3 className="text-lg font-black italic uppercase text-white">System Config</h3>
+                  <p className="text-[10px] text-slate-400 uppercase">Update pricing and contacts</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                  <div>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Pragia Fare (₵)</label>
+                      <input type="number" value={localSettings.farePerPragia} onChange={e => setLocalSettings({...localSettings, farePerPragia: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold" />
+                  </div>
+                  <div>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Taxi Fare (₵)</label>
+                      <input type="number" value={localSettings.farePerTaxi} onChange={e => setLocalSettings({...localSettings, farePerTaxi: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold" />
+                  </div>
+                  <div>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Comm. Per Seat (₵)</label>
+                      <input type="number" value={localSettings.commissionPerSeat} onChange={e => setLocalSettings({...localSettings, commissionPerSeat: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold" />
+                  </div>
+                  <div>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Solo Multiplier</label>
+                      <input type="number" step="0.1" value={localSettings.soloMultiplier} onChange={e => setLocalSettings({...localSettings, soloMultiplier: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold" />
+                  </div>
+              </div>
+
+              <div>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">Admin MoMo Name</label>
+                  <input value={localSettings.adminMomoName} onChange={e => setLocalSettings({...localSettings, adminMomoName: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold mb-2" />
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">Admin MoMo Number</label>
+                  <input value={localSettings.adminMomo} onChange={e => setLocalSettings({...localSettings, adminMomo: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold" />
+              </div>
+
+              <div>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">System Announcement</label>
+                  <textarea value={localSettings.hub_announcement || ''} onChange={e => setLocalSettings({...localSettings, hub_announcement: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs h-20" placeholder="Broadcast message..." />
+              </div>
+              
+              <div>
+                   <label className="text-[9px] font-bold text-slate-500 uppercase mb-2 block">App Logo</label>
+                   <div className="flex items-center gap-4">
+                       {localSettings.appLogo && <img src={localSettings.appLogo} className="w-12 h-12 object-contain bg-white/10 rounded-lg" />}
+                       <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'appLogo')} className="text-[9px] text-slate-400" />
+                   </div>
+              </div>
+
+              <div>
+                   <label className="text-[9px] font-bold text-slate-500 uppercase mb-2 block">About Me Text</label>
+                   <textarea value={localSettings.aboutMeText || ''} onChange={e => setLocalSettings({...localSettings, aboutMeText: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs h-24" />
+              </div>
+
+              <div>
+                   <label className="text-[9px] font-bold text-slate-500 uppercase mb-2 block">Portfolio Images</label>
+                   <div className="flex gap-2 overflow-x-auto pb-2">
+                       {localSettings.aboutMeImages?.map((img: string, i: number) => (
+                           <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 group">
+                               <img src={img} className="w-full h-full object-cover" />
+                               <button onClick={() => setLocalSettings({...localSettings, aboutMeImages: localSettings.aboutMeImages.filter((_:any, idx:number) => idx !== i)})} className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center text-white"><i className="fas fa-trash"></i></button>
+                           </div>
+                       ))}
+                       <label className="w-16 h-16 rounded-lg bg-white/5 flex items-center justify-center cursor-pointer hover:bg-white/10">
+                           <i className="fas fa-plus text-slate-500"></i>
+                           <input type="file" multiple accept="image/*" className="hidden" onChange={handlePortfolioUpload} />
+                       </label>
+                   </div>
+              </div>
+
+              <div>
+                  <h4 className="text-xs font-black uppercase text-white mb-4">AdSense Configuration</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">AdSense Status</label>
+                          <select value={localSettings.adSenseStatus || 'inactive'} onChange={e => setLocalSettings({...localSettings, adSenseStatus: e.target.value as any})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs">
+                              <option value="active">Active</option>
+                              <option value="inactive">Inactive</option>
+                          </select>
+                      </div>
+                      <div>
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Client ID (ca-pub-...)</label>
+                          <input value={localSettings.adSenseClientId || ''} onChange={e => setLocalSettings({...localSettings, adSenseClientId: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs" />
+                      </div>
+                      <div>
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Slot ID</label>
+                          <input value={localSettings.adSenseSlotId || ''} onChange={e => setLocalSettings({...localSettings, adSenseSlotId: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs" />
+                      </div>
+                      <div>
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Layout Key</label>
+                          <input value={localSettings.adSenseLayoutKey || ''} onChange={e => setLocalSettings({...localSettings, adSenseLayoutKey: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs" />
+                      </div>
+                  </div>
+              </div>
+
+              <button onClick={handleSaveSettings} disabled={isSaving} className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl disabled:opacity-50">
+                  {isSaving ? 'Saving Changes...' : 'Update Configuration'}
+              </button>
+           </div>
+       )}
+
+       {activeTab === 'missions' && (
+           <div className="space-y-6">
+              <div className="glass p-6 rounded-[2rem] border border-white/10">
+                  <h3 className="text-sm font-black text-white uppercase mb-4">Create Hotspot</h3>
+                  <div className="space-y-3">
+                      <input value={newMission.location} onChange={e => setNewMission({...newMission, location: e.target.value})} placeholder="Location Name" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-bold outline-none" />
+                      <input value={newMission.description} onChange={e => setNewMission({...newMission, description: e.target.value})} placeholder="Description" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-bold outline-none" />
+                      <input type="number" value={newMission.entryFee} onChange={e => setNewMission({...newMission, entryFee: parseFloat(e.target.value)})} placeholder="Entry Fee" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-bold outline-none" />
+                      <button onClick={() => { 
+                         onCreateMission({ ...newMission, id: `MSN-${Date.now()}`, driversJoined: [], status: 'open', createdAt: new Date().toISOString() }); 
+                         setNewMission({ location: '', description: '', entryFee: 5 }); 
+                      }} className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-[9px] uppercase transition-all">Deploy Mission</button>
+                  </div>
+              </div>
+              <div className="space-y-2">
+                 {missions.map((m: any) => (
+                    <div key={m.id} className="glass p-4 rounded-2xl flex justify-between items-center border border-white/5">
+                        <div>
+                           <p className="text-sm font-black text-white">{m.location}</p>
+                           <p className="text-[10px] text-slate-400">{m.driversJoined.length} Drivers Stationed • Fee: ₵{m.entryFee}</p>
+                        </div>
+                        <button onClick={() => onDeleteMission(m.id)} className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white flex items-center justify-center transition-all"><i className="fas fa-trash text-xs"></i></button>
+                    </div>
+                 ))}
+              </div>
+           </div>
+       )}
+       
+       {activeTab === 'rides' && (
+           <div className="space-y-4">
+              {nodes.length === 0 && <p className="text-center text-slate-600 text-xs py-4">No rides in system.</p>}
+              {nodes.map((n: any) => (
+                  <div key={n.id} className="glass p-4 rounded-2xl border border-white/5 relative overflow-hidden">
+                      <div className="flex justify-between items-start mb-2">
+                          <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                  <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${n.status === 'completed' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-amber-500/20 text-amber-500'}`}>{n.status}</span>
+                                  <span className="text-[8px] font-bold text-slate-500 uppercase">{n.id}</span>
+                              </div>
+                              <p className="text-sm font-black text-white">{n.destination}</p>
+                              <p className="text-[10px] text-slate-400">From: {n.origin}</p>
+                          </div>
+                          <div className="text-right">
+                              <p className="text-sm font-black text-white">₵ {n.farePerPerson}</p>
+                              <p className="text-[9px] text-slate-500">{n.passengers.length} Pax</p>
+                          </div>
+                      </div>
+                      <div className="flex gap-2 mt-2">
+                          {n.status !== 'completed' && (
+                             <>
+                               <button onClick={() => onCancelRide(n.id)} className="flex-1 py-2 bg-rose-500/10 text-rose-500 rounded-lg text-[9px] font-black uppercase hover:bg-rose-500 hover:text-white transition-all">Cancel</button>
+                               <button onClick={() => onSettleRide(n.id)} className="flex-1 py-2 bg-emerald-500/10 text-emerald-500 rounded-lg text-[9px] font-black uppercase hover:bg-emerald-500 hover:text-white transition-all">Settle</button>
+                             </>
+                          )}
+                      </div>
+                  </div>
+              ))}
+           </div>
+       )}
+    </div>
+  );
+};
+
 // --- APP COMPONENT ---
 
 const App: React.FC = () => {
@@ -2051,7 +2400,7 @@ const App: React.FC = () => {
             }).eq('id', nodeId),
             supabase.from('unihub_drivers').update({ 
                 walletBalance: driver.walletBalance - totalCommission 
-            }).eq('id', driverId),
+            }).eq('id', driver.id),
             supabase.from('unihub_transactions').insert([{
                 id: `TX-COMM-${Date.now()}`,
                 driverId: driverId,
@@ -2904,283 +3253,6 @@ const App: React.FC = () => {
       )}
     </>
     )}
-    </div>
-  );
-};
-
-// --- ADMIN PORTAL ---
-
-function AdminPortal({ 
-  activeTab, 
-  setActiveTab, 
-  nodes, 
-  setNodes, 
-  drivers, 
-  onAddDriver, 
-  onDeleteDriver, 
-  onCancelRide, 
-  onSettleRide, 
-  missions, 
-  onCreateMission, 
-  onDeleteMission, 
-  transactions, 
-  topupRequests, 
-  registrationRequests, 
-  onApproveTopup, 
-  onRejectTopup,
-  onApproveRegistration, 
-  onRejectRegistration,
-  onLock, 
-  searchConfig, 
-  settings, 
-  onUpdateSettings, 
-  hubRevenue, 
-  adminEmail 
-}: any) {
-  const [newMission, setNewMission] = useState<Partial<HubMission>>({
-    location: '', description: '', entryFee: 5
-  });
-
-  const [editSettings, setEditSettings] = useState<AppSettings>(settings);
-  const [uploadingField, setUploadingField] = useState<'appWallpaper' | 'aboutMeImages' | 'appLogo' | null>(null);
-
-  useEffect(() => {
-    // Only update local editSettings if we just loaded the ID for the first time
-    // This prevents background syncs from overwriting local edits
-    if (settings.id && !editSettings.id) {
-      setEditSettings(settings);
-    }
-  }, [settings]);
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'appWallpaper' | 'aboutMeImages' | 'appLogo') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Fix: Clear input value so selecting the same file triggers onChange again
-    e.target.value = '';
-
-    setUploadingField(field);
-    try {
-      const compressed = await compressImage(file, 0.6, 800);
-      if (field === 'appWallpaper') {
-        setEditSettings(prev => ({ ...prev, appWallpaper: compressed }));
-      } else if (field === 'appLogo') {
-        setEditSettings(prev => ({ ...prev, appLogo: compressed }));
-      } else {
-        setEditSettings(prev => ({ ...prev, aboutMeImages: [...(prev.aboutMeImages || []), compressed] }));
-      }
-    } catch (err) {
-      alert("Image upload failed");
-    } finally {
-      setUploadingField(null);
-    }
-  };
-
-  const removeImage = (index: number) => {
-    const newImages = [...editSettings.aboutMeImages];
-    newImages.splice(index, 1);
-    setEditSettings({ ...editSettings, aboutMeImages: newImages });
-  };
-
-  return (
-    <div className="space-y-8 animate-in fade-in">
-       <div className="flex justify-between items-center">
-          <div><h2 className="text-3xl font-black italic uppercase tracking-tighter text-white">Admin Vault</h2><p className="text-slate-500 text-[10px] font-black uppercase mt-1">Logged in as {adminEmail}</p></div>
-          <button onClick={onLock} className="w-12 h-12 bg-rose-600 rounded-2xl flex items-center justify-center text-white shadow-xl"><i className="fas fa-lock"></i></button>
-       </div>
-
-       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-emerald-500/10 p-4 rounded-3xl border border-emerald-500/20"><p className="text-[9px] font-black text-emerald-400 uppercase">Hub Revenue</p><p className="text-xl font-black text-white">₵ {hubRevenue.toFixed(2)}</p></div>
-          <div className="bg-indigo-500/10 p-4 rounded-3xl border border-indigo-500/20"><p className="text-[9px] font-black text-indigo-400 uppercase">Total Rides</p><p className="text-xl font-black text-white">{nodes.length}</p></div>
-          <div className="bg-amber-500/10 p-4 rounded-3xl border border-amber-500/20"><p className="text-[9px] font-black text-amber-500 uppercase">Fleet Size</p><p className="text-xl font-black text-white">{drivers.length}</p></div>
-       </div>
-
-       <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar">
-          {['monitor', 'fleet', 'requests', 'missions', 'settings'].map(tab => (
-             <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-white'}`}>{tab}</button>
-          ))}
-       </div>
-
-       <div className="min-h-[400px]">
-          {activeTab === 'monitor' && (
-             <div className="space-y-4">
-                {nodes.length === 0 && <p className="text-center text-slate-500">No trip history.</p>}
-                {nodes.map((n: any) => (
-                   <div key={n.id} className="glass p-4 rounded-2xl border border-white/5 flex justify-between items-center">
-                      <div><p className="text-xs font-bold text-white uppercase">{n.origin} → {n.destination}</p><p className="text-[9px] text-slate-500 font-bold uppercase">{n.status} • {n.passengers.length} Pax</p></div>
-                      <div className="flex gap-2">
-                         <button onClick={() => onSettleRide(n.id)} className="px-3 py-2 bg-emerald-500/20 text-emerald-400 rounded-lg text-[8px] font-black uppercase">Settle</button>
-                         <button onClick={() => onCancelRide(n.id)} className="px-3 py-2 bg-rose-500/20 text-rose-500 rounded-lg text-[8px] font-black uppercase">Delete</button>
-                      </div>
-                   </div>
-                ))}
-             </div>
-          )}
-
-          {activeTab === 'fleet' && (
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {drivers.map((d: any) => (
-                   <div key={d.id} className="glass p-6 rounded-[2rem] border border-white/10 relative">
-                      <div className="flex items-center gap-3 mb-4">
-                         <div className="w-10 h-10 rounded-full bg-white/5 overflow-hidden border border-white/10 shrink-0">
-                            {d.avatarUrl ? <img src={d.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-indigo-600 text-white font-black">{d.name[0]}</div>}
-                         </div>
-                         <div><p className="text-white font-bold">{d.name}</p><p className="text-[10px] text-slate-500 uppercase">{d.licensePlate} • {d.vehicleType}</p></div>
-                      </div>
-                      <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl mb-4"><p className="text-xs font-bold text-slate-400">Wallet Balance</p><p className="text-lg font-black text-white">₵ {d.walletBalance.toFixed(2)}</p></div>
-                      <button onClick={() => onDeleteDriver(d.id)} className="w-full py-3 bg-rose-600/10 text-rose-500 rounded-xl font-black text-[10px] uppercase hover:bg-rose-600 hover:text-white transition-all">Remove Partner</button>
-                   </div>
-                ))}
-             </div>
-          )}
-
-          {activeTab === 'requests' && (
-             <div className="space-y-8">
-                <div>
-                   <h3 className="text-xs font-black uppercase text-slate-500 mb-4 tracking-widest">Top-up Requests</h3>
-                   {topupRequests.filter((r: any) => r.status === 'pending').map((r: any) => (
-                      <div key={r.id} className="glass p-4 rounded-2xl border border-white/5 flex justify-between items-center mb-2">
-                         <div><p className="text-white font-bold">₵ {r.amount}</p><p className="text-[9px] text-slate-500 uppercase">Ref: {r.momoReference}</p></div>
-                         <div className="flex gap-2">
-                            <button onClick={() => onRejectTopup(r.id)} className="px-3 py-2 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-colors rounded-xl font-black text-[9px] uppercase">Reject</button>
-                            <button onClick={() => onApproveTopup(r.id)} className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-black text-[9px] uppercase shadow-lg">Approve</button>
-                         </div>
-                      </div>
-                   ))}
-                </div>
-                <div>
-                   <h3 className="text-xs font-black uppercase text-slate-500 mb-4 tracking-widest">Onboarding Applications</h3>
-                   {registrationRequests.filter((r: any) => r.status === 'pending').map((r: any) => (
-                      <div key={r.id} className="glass p-6 rounded-[2rem] border border-white/10 mb-4 space-y-4">
-                         <div className="flex gap-4">
-                            <div className="w-16 h-16 rounded-2xl bg-white/5 overflow-hidden shrink-0 border border-white/10">
-                               {r.avatarUrl ? <img src={r.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><i className="fas fa-user text-slate-500"></i></div>}
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex justify-between mb-1"><h4 className="font-bold text-white text-lg">{r.name}</h4><span className="px-2 py-1 bg-white/10 rounded-lg text-[8px] text-slate-400 uppercase h-fit">{r.vehicleType}</span></div>
-                              <p className="text-xs text-slate-400">Phone: {r.contact}</p><p className="text-xs text-slate-400">Plate: {r.licensePlate}</p>
-                            </div>
-                         </div>
-                         <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl"><p className="text-[9px] font-bold text-emerald-400 uppercase">Paid: ₵{r.amount} (Ref: {r.momoReference})</p></div>
-                         <div className="flex gap-2 mt-2">
-                            <button onClick={() => onRejectRegistration(r.id)} className="flex-1 py-3 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-colors rounded-xl font-black text-[10px] uppercase">Reject</button>
-                            <button onClick={() => onApproveRegistration(r.id)} className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg">Approve Partner</button>
-                         </div>
-                      </div>
-                   ))}
-                </div>
-             </div>
-          )}
-
-          {activeTab === 'settings' && (
-             <div className="glass p-8 rounded-[2rem] border border-white/10 space-y-6 max-h-[60vh] overflow-y-auto no-scrollbar">
-                <div className="grid grid-cols-2 gap-6">
-                   <div className="space-y-4">
-                      <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Financials</h3>
-                      <div className="grid grid-cols-2 gap-3 mb-2 bg-white/5 p-3 rounded-xl col-span-2">
-                         <div className="col-span-1">
-                           <label className="text-[8px] text-slate-500 uppercase font-bold">Admin MoMo Number</label>
-                           <input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" value={editSettings.adminMomo} onChange={e => setEditSettings({...editSettings, adminMomo: e.target.value})} />
-                         </div>
-                         <div className="col-span-1">
-                           <label className="text-[8px] text-slate-500 uppercase font-bold">Account Name</label>
-                           <input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" value={editSettings.adminMomoName} onChange={e => setEditSettings({...editSettings, adminMomoName: e.target.value})} />
-                         </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                         <div><label className="text-[8px] text-slate-500 uppercase font-bold">Pragia</label><input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" type="number" value={editSettings.farePerPragia} onChange={e => setEditSettings({...editSettings, farePerPragia: parseFloat(e.target.value)})} /></div>
-                         <div><label className="text-[8px] text-slate-500 uppercase font-bold">Taxi</label><input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" type="number" value={editSettings.farePerTaxi} onChange={e => setEditSettings({...editSettings, farePerTaxi: parseFloat(e.target.value)})} /></div>
-                         <div><label className="text-[8px] text-slate-500 uppercase font-bold">Comm.</label><input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" type="number" value={editSettings.commissionPerSeat} onChange={e => setEditSettings({...editSettings, commissionPerSeat: parseFloat(e.target.value)})} /></div>
-                         <div><label className="text-[8px] text-slate-500 uppercase font-bold">Reg Fee</label><input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" type="number" value={editSettings.registrationFee} onChange={e => setEditSettings({...editSettings, registrationFee: parseFloat(e.target.value)})} /></div>
-                      </div>
-                   </div>
-                   <div className="space-y-4">
-                      <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Visuals</h3>
-                      <div>
-                         <label className="text-[8px] text-slate-500 uppercase font-bold mb-1 block">App Logo</label>
-                         <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'appLogo')} className="hidden" id="logo-upload" />
-                         <label htmlFor="logo-upload" className="w-full h-20 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all bg-center bg-contain bg-no-repeat mb-4 relative overflow-hidden" style={editSettings.appLogo ? {backgroundImage: `url(${editSettings.appLogo})`} : {}}>
-                            {uploadingField === 'appLogo' ? (
-                               <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-xs font-black uppercase text-white animate-pulse">Compressing...</div>
-                            ) : !editSettings.appLogo && (
-                               <><i className="fas fa-camera text-slate-500 mb-1"></i><span className="text-[8px] font-bold text-slate-600 uppercase">Upload Logo</span></>
-                            )}
-                         </label>
-                         {editSettings.appLogo && <button onClick={() => setEditSettings({...editSettings, appLogo: ''})} className="text-[8px] text-rose-500 uppercase font-bold underline mb-4">Remove Logo</button>}
-
-                         <label className="text-[8px] text-slate-500 uppercase font-bold mb-1 block">App Wallpaper</label>
-                         <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'appWallpaper')} className="hidden" id="wallpaper-upload" />
-                         <label htmlFor="wallpaper-upload" className="w-full h-20 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all bg-center bg-cover relative overflow-hidden" style={editSettings.appWallpaper ? {backgroundImage: `url(${editSettings.appWallpaper})`} : {}}>
-                            {uploadingField === 'appWallpaper' ? (
-                               <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-xs font-black uppercase text-white animate-pulse">Compressing...</div>
-                            ) : !editSettings.appWallpaper && (
-                               <><i className="fas fa-image text-slate-500 mb-1"></i><span className="text-[8px] font-bold text-slate-600 uppercase">Upload BG</span></>
-                            )}
-                         </label>
-                         {editSettings.appWallpaper && <button onClick={() => setEditSettings({...editSettings, appWallpaper: ''})} className="mt-1 text-[8px] text-rose-500 uppercase font-bold underline">Remove Wallpaper</button>}
-                      </div>
-                   </div>
-                </div>
-
-                <div className="p-4 bg-orange-500/10 rounded-2xl border border-orange-500/20">
-                    <h3 className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-3">Google AdSense Configuration</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                       <div className="col-span-2">
-                          <label className="text-[8px] text-slate-500 uppercase font-bold">Status</label>
-                          <select className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" value={editSettings.adSenseStatus || 'inactive'} onChange={e => setEditSettings({...editSettings, adSenseStatus: e.target.value as any})}>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                          </select>
-                       </div>
-                       <div>
-                          <label className="text-[8px] text-slate-500 uppercase font-bold">Client ID (ca-pub-xxx)</label>
-                          <input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" placeholder="ca-pub-..." value={editSettings.adSenseClientId || ''} onChange={e => setEditSettings({...editSettings, adSenseClientId: e.target.value})} />
-                       </div>
-                       <div>
-                          <label className="text-[8px] text-slate-500 uppercase font-bold">Slot ID (Numeric)</label>
-                          <input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" placeholder="9489..." value={editSettings.adSenseSlotId || ''} onChange={e => setEditSettings({...editSettings, adSenseSlotId: e.target.value})} />
-                       </div>
-                       <div className="col-span-2">
-                          <label className="text-[8px] text-slate-500 uppercase font-bold">Layout Key (-fb+...)</label>
-                          <input className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white font-bold outline-none text-xs" placeholder="-fb+5w+4e-db+86" value={editSettings.adSenseLayoutKey || ''} onChange={e => setEditSettings({...editSettings, adSenseLayoutKey: e.target.value})} />
-                       </div>
-                    </div>
-                </div>
-
-                <div>
-                   <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Portfolio Gallery</h3>
-                   <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                      <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'aboutMeImages')} className="hidden" id="portfolio-upload" disabled={uploadingField !== null} />
-                      <label htmlFor="portfolio-upload" className={`w-24 h-24 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all shrink-0 ${uploadingField !== null ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                         {uploadingField === 'aboutMeImages' ? (
-                             <i className="fas fa-spinner fa-spin text-indigo-500"></i>
-                         ) : (
-                             <><i className="fas fa-plus text-slate-500 mb-1"></i><span className="text-[8px] font-bold text-slate-600 uppercase">Add</span></>
-                         )}
-                      </label>
-                      {editSettings.aboutMeImages?.map((img, i) => (
-                         <div key={i} className="w-24 h-24 rounded-xl overflow-hidden relative shrink-0 group border border-white/10">
-                            <img src={img} className="w-full h-full object-cover" />
-                            <button onClick={() => removeImage(i)} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity"><i className="fas fa-trash"></i></button>
-                         </div>
-                      ))}
-                   </div>
-                </div>
-
-                <div>
-                   <label className="text-[9px] text-slate-500 uppercase font-bold">Announcement Banner</label>
-                   <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs mt-1" placeholder="Message..." value={editSettings.hub_announcement || ''} onChange={e => setEditSettings({...editSettings, hub_announcement: e.target.value})} />
-                </div>
-                <div>
-                   <label className="text-[9px] text-slate-500 uppercase font-bold">About Text</label>
-                   <textarea className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs h-24 mt-1" value={editSettings.aboutMeText} onChange={e => setEditSettings({...editSettings, aboutMeText: e.target.value})} />
-                </div>
-                <button onClick={() => onUpdateSettings(editSettings)} disabled={uploadingField !== null} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
-                   {uploadingField !== null ? 'Processing...' : 'Save Changes'}
-                </button>
-             </div>
-          )}
-       </div>
     </div>
   );
 }
