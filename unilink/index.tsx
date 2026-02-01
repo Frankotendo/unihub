@@ -268,11 +268,25 @@ const compressImage = (file: File, quality = 0.6, maxWidth = 800): Promise<strin
 
 // --- SUB-COMPONENTS ---
 
-const DriverVoiceOrb = ({ activeDriver, availableNodes, onUpdateStatus, onAcceptRide }: { 
-  activeDriver: Driver, 
-  availableNodes: RideNode[], 
-  onUpdateStatus: (s: 'online' | 'busy' | 'offline') => void,
-  onAcceptRide: (id: string) => void
+const GlobalVoiceOrb = ({ 
+  mode,
+  user,
+  contextData,
+  actions
+}: { 
+  mode: 'passenger' | 'driver' | 'admin',
+  user: any,
+  contextData: {
+    nodes: RideNode[],
+    drivers: Driver[],
+    transactions?: Transaction[],
+    settings: AppSettings,
+    pendingRequests?: number,
+  },
+  actions: {
+    onUpdateStatus?: (s: string) => void,
+    onAcceptRide?: (id: string) => void,
+  }
 }) => {
   const [isActive, setIsActive] = useState(false);
   const [state, setState] = useState<'idle' | 'listening' | 'speaking'>('idle');
@@ -302,8 +316,11 @@ const DriverVoiceOrb = ({ activeDriver, availableNodes, onUpdateStatus, onAccept
 
       // Base color based on state
       let r = 99, g = 102, b = 241; // Indigo (Idle)
+      if (mode === 'admin') { r = 244; g = 63; b = 94; } // Rose for Admin
+      if (mode === 'driver') { r = 245; g = 158; b = 11; } // Amber for Driver
+      
       if (state === 'listening') { r = 16, g = 185, b = 129; } // Emerald
-      if (state === 'speaking') { r = 245, g = 158, b = 11; } // Amber
+      if (state === 'speaking') { r = 255; g = 255; b = 255; } // White
 
       // Pulsating Effect
       const baseRadius = 60;
@@ -335,19 +352,15 @@ const DriverVoiceOrb = ({ activeDriver, availableNodes, onUpdateStatus, onAccept
     };
     draw();
     return () => cancelAnimationFrame(frameId);
-  }, [isActive, state]);
+  }, [isActive, state, mode]);
 
   const toggleSession = async () => {
     if (isActive) {
-      // Disconnect
       setIsActive(false);
       setState('idle');
-      
-      // Fix: sessionRef.current is a Promise, resolve it to close the session
       if (sessionRef.current) {
         sessionRef.current.then((session: any) => session.close()).catch((err: any) => console.error("Failed to close session:", err));
       }
-
       audioContextRef.current?.close();
       return;
     }
@@ -355,33 +368,61 @@ const DriverVoiceOrb = ({ activeDriver, availableNodes, onUpdateStatus, onAccept
     setIsActive(true);
     setState('listening');
 
-    const driverTools: FunctionDeclaration[] = [
-      {
-        name: 'update_status',
-        description: 'Update the driver availability status (online, busy, offline).',
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            status: { type: Type.STRING, enum: ['online', 'busy', 'offline'] }
-          },
-          required: ['status']
-        }
-      },
-      {
-        name: 'check_wallet',
-        description: 'Check current wallet balance and earnings.'
-      },
-      {
-        name: 'scan_for_rides',
-        description: 'Search for available rides near a location or generally.',
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            location: { type: Type.STRING, description: 'Optional location keyword like "Main Gate" or "Casford".' }
+    // DEFINE TOOLS BASED ON MODE
+    let tools: FunctionDeclaration[] = [];
+    let systemInstruction = "";
+
+    if (mode === 'driver') {
+      systemInstruction = `You are the NexRyde Co-Pilot. You help drivers hands-free.
+      Current Driver: ${user?.name || 'Partner'}. 
+      Be concise, professional, and helpful. Keep responses under 20 words for safety.`;
+      
+      tools = [
+        {
+          name: 'update_status',
+          description: 'Update the driver availability status (online, busy, offline).',
+          parameters: {
+             type: Type.OBJECT,
+             properties: { status: { type: Type.STRING, enum: ['online', 'busy', 'offline'] } },
+             required: ['status']
+          }
+        },
+        { name: 'check_wallet', description: 'Check current wallet balance and earnings.' },
+        { 
+          name: 'scan_for_rides', 
+          description: 'Search for available rides near a location.',
+          parameters: {
+             type: Type.OBJECT,
+             properties: { location: { type: Type.STRING, description: 'Location keyword like "Casford" or "Science".' } }
           }
         }
-      }
-    ];
+      ];
+    } else if (mode === 'admin') {
+      systemInstruction = `You are the Nexus Security Overseer. 
+      You analyze system health, detect financial anomalies, and scan for cyber threats.
+      You speak with authority and precision.`;
+      
+      tools = [
+        { name: 'analyze_security_threats', description: 'Scans system logs for high-frequency requests, bot patterns, and potential attacks.' },
+        { name: 'get_revenue_report', description: 'Get the total hub revenue and financial status.' },
+        { name: 'system_health_check', description: 'Get count of active users, drivers, and pending requests.' }
+      ];
+    } else {
+      // Passenger
+      systemInstruction = `You are the NexRyde Assistant. You help students find rides and check prices. Be friendly and helpful.`;
+      tools = [
+        { 
+          name: 'find_ride', 
+          description: 'Find rides going to a specific destination.',
+          parameters: {
+             type: Type.OBJECT,
+             properties: { destination: { type: Type.STRING } },
+             required: ['destination']
+          }
+        },
+        { name: 'check_pricing', description: 'Get current fare prices for different vehicle types.' }
+      ];
+    }
 
     try {
       const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
@@ -396,10 +437,8 @@ const DriverVoiceOrb = ({ activeDriver, availableNodes, onUpdateStatus, onAccept
         model: 'gemini-2.5-flash-native-audio-preview-12-2025',
         config: {
           responseModalities: [Modality.AUDIO],
-          systemInstruction: `You are the NexRyde Co-Pilot. You help drivers hands-free.
-          Current Driver: ${activeDriver.name}. Vehicle: ${activeDriver.vehicleType}.
-          Be concise, professional, and helpful. Keep responses under 20 words for safety while driving.`,
-          tools: [{ functionDeclarations: driverTools }]
+          systemInstruction,
+          tools: [{ functionDeclarations: tools }]
         },
         callbacks: {
           onopen: () => {
@@ -413,29 +452,23 @@ const DriverVoiceOrb = ({ activeDriver, availableNodes, onUpdateStatus, onAccept
             scriptProcessor.connect(inputAudioContext.destination);
           },
           onmessage: async (msg: LiveServerMessage) => {
-            // Handle Audio
             const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData) {
               setState('speaking');
               const buffer = await decodeAudioData(decode(audioData), outputAudioContext, 24000, 1);
-              
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputAudioContext.currentTime);
-              
               const source = outputAudioContext.createBufferSource();
               source.buffer = buffer;
               source.connect(outputAudioContext.destination);
               source.start(nextStartTimeRef.current);
-              
               nextStartTimeRef.current += buffer.duration;
               sourcesRef.current.add(source);
-              
               source.onended = () => {
                 sourcesRef.current.delete(source);
                 if (sourcesRef.current.size === 0) setState('listening');
               };
             }
 
-            // Handle Interruption
             if (msg.serverContent?.interrupted) {
                sourcesRef.current.forEach(s => s.stop());
                sourcesRef.current.clear();
@@ -443,31 +476,65 @@ const DriverVoiceOrb = ({ activeDriver, availableNodes, onUpdateStatus, onAccept
                setState('listening');
             }
 
-            // Handle Tool Calls
             if (msg.toolCall) {
               const session = await sessionPromise;
               for (const fc of msg.toolCall.functionCalls) {
-                 let result = { result: "Done" };
+                 let result: any = { result: "Done" };
                  
-                 if (fc.name === 'update_status') {
+                 // --- DRIVER TOOLS ---
+                 if (fc.name === 'update_status' && actions.onUpdateStatus) {
                     const s = (fc.args as any).status;
-                    onUpdateStatus(s);
-                    result = { result: `Status set to ${s}` };
+                    actions.onUpdateStatus(s);
+                    result = { result: `Status updated to ${s}` };
                  } else if (fc.name === 'check_wallet') {
-                    result = { result: `Current balance is ${activeDriver.walletBalance} cedis.` };
+                    result = { result: `Balance: ${user?.walletBalance || 0} cedis.` };
                  } else if (fc.name === 'scan_for_rides') {
                     const loc = (fc.args as any).location?.toLowerCase();
-                    const rides = availableNodes.filter(n => {
+                    const rides = contextData.nodes.filter(n => {
                        if (!loc) return true;
                        return n.origin.toLowerCase().includes(loc) || n.destination.toLowerCase().includes(loc);
-                    }).slice(0, 3); // Limit to 3 for voice
+                    }).slice(0, 3);
+                    if (rides.length === 0) result = { result: "No rides found." };
+                    else result = { result: `Found ${rides.length} rides. ` + rides.map(r => r.destination).join(", ") };
+                 
+                 // --- ADMIN TOOLS ---
+                 } else if (fc.name === 'analyze_security_threats') {
+                    // Simulated Security Logic
+                    const pendingCount = contextData.pendingRequests || 0;
+                    const rapidNodes = contextData.nodes.filter(n => (Date.now() - new Date(n.createdAt).getTime()) < 3600000).length;
                     
-                    if (rides.length === 0) {
-                      result = { result: "No rides found matching that location." };
-                    } else {
-                      const rideText = rides.map(r => `From ${r.origin} to ${r.destination} for ${r.farePerPerson} cedis.`).join(". ");
-                      result = { result: `Found ${rides.length} rides. ${rideText}` };
+                    let threatLevel = "Low";
+                    let details = "System operating within normal parameters.";
+                    if (pendingCount > 10) {
+                        threatLevel = "Medium";
+                        details = `High volume of pending registrations (${pendingCount}). Potential bot activity detected.`;
+                    } else if (rapidNodes > 50) {
+                        threatLevel = "High";
+                        details = `Anomaly: ${rapidNodes} rides created in the last hour. DDoS pattern suspected.`;
                     }
+                    
+                    result = { 
+                        status: threatLevel,
+                        integrity_score: threatLevel === 'Low' ? 98 : threatLevel === 'Medium' ? 75 : 45,
+                        analysis: details,
+                        action: threatLevel === 'High' ? "Recommended: Enable Lockdown Mode immediately." : "No immediate action required."
+                    };
+
+                 } else if (fc.name === 'get_revenue_report') {
+                     const total = contextData.transactions?.reduce((a, b) => a + b.amount, 0) || 0;
+                     result = { result: `Total Hub Revenue is ${total.toFixed(2)} cedis.` };
+                 } else if (fc.name === 'system_health_check') {
+                     result = { 
+                         result: `Active Drivers: ${contextData.drivers.length}. Total Rides: ${contextData.nodes.length}. Pending Approvals: ${contextData.pendingRequests}.`
+                     };
+
+                 // --- PASSENGER TOOLS ---
+                 } else if (fc.name === 'find_ride') {
+                     const dest = (fc.args as any).destination?.toLowerCase();
+                     const rides = contextData.nodes.filter(n => n.destination.toLowerCase().includes(dest) && n.status === 'forming');
+                     result = { result: rides.length > 0 ? `Found ${rides.length} rides to ${dest}. Lowest fare is ${Math.min(...rides.map(r => r.farePerPerson))} cedis.` : `No rides to ${dest} at the moment.` };
+                 } else if (fc.name === 'check_pricing') {
+                     result = { result: `Pragia: ${contextData.settings.farePerPragia}. Taxi: ${contextData.settings.farePerTaxi}.` };
                  }
 
                  session.sendToolResponse({
@@ -490,21 +557,25 @@ const DriverVoiceOrb = ({ activeDriver, availableNodes, onUpdateStatus, onAccept
           }
         }
       });
-      
       sessionRef.current = sessionPromise;
-
     } catch (e: any) {
       console.error("Failed to start voice session", e);
       setIsActive(false);
-      alert("Failed to access microphone. Please ensure permission is granted.");
+      alert("Failed to access microphone.");
     }
+  };
+
+  const getOrbColor = () => {
+     if (mode === 'admin') return 'from-rose-600 to-pink-600';
+     if (mode === 'driver') return 'from-amber-500 to-orange-600';
+     return 'from-indigo-600 to-purple-600';
   };
 
   return (
     <>
       <button 
         onClick={toggleSession}
-        className={`fixed bottom-24 left-6 z-[100] w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all ${isActive ? 'bg-rose-500 scale-110 animate-pulse' : 'bg-gradient-to-tr from-indigo-600 to-purple-600'}`}
+        className={`fixed bottom-24 left-6 lg:bottom-12 lg:left-12 z-[100] w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all ${isActive ? 'bg-rose-500 scale-110 animate-pulse' : `bg-gradient-to-tr ${getOrbColor()}`}`}
       >
         <i className={`fas ${isActive ? 'fa-microphone-slash' : 'fa-microphone'} text-white text-2xl`}></i>
       </button>
@@ -514,17 +585,34 @@ const DriverVoiceOrb = ({ activeDriver, availableNodes, onUpdateStatus, onAccept
            <canvas ref={canvasRef} width={400} height={400} className="w-[300px] h-[300px] sm:w-[400px] sm:h-[400px]" />
            <div className="mt-8 text-center">
               <h3 className="text-2xl font-black italic uppercase text-white tracking-widest animate-pulse">
-                {state === 'listening' ? 'Listening...' : state === 'speaking' ? 'NexRyde Speaking' : 'Processing...'}
+                {state === 'listening' ? 'Listening...' : state === 'speaking' ? 'NexRyde AI' : 'Processing...'}
               </h3>
-              <p className="text-xs font-bold text-slate-500 uppercase mt-2 tracking-[0.2em]">Hands-Free Mode Active</p>
+              <p className="text-xs font-bold opacity-70 uppercase mt-2 tracking-[0.2em]" style={{ color: mode === 'admin' ? '#f43f5e' : '#94a3b8' }}>
+                {mode === 'admin' ? 'Security Protocol Active' : mode === 'driver' ? 'Partner Hands-Free' : 'Assistant Active'}
+              </p>
+              
               <div className="mt-8 grid grid-cols-2 gap-4 max-w-xs mx-auto text-[10px] text-slate-400 font-bold uppercase">
-                 <div className="bg-white/5 p-3 rounded-xl border border-white/5">"Go Offline"</div>
-                 <div className="bg-white/5 p-3 rounded-xl border border-white/5">"Check Earnings"</div>
-                 <div className="bg-white/5 p-3 rounded-xl border border-white/5">"Find rides near Casford"</div>
-                 <div className="bg-white/5 p-3 rounded-xl border border-white/5">"Update status to Busy"</div>
+                 {mode === 'admin' && (
+                    <>
+                       <div className="bg-rose-500/10 p-3 rounded-xl border border-rose-500/20 text-rose-400">"Analyze Threats"</div>
+                       <div className="bg-rose-500/10 p-3 rounded-xl border border-rose-500/20 text-rose-400">"Check Revenue"</div>
+                    </>
+                 )}
+                 {mode === 'driver' && (
+                    <>
+                       <div className="bg-amber-500/10 p-3 rounded-xl border border-amber-500/20 text-amber-400">"Go Online"</div>
+                       <div className="bg-amber-500/10 p-3 rounded-xl border border-amber-500/20 text-amber-400">"Scan Rides"</div>
+                    </>
+                 )}
+                 {mode === 'passenger' && (
+                    <>
+                       <div className="bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-indigo-400">"Find a ride to Mall"</div>
+                       <div className="bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-indigo-400">"Check prices"</div>
+                    </>
+                 )}
               </div>
            </div>
-           <button onClick={toggleSession} className="mt-12 px-8 py-3 bg-white/10 rounded-full text-white font-black uppercase text-xs hover:bg-white/20 transition-all">Close Voice Mode</button>
+           <button onClick={toggleSession} className="mt-12 px-8 py-3 bg-white/10 rounded-full text-white font-black uppercase text-xs hover:bg-white/20 transition-all">Terminate Link</button>
         </div>
       )}
     </>
@@ -1271,8 +1359,6 @@ const DriverPortal = ({
 
   return (
       <div className="space-y-6">
-          <DriverVoiceOrb activeDriver={activeDriver} availableNodes={availableRides} onUpdateStatus={onUpdateStatus} onAcceptRide={(id) => onAccept(id, activeDriver.id)} />
-
           <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar">
              {['market', 'active', 'broadcast', 'wallet'].map(tab => (
                  <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all relative ${activeTab === tab ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>
@@ -2330,6 +2416,26 @@ const App: React.FC = () => {
            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
            Live Syncing...
         </div>
+      )}
+
+      {/* Global AI Voice Orb - Available for Passenger, Driver, Admin */}
+      {(currentUser || activeDriverId || isAdminAuthenticated) && (
+        <GlobalVoiceOrb 
+          mode={viewMode}
+          user={viewMode === 'driver' ? activeDriver : currentUser}
+          contextData={{
+             nodes,
+             drivers,
+             transactions,
+             settings,
+             pendingRequests: pendingRequestsCount
+          }}
+          actions={{
+             onUpdateStatus: async (status: string) => {
+                if (activeDriverId) await supabase.from('unihub_drivers').update({ status }).eq('id', activeDriverId);
+             }
+          }}
+        />
       )}
 
       <nav className="hidden lg:flex w-72 glass border-r border-white/5 flex-col p-8 space-y-10 z-50">
