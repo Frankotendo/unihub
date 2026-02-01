@@ -161,7 +161,7 @@ interface Transaction {
   id: string;
   driverId: string;
   amount: number;
-  type: 'commission' | 'topup' | 'registration'; 
+  type: 'commission' | 'topup' | 'registration' | 'refund'; 
   timestamp: string;
 }
 
@@ -596,7 +596,8 @@ const GlobalVoiceOrb = ({
                  } else if (fc.name === 'analyze_security_threats') {
                     result = { status: "Safe", analysis: "System Nominal.", action: "None." };
                  } else if (fc.name === 'get_revenue_report') {
-                     const total = contextData.transactions?.reduce((a, b) => a + b.amount, 0) || 0;
+                     // FIX: Filter revenue to exclude refunds and commissions (double counting)
+                     const total = contextData.transactions?.filter(t => (t.type === 'topup' || t.type === 'registration') && !t.id.includes('REFUND')).reduce((a, b) => a + b.amount, 0) || 0;
                      result = { result: `Total Hub Revenue is ${total.toFixed(2)} cedis.` };
                  } else if (fc.name === 'system_health_check') {
                      result = { result: `Active Drivers: ${contextData.drivers.length}. Total Rides: ${contextData.nodes.length}. Pending: ${contextData.pendingRequests}.` };
@@ -1177,7 +1178,8 @@ const PassengerPortal = ({
                     )}
                  </div>
               </div>
-            )})}\n         </div>
+            )})}
+         </div>
        )}
 
        {/* Create CTA */}
@@ -1757,7 +1759,8 @@ const DriverPortal = ({
                               </div>
                           </div>
                       </div>
-                  ))}\n              </div>
+                  ))}
+              </div>
           )}
 
           {activeTab === 'broadcast' && (
@@ -2502,7 +2505,10 @@ const App: React.FC = () => {
   const isDriverLoading = !!(activeDriverId && !activeDriver && isSyncing);
   const onlineDriverCount = useMemo(() => drivers.filter(d => d.status === 'online').length, [drivers]);
   const activeNodeCount = useMemo(() => nodes.filter(n => n.status !== 'completed').length, [nodes]);
-  const hubRevenue = useMemo(() => transactions.reduce((a, b) => a + b.amount, 0), [transactions]);
+  // FIX: Revenue calculation now filters for real CASH revenue (Topups + Registrations) and excludes refunds/commissions to avoid double counting.
+  const hubRevenue = useMemo(() => transactions
+    .filter(t => (t.type === 'topup' || t.type === 'registration') && !t.id.includes('REFUND'))
+    .reduce((a, b) => a + b.amount, 0), [transactions]);
   const pendingRequestsCount = useMemo(() => 
     topupRequests.filter(r => r.status === 'pending').length + 
     registrationRequests.filter(r => r.status === 'pending').length, 
@@ -2773,7 +2779,7 @@ const App: React.FC = () => {
                     id: `TX-REFUND-${Date.now()}`,
                     driverId: driver.id,
                     amount: refundAmount,
-                    type: 'topup',
+                    type: 'refund', // FIX: Use 'refund' type instead of 'topup' to avoid revenue confusion
                     timestamp: new Date().toLocaleString()
                  }])
              ]);
@@ -2792,7 +2798,7 @@ const App: React.FC = () => {
                             id: `TX-REFUND-PRE-${Date.now()}`,
                             driverId: driver.id,
                             amount: refundAmount,
-                            type: 'topup',
+                            type: 'refund', // FIX: Use 'refund' type
                             timestamp: new Date().toLocaleString()
                         }])
                     ]);
