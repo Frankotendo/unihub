@@ -161,7 +161,7 @@ interface Transaction {
   id: string;
   driverId: string;
   amount: number;
-  type: 'commission' | 'topup' | 'registration' | 'refund'; 
+  type: 'commission' | 'topup' | 'registration'; 
   timestamp: string;
 }
 
@@ -596,8 +596,7 @@ const GlobalVoiceOrb = ({
                  } else if (fc.name === 'analyze_security_threats') {
                     result = { status: "Safe", analysis: "System Nominal.", action: "None." };
                  } else if (fc.name === 'get_revenue_report') {
-                     // FIX: Filter revenue to exclude refunds and commissions (double counting)
-                     const total = contextData.transactions?.filter(t => (t.type === 'topup' || t.type === 'registration') && !t.id.includes('REFUND')).reduce((a, b) => a + b.amount, 0) || 0;
+                     const total = contextData.transactions?.reduce((a, b) => a + b.amount, 0) || 0;
                      result = { result: `Total Hub Revenue is ${total.toFixed(2)} cedis.` };
                  } else if (fc.name === 'system_health_check') {
                      result = { result: `Active Drivers: ${contextData.drivers.length}. Total Rides: ${contextData.nodes.length}. Pending: ${contextData.pendingRequests}.` };
@@ -982,7 +981,7 @@ const PassengerPortal = ({
     return true;
   });
 
-  const myRides = nodes.filter((n: RideNode) => myRideIds.includes(n.id));
+  const myRides = nodes.filter((n: RideNode) => myRideIds.includes(n.id) && n.status !== 'completed');
   const availableRides = filteredNodes.filter((n: RideNode) => n.status !== 'completed' && n.status !== 'dispatched' && !myRideIds.includes(n.id));
 
   // Fare estimation effect
@@ -1109,7 +1108,7 @@ const PassengerPortal = ({
             <h3 className="text-xs font-black uppercase text-slate-500 tracking-widest px-2">My Active Trips</h3>
             {myRides.map((node: RideNode) => {
               const myPassengerInfo = node.passengers.find(p => p.phone === currentUser.phone);
-              const myPin = myPassengerInfo?.verificationCode || node.verificationCode;
+              const myPin = myPassengerInfo?.verificationCode;
               const assignedDriver = drivers.find((d: Driver) => d.id === node.assignedDriverId);
 
               return (
@@ -1178,8 +1177,7 @@ const PassengerPortal = ({
                     )}
                  </div>
               </div>
-            )})}
-         </div>
+            )})}\n         </div>
        )}
 
        {/* Create CTA */}
@@ -1759,8 +1757,7 @@ const DriverPortal = ({
                               </div>
                           </div>
                       </div>
-                  ))}
-              </div>
+                  ))}\n              </div>
           )}
 
           {activeTab === 'broadcast' && (
@@ -2505,10 +2502,7 @@ const App: React.FC = () => {
   const isDriverLoading = !!(activeDriverId && !activeDriver && isSyncing);
   const onlineDriverCount = useMemo(() => drivers.filter(d => d.status === 'online').length, [drivers]);
   const activeNodeCount = useMemo(() => nodes.filter(n => n.status !== 'completed').length, [nodes]);
-  // FIX: Revenue calculation now filters for real CASH revenue (Topups + Registrations) and excludes refunds/commissions to avoid double counting.
-  const hubRevenue = useMemo(() => transactions
-    .filter(t => (t.type === 'topup' || t.type === 'registration') && !t.id.includes('REFUND'))
-    .reduce((a, b) => a + b.amount, 0), [transactions]);
+  const hubRevenue = useMemo(() => transactions.reduce((a, b) => a + b.amount, 0), [transactions]);
   const pendingRequestsCount = useMemo(() => 
     topupRequests.filter(r => r.status === 'pending').length + 
     registrationRequests.filter(r => r.status === 'pending').length, 
@@ -2726,6 +2720,12 @@ const App: React.FC = () => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
 
+    // GUARD: Check if already completed to prevent duplicate verification
+    if (node.status === 'completed') {
+        alert("Trip already completed.");
+        return;
+    }
+
     const isMasterCode = node.verificationCode === code;
     const passengerMatch = node.passengers.find(p => p.verificationCode === code);
 
@@ -2779,7 +2779,7 @@ const App: React.FC = () => {
                     id: `TX-REFUND-${Date.now()}`,
                     driverId: driver.id,
                     amount: refundAmount,
-                    type: 'refund', // FIX: Use 'refund' type instead of 'topup' to avoid revenue confusion
+                    type: 'topup',
                     timestamp: new Date().toLocaleString()
                  }])
              ]);
@@ -2798,7 +2798,7 @@ const App: React.FC = () => {
                             id: `TX-REFUND-PRE-${Date.now()}`,
                             driverId: driver.id,
                             amount: refundAmount,
-                            type: 'refund', // FIX: Use 'refund' type
+                            type: 'topup',
                             timestamp: new Date().toLocaleString()
                         }])
                     ]);
