@@ -1436,7 +1436,8 @@ const DriverPortal = ({
   onRequestRegistration,
   searchConfig,
   settings,
-  onUpdateStatus 
+  onUpdateStatus,
+  isLoading
 }: any) => {
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPin, setLoginPin] = useState('');
@@ -1465,6 +1466,15 @@ const DriverPortal = ({
   const commissionRate = settings?.commissionPerSeat || 0;
   const requiredBalanceForBroadcast = isShuttle ? (estimatedCapacity * commissionRate) : 0; 
   const canAffordBroadcast = activeDriver ? (activeDriver.walletBalance >= requiredBalanceForBroadcast) : false;
+
+  if (isLoading) {
+      return (
+          <div className="flex flex-col items-center justify-center min-h-[50vh] animate-in fade-in duration-700">
+             <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+             <p className="text-xs font-black text-indigo-400 uppercase tracking-[0.2em] animate-pulse">Syncing Network...</p>
+          </div>
+      );
+  }
 
   if (!activeDriver) {
       if (regMode) {
@@ -1593,7 +1603,7 @@ const DriverPortal = ({
              />
           )}
 
-          <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar">
+          <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar mb-6">
              {['market', 'active', 'broadcast', 'wallet'].map(tab => (
                  <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all relative ${activeTab === tab ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>
                     {tab}
@@ -1752,7 +1762,7 @@ const DriverPortal = ({
 
           {activeTab === 'broadcast' && (
               <div className="space-y-8">
-                  <div className="glass p-8 rounded-[2.5rem] border border-white/10">
+                  <div className="glass p-6 md:p-8 rounded-[2.5rem] border border-white/10">
                       <div className="flex justify-between items-center mb-6">
                         <h3 className="text-lg font-black italic uppercase text-white">Create Route</h3>
                         {isShuttle && (
@@ -2489,6 +2499,7 @@ const App: React.FC = () => {
   }, []);
 
   const activeDriver = useMemo(() => drivers.find(d => d.id === activeDriverId), [drivers, activeDriverId]);
+  const isDriverLoading = !!(activeDriverId && !activeDriver && isSyncing);
   const onlineDriverCount = useMemo(() => drivers.filter(d => d.status === 'online').length, [drivers]);
   const activeNodeCount = useMemo(() => nodes.filter(n => n.status !== 'completed').length, [nodes]);
   const hubRevenue = useMemo(() => transactions.reduce((a, b) => a + b.amount, 0), [transactions]);
@@ -3403,7 +3414,7 @@ const App: React.FC = () => {
         <MobileNavItem active={showMenuModal} icon="fa-bars" label="Menu" onClick={() => setShowMenuModal(true)} />
       </nav>
 
-      <main className={`flex-1 overflow-y-auto p-4 lg:p-12 pb-24 lg:pb-12 no-scrollbar z-10 relative transition-all duration-500 ${settings.hub_announcement && !dismissedAnnouncement ? 'pt-24 lg:pt-28' : 'pt-4 lg:pt-12'}`}>
+      <main className={`flex-1 overflow-y-auto p-4 lg:p-12 pb-36 lg:pb-12 no-scrollbar z-10 relative transition-all duration-500 ${settings.hub_announcement && !dismissedAnnouncement ? 'pt-24 lg:pt-28' : 'pt-4 lg:pt-12'}`}>
         <div className="max-w-6xl mx-auto space-y-6 lg:space-y-8">
           
           {isNewUser && (
@@ -3485,6 +3496,7 @@ const App: React.FC = () => {
                  if(!activeDriverId) return;
                  await supabase.from('unihub_drivers').update({ status }).eq('id', activeDriverId);
               }}
+              isLoading={isDriverLoading}
             />
           )}
           {viewMode === 'admin' && (
