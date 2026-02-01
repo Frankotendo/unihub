@@ -1177,8 +1177,7 @@ const PassengerPortal = ({
                     )}
                  </div>
               </div>
-            )})}
-         </div>
+            )})}\n         </div>
        )}
 
        {/* Create CTA */}
@@ -1748,8 +1747,7 @@ const DriverPortal = ({
                               </div>
                           </div>
                       </div>
-                  ))}
-              </div>
+                  ))}\n              </div>
           )}
 
           {activeTab === 'broadcast' && (
@@ -1917,6 +1915,10 @@ const AdminPortal = ({
   const [localSettings, setLocalSettings] = useState(settings);
   const [isSaving, setIsSaving] = useState(false);
 
+  // New state for admin credentials update
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+
   useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
@@ -1925,6 +1927,22 @@ const AdminPortal = ({
       setIsSaving(true);
       await onUpdateSettings(localSettings);
       setIsSaving(false);
+  };
+
+  const handleUpdateCredentials = async () => {
+    if (!newAdminEmail && !newAdminPassword) return alert("Enter a new email or password to update.");
+    
+    const updates: any = {};
+    if (newAdminEmail) updates.email = newAdminEmail;
+    if (newAdminPassword) updates.password = newAdminPassword;
+
+    const { error } = await supabase.auth.updateUser(updates);
+    if (error) alert("Update failed: " + error.message);
+    else {
+        alert("Credentials updated! Please login again if you changed your password.");
+        setNewAdminEmail('');
+        setNewAdminPassword('');
+    }
   };
 
   const handleImageUpload = async (e: any, field: 'appLogo' | 'appWallpaper') => {
@@ -2126,6 +2144,11 @@ const AdminPortal = ({
               </div>
 
               <div>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">Partner Registration Fee (₵)</label>
+                  <input type="number" value={localSettings.registrationFee} onChange={e => setLocalSettings({...localSettings, registrationFee: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold" />
+              </div>
+
+              <div>
                   <label className="text-[9px] font-bold text-slate-500 uppercase">System Announcement</label>
                   <textarea value={localSettings.hub_announcement || ''} onChange={e => setLocalSettings({...localSettings, hub_announcement: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs h-20" placeholder="Broadcast message..." />
               </div>
@@ -2202,7 +2225,22 @@ const AdminPortal = ({
                   </div>
               </div>
 
-              <button onClick={handleSaveSettings} disabled={isSaving} className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl disabled:opacity-50">
+              <div className="pt-6 border-t border-white/5">
+                <h4 className="text-xs font-black uppercase text-white mb-4">Admin Security</h4>
+                <div className="space-y-3">
+                    <div>
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Update Email</label>
+                        <input value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs" placeholder="New Admin Email" />
+                    </div>
+                    <div>
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Update Password</label>
+                        <input type="password" value={newAdminPassword} onChange={e => setNewAdminPassword(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs" placeholder="New Strong Password" />
+                    </div>
+                    <button onClick={handleUpdateCredentials} className="w-full py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-black text-[9px] uppercase transition-all">Update Credentials</button>
+                </div>
+              </div>
+
+              <button onClick={handleSaveSettings} disabled={isSaving} className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl disabled:opacity-50 mt-4">
                   {isSaving ? 'Saving Changes...' : 'Update Configuration'}
               </button>
            </div>
@@ -3550,6 +3588,73 @@ const App: React.FC = () => {
                  <button onClick={shareHub} className="flex-1 py-4 bg-amber-500 text-[#020617] rounded-[1.5rem] font-black text-[10px] uppercase shadow-xl">Share Platform</button>
               </div>
            </div>
+        </div>
+      )}
+
+      {/* NEW HELP MODAL */}
+      {showHelpModal && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+            <div className="glass-bright w-full max-w-4xl rounded-[3rem] p-8 lg:p-12 space-y-8 animate-in zoom-in border border-white/10 overflow-y-auto max-h-[90vh] no-scrollbar">
+               <div className="flex justify-between items-center">
+                 <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white">NexRyde Guide</h3>
+                 <button onClick={() => setShowHelpModal(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-slate-500 hover:text-white transition-all">
+                    <i className="fas fa-times"></i>
+                 </button>
+               </div>
+               
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <HelpSection 
+                     icon="fa-user-graduate" 
+                     title="For Passengers" 
+                     color="text-indigo-400"
+                     points={[
+                         "Select 'Pool' to share rides and save money.",
+                         "Select 'Solo' for express, direct trips (higher fare).",
+                         "Join existing rides from the Community Rides list.",
+                         "Use the AI voice assistant for hands-free booking.",
+                         "Always verify the Ride PIN with your driver."
+                     ]}
+                  />
+                  <HelpSection 
+                     icon="fa-id-card-clip" 
+                     title="For Partners" 
+                     color="text-amber-500"
+                     points={[
+                         "Register as a partner to start earning.",
+                         "Top up your wallet via MoMo to accept rides.",
+                         "Station at Hotspots to get priority assignments.",
+                         "Broadcast your own routes (Shuttles/Taxis).",
+                         "Keep your rating high for bonuses."
+                     ]}
+                  />
+                  <HelpSection 
+                     icon="fa-shield-halved" 
+                     title="Safety First" 
+                     color="text-emerald-400"
+                     points={[
+                         "Share trip details with friends via the Share button.",
+                         "Verify driver photo and license plate before boarding.",
+                         "Report any issues immediately to Support.",
+                         "Emergency contacts are available in the About section."
+                     ]}
+                  />
+                   <HelpSection 
+                     icon="fa-robot" 
+                     title="AI Features" 
+                     color="text-rose-400"
+                     points={[
+                         "Tap the Orb to speak in local languages (Twi, Ga, etc).",
+                         "Drivers can use voice commands to find hotspots.",
+                         "Passengers can book rides just by speaking.",
+                         "Use the 'Guide' chat for instant answers."
+                     ]}
+                  />
+               </div>
+               
+               <div className="pt-6 border-t border-white/5 text-center">
+                  <button onClick={() => setShowHelpModal(false)} className="px-12 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Got it</button>
+               </div>
+            </div>
         </div>
       )}
 
