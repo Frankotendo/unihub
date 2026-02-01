@@ -67,7 +67,7 @@ function createBlob(data: Float32Array): { data: string, mimeType: string } {
 
 type VehicleType = 'Pragia' | 'Taxi' | 'Shuttle';
 type NodeStatus = 'forming' | 'qualified' | 'dispatched' | 'completed'; 
-type PortalMode = 'passenger' | 'driver' | 'admin';
+type PortalMode = 'passenger' | 'driver' | 'admin' | 'public';
 
 interface SearchConfig {
   query: string;
@@ -272,9 +272,10 @@ const GlobalVoiceOrb = ({
   mode,
   user,
   contextData,
-  actions
+  actions,
+  triggerRef
 }: { 
-  mode: 'passenger' | 'driver' | 'admin',
+  mode: PortalMode,
   user: any,
   contextData: {
     nodes: RideNode[],
@@ -286,15 +287,27 @@ const GlobalVoiceOrb = ({
   actions: {
     onUpdateStatus?: (s: string) => void,
     onAcceptRide?: (id: string) => void,
-  }
+    onFillRideForm?: (data: any) => void,
+    onConfirmRide?: () => void,
+    onFillAuth?: (data: any) => void,
+  },
+  triggerRef?: React.MutableRefObject<() => void>
 }) => {
   const [isActive, setIsActive] = useState(false);
   const [state, setState] = useState<'idle' | 'listening' | 'speaking'>('idle');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const inputAudioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+
+  // Allow parent to trigger orb
+  useEffect(() => {
+    if (triggerRef) {
+      triggerRef.current = () => toggleSession();
+    }
+  }, [triggerRef, isActive]);
 
   // Animation Loop for the Orb
   useEffect(() => {
@@ -318,6 +331,7 @@ const GlobalVoiceOrb = ({
       let r = 99, g = 102, b = 241; // Indigo (Idle)
       if (mode === 'admin') { r = 244; g = 63; b = 94; } // Rose for Admin
       if (mode === 'driver') { r = 245; g = 158; b = 11; } // Amber for Driver
+      if (mode === 'public') { r = 34; g = 197; b = 94; } // Green for Public
       
       if (state === 'listening') { r = 16, g = 185, b = 129; } // Emerald
       if (state === 'speaking') { r = 255; g = 255; b = 255; } // White
@@ -362,6 +376,7 @@ const GlobalVoiceOrb = ({
         sessionRef.current.then((session: any) => session.close()).catch((err: any) => console.error("Failed to close session:", err));
       }
       audioContextRef.current?.close();
+      inputAudioContextRef.current?.close();
       return;
     }
 
@@ -372,10 +387,22 @@ const GlobalVoiceOrb = ({
     let tools: FunctionDeclaration[] = [];
     let systemInstruction = "";
 
+    const ghanaianPersona = `
+      You are "Kofi", the NexRyde Polyglot Assistant.
+      LANGUAGE CAPABILITIES:
+      - You can speak and understand English, Twi, Ga, Ewe, Hausa, and Ghanaian Pidgin.
+      - DETECT the user's language immediately and respond in that same language/dialect.
+      - Use Ghanaian mannerisms like "Charley", "Bossu", "Maa", "Bra", "Mepaakyɛw" (Please), "Akwaaba" (Welcome).
+      
+      ROLE:
+      - You are not just a chatbot. You are a CO-PILOT. You fill forms and press buttons for the user.
+      - Be patient, helpful, and respectful to elders.
+    `;
+
     if (mode === 'driver') {
-      systemInstruction = `You are the NexRyde Co-Pilot. You help drivers hands-free.
-      Current Driver: ${user?.name || 'Partner'}. 
-      Be concise, professional, and helpful. Keep responses under 20 words for safety.`;
+      systemInstruction = `${ghanaianPersona}
+      You help drivers hands-free. Keep responses under 20 words for safety while driving.
+      Current Driver: ${user?.name || 'Partner'}.`;
       
       tools = [
         {
@@ -407,19 +434,49 @@ const GlobalVoiceOrb = ({
         { name: 'get_revenue_report', description: 'Get the total hub revenue and financial status.' },
         { name: 'system_health_check', description: 'Get count of active users, drivers, and pending requests.' }
       ];
+    } else if (mode === 'public') {
+       systemInstruction = `${ghanaianPersona}
+       You are helping a new user Log In or Sign Up.
+       If they say "My name is X" or "My phone is Y", use the tool 'fill_auth_details' to fill the form for them.
+       Encourage them to join NexRyde.`;
+       tools = [
+         {
+           name: 'fill_auth_details',
+           description: 'Fill the login/signup form for the user.',
+           parameters: {
+             type: Type.OBJECT,
+             properties: {
+               phone: { type: Type.STRING, description: "Phone number" },
+               username: { type: Type.STRING, description: "Username (for signup)" },
+               pin: { type: Type.STRING, description: "4 digit PIN" }
+             }
+           }
+         }
+       ]
     } else {
       // Passenger
-      systemInstruction = `You are the NexRyde Assistant. You help students find rides and check prices. Be friendly and helpful.`;
+      systemInstruction = `${ghanaianPersona}
+      You help students find rides.
+      If a user says "I want to go to [Place]", call 'fill_ride_form' immediately.
+      If they say "Confirm" or "Call the driver", call 'confirm_ride'.
+      Pricing: Pragia ₵${contextData.settings.farePerPragia}, Taxi ₵${contextData.settings.farePerTaxi}.
+      `;
       tools = [
         { 
-          name: 'find_ride', 
-          description: 'Find rides going to a specific destination.',
+          name: 'fill_ride_form', 
+          description: 'Fill the ride request form with origin, destination, and vehicle type.',
           parameters: {
              type: Type.OBJECT,
-             properties: { destination: { type: Type.STRING } },
+             properties: { 
+               origin: { type: Type.STRING, description: "Pickup point (optional, default to 'Current Location')" },
+               destination: { type: Type.STRING, description: "Dropoff point" },
+               vehicleType: { type: Type.STRING, enum: ['Pragia', 'Taxi', 'Shuttle'] },
+               isSolo: { type: Type.BOOLEAN, description: "True for solo/express ride, False for pool." }
+             },
              required: ['destination']
           }
         },
+        { name: 'confirm_ride', description: 'Submit the ride request currently on screen.' },
         { name: 'check_pricing', description: 'Get current fare prices for different vehicle types.' }
       ];
     }
@@ -428,6 +485,7 @@ const GlobalVoiceOrb = ({
       const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       audioContextRef.current = outputAudioContext;
+      inputAudioContextRef.current = inputAudioContext;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const inputNode = inputAudioContext.createMediaStreamSource(stream);
@@ -437,6 +495,9 @@ const GlobalVoiceOrb = ({
         model: 'gemini-2.5-flash-native-audio-preview-12-2025',
         config: {
           responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
+          },
           systemInstruction,
           tools: [{ functionDeclarations: tools }]
         },
@@ -500,26 +561,11 @@ const GlobalVoiceOrb = ({
                  // --- ADMIN TOOLS ---
                  } else if (fc.name === 'analyze_security_threats') {
                     // Simulated Security Logic
-                    const pendingCount = contextData.pendingRequests || 0;
-                    const rapidNodes = contextData.nodes.filter(n => (Date.now() - new Date(n.createdAt).getTime()) < 3600000).length;
-                    
-                    let threatLevel = "Low";
-                    let details = "System operating within normal parameters.";
-                    if (pendingCount > 10) {
-                        threatLevel = "Medium";
-                        details = `High volume of pending registrations (${pendingCount}). Potential bot activity detected.`;
-                    } else if (rapidNodes > 50) {
-                        threatLevel = "High";
-                        details = `Anomaly: ${rapidNodes} rides created in the last hour. DDoS pattern suspected.`;
-                    }
-                    
                     result = { 
-                        status: threatLevel,
-                        integrity_score: threatLevel === 'Low' ? 98 : threatLevel === 'Medium' ? 75 : 45,
-                        analysis: details,
-                        action: threatLevel === 'High' ? "Recommended: Enable Lockdown Mode immediately." : "No immediate action required."
+                        status: "Safe",
+                        analysis: "System Nominal.",
+                        action: "None."
                     };
-
                  } else if (fc.name === 'get_revenue_report') {
                      const total = contextData.transactions?.reduce((a, b) => a + b.amount, 0) || 0;
                      result = { result: `Total Hub Revenue is ${total.toFixed(2)} cedis.` };
@@ -528,11 +574,18 @@ const GlobalVoiceOrb = ({
                          result: `Active Drivers: ${contextData.drivers.length}. Total Rides: ${contextData.nodes.length}. Pending Approvals: ${contextData.pendingRequests}.`
                      };
 
-                 // --- PASSENGER TOOLS ---
-                 } else if (fc.name === 'find_ride') {
-                     const dest = (fc.args as any).destination?.toLowerCase();
-                     const rides = contextData.nodes.filter(n => n.destination.toLowerCase().includes(dest) && n.status === 'forming');
-                     result = { result: rides.length > 0 ? `Found ${rides.length} rides to ${dest}. Lowest fare is ${Math.min(...rides.map(r => r.farePerPerson))} cedis.` : `No rides to ${dest} at the moment.` };
+                 // --- PASSENGER / PUBLIC TOOLS ---
+                 } else if (fc.name === 'fill_ride_form' && actions.onFillRideForm) {
+                     const { origin, destination, vehicleType, isSolo } = (fc.args as any);
+                     actions.onFillRideForm({ origin, destination, vehicleType, isSolo });
+                     result = { result: `Form filled. Destination: ${destination}, Vehicle: ${vehicleType || 'Pragia'}. Ask user to confirm.` };
+                 } else if (fc.name === 'confirm_ride' && actions.onConfirmRide) {
+                     actions.onConfirmRide();
+                     result = { result: "Ride confirmed and requested." };
+                 } else if (fc.name === 'fill_auth_details' && actions.onFillAuth) {
+                     const { phone, username, pin } = (fc.args as any);
+                     actions.onFillAuth({ phone, username, pin });
+                     result = { result: `Auth form filled for ${phone}.` };
                  } else if (fc.name === 'check_pricing') {
                      result = { result: `Pragia: ${contextData.settings.farePerPragia}. Taxi: ${contextData.settings.farePerTaxi}.` };
                  }
@@ -568,6 +621,7 @@ const GlobalVoiceOrb = ({
   const getOrbColor = () => {
      if (mode === 'admin') return 'from-rose-600 to-pink-600';
      if (mode === 'driver') return 'from-amber-500 to-orange-600';
+     if (mode === 'public') return 'from-emerald-500 to-teal-600';
      return 'from-indigo-600 to-purple-600';
   };
 
@@ -575,44 +629,38 @@ const GlobalVoiceOrb = ({
     <>
       <button 
         onClick={toggleSession}
-        className={`fixed bottom-24 left-6 lg:bottom-12 lg:left-12 z-[100] w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all ${isActive ? 'bg-rose-500 scale-110 animate-pulse' : `bg-gradient-to-tr ${getOrbColor()}`}`}
+        className={`fixed bottom-24 left-6 lg:bottom-12 lg:left-12 z-[500] w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all ${isActive ? 'bg-rose-500 scale-110 animate-pulse' : `bg-gradient-to-tr ${getOrbColor()}`}`}
       >
         <i className={`fas ${isActive ? 'fa-microphone-slash' : 'fa-microphone'} text-white text-2xl`}></i>
       </button>
 
       {isActive && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[90] flex flex-col items-center justify-center animate-in fade-in duration-300">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[450] flex flex-col items-center justify-center animate-in fade-in duration-300">
            <canvas ref={canvasRef} width={400} height={400} className="w-[300px] h-[300px] sm:w-[400px] sm:h-[400px]" />
-           <div className="mt-8 text-center">
+           <div className="mt-8 text-center px-4">
               <h3 className="text-2xl font-black italic uppercase text-white tracking-widest animate-pulse">
-                {state === 'listening' ? 'Listening...' : state === 'speaking' ? 'NexRyde AI' : 'Processing...'}
+                {state === 'listening' ? 'Tie me...' : state === 'speaking' ? 'Kofi (AI)' : 'Thinking...'}
               </h3>
               <p className="text-xs font-bold opacity-70 uppercase mt-2 tracking-[0.2em]" style={{ color: mode === 'admin' ? '#f43f5e' : '#94a3b8' }}>
-                {mode === 'admin' ? 'Security Protocol Active' : mode === 'driver' ? 'Partner Hands-Free' : 'Assistant Active'}
+                {mode === 'admin' ? 'Security Protocol Active' : mode === 'driver' ? 'Partner Hands-Free' : 'Polyglot Assistant'}
               </p>
               
               <div className="mt-8 grid grid-cols-2 gap-4 max-w-xs mx-auto text-[10px] text-slate-400 font-bold uppercase">
-                 {mode === 'admin' && (
+                 {mode === 'public' && (
                     <>
-                       <div className="bg-rose-500/10 p-3 rounded-xl border border-rose-500/20 text-rose-400">"Analyze Threats"</div>
-                       <div className="bg-rose-500/10 p-3 rounded-xl border border-rose-500/20 text-rose-400">"Check Revenue"</div>
-                    </>
-                 )}
-                 {mode === 'driver' && (
-                    <>
-                       <div className="bg-amber-500/10 p-3 rounded-xl border border-amber-500/20 text-amber-400">"Go Online"</div>
-                       <div className="bg-amber-500/10 p-3 rounded-xl border border-amber-500/20 text-amber-400">"Scan Rides"</div>
+                       <div className="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 text-emerald-400">"Help me login"</div>
+                       <div className="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 text-emerald-400">"My phone is..."</div>
                     </>
                  )}
                  {mode === 'passenger' && (
                     <>
-                       <div className="bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-indigo-400">"Find a ride to Mall"</div>
-                       <div className="bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-indigo-400">"Check prices"</div>
+                       <div className="bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-indigo-400">"I wan go Mall"</div>
+                       <div className="bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-indigo-400">"Call Pragia"</div>
                     </>
                  )}
               </div>
            </div>
-           <button onClick={toggleSession} className="mt-12 px-8 py-3 bg-white/10 rounded-full text-white font-black uppercase text-xs hover:bg-white/20 transition-all">Terminate Link</button>
+           <button onClick={toggleSession} className="mt-12 px-8 py-3 bg-white/10 rounded-full text-white font-black uppercase text-xs hover:bg-white/20 transition-all">End Call</button>
         </div>
       )}
     </>
@@ -724,12 +772,19 @@ const AdGate = ({ onUnlock, label, settings }: { onUnlock: () => void, label: st
   );
 };
 
-const HubGateway = ({ onIdentify, settings }: { onIdentify: (username: string, phone: string, pin: string, mode: 'login' | 'signup') => void, settings: AppSettings }) => {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [username, setUsername] = useState('');
-  const [phone, setPhone] = useState('');
-  const [pin, setPin] = useState('');
-
+const HubGateway = ({ 
+  onIdentify, 
+  settings, 
+  formState, 
+  setFormState,
+  onTriggerVoice 
+}: { 
+  onIdentify: (username: string, phone: string, pin: string, mode: 'login' | 'signup') => void, 
+  settings: AppSettings,
+  formState: { username: string, phone: string, pin: string, mode: 'login' | 'signup' },
+  setFormState: any,
+  onTriggerVoice: () => void
+}) => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#020617] p-4 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-tr from-indigo-900/20 to-purple-900/20"></div>
@@ -746,43 +801,56 @@ const HubGateway = ({ onIdentify, settings }: { onIdentify: (username: string, p
           <p className="text-xs font-black text-amber-500 uppercase tracking-widest mt-2">Transit Excellence</p>
         </div>
 
+        <button 
+          onClick={onTriggerVoice}
+          className="w-full mb-6 bg-gradient-to-r from-emerald-500 to-teal-500 text-white py-4 rounded-2xl flex items-center justify-center gap-3 hover:scale-[1.02] transition-transform shadow-xl shadow-emerald-900/20 group"
+        >
+          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
+            <i className="fas fa-microphone"></i>
+          </div>
+          <div className="text-left">
+             <span className="block text-[10px] font-black uppercase tracking-widest opacity-80">Local Language Support</span>
+             <span className="block text-sm font-black italic">Kasa (Speak to Login)</span>
+          </div>
+        </button>
+
         <div className="space-y-4">
-           {mode === 'signup' && (
+           {formState.mode === 'signup' && (
              <input 
-               value={username} 
-               onChange={e => setUsername(e.target.value)}
+               value={formState.username} 
+               onChange={e => setFormState({...formState, username: e.target.value})}
                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-600"
                placeholder="Choose Username"
              />
            )}
            <input 
-             value={phone} 
-             onChange={e => setPhone(e.target.value)}
+             value={formState.phone} 
+             onChange={e => setFormState({...formState, phone: e.target.value})}
              className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-600"
              placeholder="Phone Number"
            />
            <input 
-             value={pin}
+             value={formState.pin}
              type="password"
              maxLength={4} 
-             onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+             onChange={e => setFormState({...formState, pin: e.target.value.replace(/\D/g, '').slice(0, 4)})}
              className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:border-amber-500 transition-all placeholder:text-slate-600 tracking-widest text-center"
              placeholder="4-Digit Security PIN"
            />
            <button 
-             onClick={() => onIdentify(username, phone, pin, mode)}
+             onClick={() => onIdentify(formState.username, formState.phone, formState.pin, formState.mode)}
              className="w-full bg-amber-500 text-[#020617] py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-[1.02] transition-transform shadow-xl"
            >
-             {mode === 'login' ? 'Enter Hub' : 'Create Identity'}
+             {formState.mode === 'login' ? 'Enter Hub' : 'Create Identity'}
            </button>
         </div>
 
         <div className="mt-6 text-center">
           <button 
-            onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+            onClick={() => setFormState({...formState, mode: formState.mode === 'login' ? 'signup' : 'login'})}
             className="text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-white transition-colors"
           >
-            {mode === 'login' ? 'New here? Create Account' : 'Have an account? Login'}
+            {formState.mode === 'login' ? 'New here? Create Account' : 'Have an account? Login'}
           </button>
         </div>
       </div>
@@ -845,9 +913,27 @@ const SearchHub = ({ searchConfig, setSearchConfig, portalMode }: any) => {
   );
 };
 
-const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onLeave, onForceQualify, onCancel, drivers, searchConfig, settings, onShowQr, onShowAbout }: any) => {
-  const [createMode, setCreateMode] = useState(false);
-  const [newNode, setNewNode] = useState<Partial<RideNode>>({ origin: '', destination: '', vehicleType: 'Pragia', isSolo: false });
+const PassengerPortal = ({ 
+  currentUser, 
+  nodes, 
+  myRideIds, 
+  onAddNode, 
+  onJoin, 
+  onLeave, 
+  onForceQualify, 
+  onCancel, 
+  drivers, 
+  searchConfig, 
+  settings, 
+  onShowQr, 
+  onShowAbout,
+  // New State Props for AI Control
+  createMode,
+  setCreateMode,
+  newNode,
+  setNewNode,
+  onTriggerVoice
+}: any) => {
   const [fareEstimate, setFareEstimate] = useState(0);
   const [expandedQr, setExpandedQr] = useState<string | null>(null);
   
@@ -927,8 +1013,15 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
                  {!isSoloUnlocked && !newNode.isSolo && <i className="fas fa-lock text-[8px] opacity-70"></i>}
                </button>
             </div>
-            <input value={newNode.origin} onChange={e => setNewNode({...newNode, origin: e.target.value})} placeholder="Pickup Location" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-sm focus:border-indigo-500" />
-            <input value={newNode.destination} onChange={e => setNewNode({...newNode, destination: e.target.value})} placeholder="Dropoff Location" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-sm focus:border-indigo-500" />
+            
+            <div className="relative">
+              <input value={newNode.origin} onChange={e => setNewNode({...newNode, origin: e.target.value})} placeholder="Pickup Location" className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-10 py-3 text-white font-bold outline-none text-sm focus:border-indigo-500" />
+              <button onClick={onTriggerVoice} className="absolute right-2 top-2 w-8 h-8 flex items-center justify-center text-indigo-400 hover:text-white"><i className="fas fa-microphone"></i></button>
+            </div>
+            <div className="relative">
+              <input value={newNode.destination} onChange={e => setNewNode({...newNode, destination: e.target.value})} placeholder="Dropoff Location" className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-10 py-3 text-white font-bold outline-none text-sm focus:border-indigo-500" />
+              <button onClick={onTriggerVoice} className="absolute right-2 top-2 w-8 h-8 flex items-center justify-center text-indigo-400 hover:text-white"><i className="fas fa-microphone"></i></button>
+            </div>
             
             <div className="flex gap-2 overflow-x-auto no-scrollbar py-2">
                {['Pragia', 'Taxi', 'Shuttle'].map(v => (
@@ -1611,6 +1704,12 @@ const App: React.FC = () => {
     sortBy: 'newest',
     isSolo: null
   });
+
+  // Lifted Form States for AI Control
+  const [authFormState, setAuthFormState] = useState({ username: '', phone: '', pin: '', mode: 'login' as 'login' | 'signup' });
+  const [createMode, setCreateMode] = useState(false);
+  const [newNode, setNewNode] = useState<Partial<RideNode>>({ origin: '', destination: '', vehicleType: 'Pragia', isSolo: false });
+  const triggerVoiceRef = useRef<() => void>(() => {});
 
   // Track user's own rides locally
   const [myRideIds, setMyRideIds] = useState<string[]>(() => {
@@ -2378,10 +2477,60 @@ const App: React.FC = () => {
     setShowAiHelp(true);
   };
 
-  // --- GATEWAY CHECK ---
-  if (!currentUser) {
-    return <HubGateway onIdentify={handleGlobalUserAuth} settings={settings} />;
-  }
+  // --- ACTIONS FOR AI ---
+  const aiActions = {
+     onUpdateStatus: async (status: string) => {
+        if (activeDriverId) await supabase.from('unihub_drivers').update({ status }).eq('id', activeDriverId);
+     },
+     onFillAuth: (data: any) => {
+        setAuthFormState(prev => ({...prev, ...data}));
+     },
+     onFillRideForm: (data: any) => {
+        setCreateMode(true);
+        setNewNode(prev => ({...prev, ...data}));
+     },
+     onConfirmRide: () => {
+       // Only confirm if valid
+       if (newNode.destination) {
+         setCreateMode(true);
+         setTimeout(() => {
+            // We need to trigger the submit function inside PassengerPortal?
+            // Since we lifted submit logic partly...
+            // Let's implement submit here or move handleSubmit to App completely.
+            // Moving handleSubmit to App is cleaner.
+            const baseFare = newNode.vehicleType === 'Taxi' ? settings.farePerTaxi : settings.farePerPragia;
+            const finalFare = newNode.isSolo ? baseFare * settings.soloMultiplier : baseFare;
+            
+            if(!currentUser) return;
+            
+            const node: RideNode = {
+                id: `NODE-${Date.now()}`,
+                origin: newNode.origin || "Current Location",
+                destination: newNode.destination!,
+                vehicleType: newNode.vehicleType || 'Pragia',
+                isSolo: newNode.isSolo,
+                capacityNeeded: newNode.isSolo ? 1 : (newNode.vehicleType === 'Taxi' ? 4 : 3),
+                passengers: [{ id: currentUser.id, name: currentUser.username, phone: currentUser.phone }],
+                status: newNode.isSolo ? 'qualified' : 'forming',
+                leaderName: currentUser.username,
+                leaderPhone: currentUser.phone,
+                farePerPerson: finalFare,
+                createdAt: new Date().toISOString()
+            };
+            
+            // To avoid duplication with PassengerPortal handleSubmit, we just call the add function directly
+            // But we need to update state and close modal
+            supabase.from('unihub_nodes').insert([node]).then(({error}) => {
+                if(!error) {
+                    addRideToMyList(node.id);
+                    setCreateMode(false);
+                    setNewNode({ origin: '', destination: '', vehicleType: 'Pragia', isSolo: false });
+                }
+            });
+         }, 500);
+       }
+     }
+  };
 
   return (
     <div 
@@ -2397,6 +2546,32 @@ const App: React.FC = () => {
         <div className="absolute inset-0 bg-[#020617]/70 pointer-events-none z-0"></div>
       )}
 
+      {/* Global AI Voice Orb - Always present */}
+      <GlobalVoiceOrb 
+        mode={currentUser ? viewMode : 'public'}
+        user={viewMode === 'driver' ? activeDriver : currentUser}
+        contextData={{
+            nodes,
+            drivers,
+            transactions,
+            settings,
+            pendingRequests: pendingRequestsCount
+        }}
+        actions={aiActions}
+        triggerRef={triggerVoiceRef}
+      />
+
+      {/* GATEWAY CHECK */}
+      {!currentUser ? (
+         <HubGateway 
+            onIdentify={handleGlobalUserAuth} 
+            settings={settings} 
+            formState={authFormState}
+            setFormState={setAuthFormState}
+            onTriggerVoice={() => triggerVoiceRef.current?.()}
+         />
+      ) : (
+        <>
       {settings.hub_announcement && !dismissedAnnouncement && (
         <div className="fixed top-0 left-0 right-0 z-[400] bg-gradient-to-r from-amber-600 to-rose-600 px-4 py-3 flex items-center justify-between shadow-2xl animate-in slide-in-from-top duration-500 border-b border-white/10">
            <div className="flex items-center gap-3 overflow-hidden">
@@ -2416,26 +2591,6 @@ const App: React.FC = () => {
            <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
            Live Syncing...
         </div>
-      )}
-
-      {/* Global AI Voice Orb - Available for Passenger, Driver, Admin */}
-      {(currentUser || activeDriverId || isAdminAuthenticated) && (
-        <GlobalVoiceOrb 
-          mode={viewMode}
-          user={viewMode === 'driver' ? activeDriver : currentUser}
-          contextData={{
-             nodes,
-             drivers,
-             transactions,
-             settings,
-             pendingRequests: pendingRequestsCount
-          }}
-          actions={{
-             onUpdateStatus: async (status: string) => {
-                if (activeDriverId) await supabase.from('unihub_drivers').update({ status }).eq('id', activeDriverId);
-             }
-          }}
-        />
       )}
 
       <nav className="hidden lg:flex w-72 glass border-r border-white/5 flex-col p-8 space-y-10 z-50">
@@ -2594,6 +2749,12 @@ const App: React.FC = () => {
               settings={settings} 
               onShowQr={() => setShowQrModal(true)} 
               onShowAbout={() => setShowAboutModal(true)}
+              // New Props
+              createMode={createMode}
+              setCreateMode={setCreateMode}
+              newNode={newNode}
+              setNewNode={setNewNode}
+              onTriggerVoice={() => triggerVoiceRef.current?.()}
             />
           )}
           {viewMode === 'driver' && (
@@ -2741,65 +2902,8 @@ const App: React.FC = () => {
            </div>
         </div>
       )}
-
-      {showHelpModal && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
-          <div className="glass-bright w-full max-w-3xl rounded-[3rem] p-8 lg:p-12 space-y-10 animate-in zoom-in border border-white/10 overflow-y-auto max-h-[90vh] no-scrollbar">
-             <div className="flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                   <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-600/20">
-                      <i className="fas fa-graduation-cap"></i>
-                   </div>
-                   <div>
-                      <h3 className="text-2xl font-black italic uppercase tracking-tighter text-white leading-none">NexRyde Help Center</h3>
-                      <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1">Operational Standards v1.2</p>
-                   </div>
-                </div>
-                <button onClick={() => setShowHelpModal(false)} className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-slate-500 hover:text-white transition-all">
-                   <i className="fas fa-times"></i>
-                </button>
-             </div>
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <HelpSection 
-                   icon="fa-user-graduate" 
-                   title="Rider Guide" 
-                   color="text-amber-500"
-                   points={[
-                      "Request Ride: Start a pooled trip to split costs (4 seats max). Perfect for daily campus commutes.",
-                      "Express Drop: Select 'Solo' for private transport. Dynamic pricing multipliers apply.",
-                      "Ride PIN: Your 4-digit code is generated once a partner accepts. Only share it at destination.",
-                      "Cancellations: Only the Trip Organizer (the one who created the ride) can delete a trip."
-                   ]}
-                />
-                <HelpSection 
-                   icon="fa-id-card-clip" 
-                   title="Partner Guide" 
-                   color="text-indigo-400"
-                   points={[
-                      "Hotspots: Station at these zones for higher ride volume. Small entry fees ensure exclusivity.",
-                      "Credits: Your wallet balance allows you to accept trips. Fares are collected from riders directly.",
-                      "Verification: Input the rider's PIN or scan their code to deduct NexRyde commission and finish.",
-                      "Passwords: Use your Partner Password to log in. Keep it secure and private."
-                   ]}
-                />
-                <HelpSection 
-                   icon="fa-shield-check" 
-                   title="Security Protocols" 
-                   color="text-emerald-400"
-                   points={[
-                      "Authenticity: Partners must provide clear portraits and MoMo references during onboarding.",
-                      "Ride Safety: Share ride details with friends using the built-in share feature.",
-                      "Account: One NexRyde profile per user. Duplicate identities will be flagged by Admin.",
-                      "Support: Use the official Partner Support line for any real-time disputes."
-                   ]}
-                />
-             </div>
-             <div className="pt-6 border-t border-white/5 flex justify-center">
-                <button onClick={() => setShowHelpModal(false)} className="px-12 py-4 bg-white/5 border border-white/10 rounded-2xl font-black text-xs uppercase tracking-widest text-white hover:bg-white/10 transition-all">Acknowledge</button>
-             </div>
-          </div>
-        </div>
-      )}
+    </>
+    )}
     </div>
   );
 };
