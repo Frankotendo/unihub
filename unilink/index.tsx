@@ -1328,6 +1328,12 @@ const App: React.FC = () => {
     ]);
   };
 
+  const rejectTopup = async (reqId: string) => {
+    if(!confirm("Reject this top-up request?")) return;
+    const { error } = await supabase.from('unihub_topups').update({ status: 'rejected' }).eq('id', reqId);
+    if (error) alert("Failed to reject: " + error.message);
+  };
+
   const approveRegistration = async (regId: string) => {
     const reg = registrationRequests.find(r => r.id === regId);
     if (!reg || reg.status !== 'pending') return;
@@ -1362,6 +1368,12 @@ const App: React.FC = () => {
       console.error("Approval error:", err);
       alert("Activation failed: " + err.message);
     }
+  };
+
+  const rejectRegistration = async (regId: string) => {
+    if(!confirm("Reject this partner application?")) return;
+    const { error } = await supabase.from('unihub_registrations').update({ status: 'rejected' }).eq('id', regId);
+    if (error) alert("Failed to reject: " + error.message);
   };
 
   const registerDriver = async (d: Omit<Driver, 'id' | 'walletBalance' | 'rating' | 'status'>) => {
@@ -1715,7 +1727,9 @@ const App: React.FC = () => {
                 topupRequests={topupRequests}
                 registrationRequests={registrationRequests}
                 onApproveTopup={approveTopup}
+                onRejectTopup={rejectTopup}
                 onApproveRegistration={approveRegistration}
+                onRejectRegistration={rejectRegistration}
                 onLock={handleAdminLogout}
                 searchConfig={searchConfig}
                 settings={settings}
@@ -2178,7 +2192,9 @@ function AdminPortal({
   topupRequests, 
   registrationRequests, 
   onApproveTopup, 
+  onRejectTopup,
   onApproveRegistration, 
+  onRejectRegistration,
   onLock, 
   searchConfig, 
   settings, 
@@ -2277,7 +2293,10 @@ function AdminPortal({
                    {topupRequests.filter((r: any) => r.status === 'pending').map((r: any) => (
                       <div key={r.id} className="glass p-4 rounded-2xl border border-white/5 flex justify-between items-center mb-2">
                          <div><p className="text-white font-bold">₵ {r.amount}</p><p className="text-[9px] text-slate-500 uppercase">Ref: {r.momoReference}</p></div>
-                         <button onClick={() => onApproveTopup(r.id)} className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-black text-[9px] uppercase">Approve</button>
+                         <div className="flex gap-2">
+                            <button onClick={() => onRejectTopup(r.id)} className="px-3 py-2 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-colors rounded-xl font-black text-[9px] uppercase">Reject</button>
+                            <button onClick={() => onApproveTopup(r.id)} className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-black text-[9px] uppercase shadow-lg">Approve</button>
+                         </div>
                       </div>
                    ))}
                 </div>
@@ -2295,7 +2314,10 @@ function AdminPortal({
                             </div>
                          </div>
                          <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl"><p className="text-[9px] font-bold text-emerald-400 uppercase">Paid: ₵{r.amount} (Ref: {r.momoReference})</p></div>
-                         <button onClick={() => onApproveRegistration(r.id)} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase mt-2">Approve Partner</button>
+                         <div className="flex gap-2 mt-2">
+                            <button onClick={() => onRejectRegistration(r.id)} className="flex-1 py-3 bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-colors rounded-xl font-black text-[10px] uppercase">Reject</button>
+                            <button onClick={() => onApproveRegistration(r.id)} className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg">Approve Partner</button>
+                         </div>
                       </div>
                    ))}
                 </div>
