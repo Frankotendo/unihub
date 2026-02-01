@@ -1130,9 +1130,18 @@ const App: React.FC = () => {
     const node = nodes.find(n => n.id === nodeId);
     if (!driver || !node) return;
 
-    const totalPotentialCommission = settings.commissionPerSeat * node.passengers.length;
-    if (driver.walletBalance < totalPotentialCommission) {
-      alert(`Insufficient Credits! You need at least ₵${totalPotentialCommission.toFixed(2)} to accept this ride.`);
+    // RULE: One active ride at a time
+    const activeRide = nodes.find(n => n.assignedDriverId === driverId && n.status === 'dispatched');
+    if (activeRide) {
+        alert("Please complete your current active ride before accepting a new one.");
+        return;
+    }
+
+    const totalCommission = settings.commissionPerSeat * node.passengers.length;
+
+    // Check Balance
+    if (driver.walletBalance < totalCommission) {
+      alert(`Insufficient Credits! You need at least ₵${totalCommission.toFixed(2)} to accept this ride.`);
       return;
     }
 
@@ -1145,15 +1154,33 @@ const App: React.FC = () => {
         verificationCode: Math.floor(1000 + Math.random() * 9000).toString()
     }));
 
-    await supabase.from('unihub_nodes').update({ 
-      status: 'dispatched', 
-      assignedDriverId: driverId, 
-      verificationCode, // Keep fallback
-      passengers: updatedPassengers, // Store individual codes
-      negotiatedTotalFare: customFare || node?.negotiatedTotalFare
-    }).eq('id', nodeId);
-
-    alert(customFare ? `Premium trip accepted at ₵${customFare}!` : "Ride accepted! Verification codes synced.");
+    // UPFRONT DEDUCTION LOGIC
+    try {
+        await Promise.all([
+            supabase.from('unihub_nodes').update({ 
+              status: 'dispatched', 
+              assignedDriverId: driverId, 
+              verificationCode, 
+              passengers: updatedPassengers, 
+              negotiatedTotalFare: customFare || node?.negotiatedTotalFare
+            }).eq('id', nodeId),
+            supabase.from('unihub_drivers').update({ 
+                walletBalance: driver.walletBalance - totalCommission 
+            }).eq('id', driverId),
+            supabase.from('unihub_transactions').insert([{
+                id: `TX-COMM-${Date.now()}`,
+                driverId: driverId,
+                amount: totalCommission,
+                type: 'commission',
+                timestamp: new Date().toLocaleString()
+            }])
+        ]);
+    
+        alert(customFare ? `Premium trip accepted at ₵${customFare}! Commission deducted.` : "Ride accepted! Commission deducted. Codes synced.");
+    } catch (err: any) {
+        console.error("Accept ride error:", err);
+        alert("Failed to accept ride. Please try again.");
+    }
   };
 
   const verifyRide = async (nodeId: string, code: string) => {
@@ -1165,38 +1192,19 @@ const App: React.FC = () => {
     const passengerMatch = node.passengers.find(p => p.verificationCode === code);
 
     if (isMasterCode || passengerMatch) {
-      const driver = drivers.find(d => d.id === node.assignedDriverId);
-      if (!driver) {
-        alert("Verification error: Partner record not found.");
-        return;
-      }
-
-      const totalCommission = settings.commissionPerSeat * node.passengers.length;
-
+      // Driver verification logic - NO DEDUCTION HERE (already pre-paid)
       try {
-        await Promise.all([
-          supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId),
-          supabase.from('unihub_drivers').update({ 
-            walletBalance: driver.walletBalance - totalCommission 
-          }).eq('id', driver.id),
-          supabase.from('unihub_transactions').insert([{
-            id: `TX-VERIFY-${Date.now()}`,
-            driverId: driver.id,
-            amount: totalCommission,
-            type: 'commission',
-            timestamp: new Date().toLocaleString()
-          }])
-        ]);
+        await supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId);
         removeRideFromMyList(nodeId);
         
         const successMsg = passengerMatch 
-            ? `Ride Verified! Passenger ${passengerMatch.name} confirmed. Commission deducted.` 
-            : `Ride verified! Commission of ₵${totalCommission.toFixed(2)} deducted.`;
+            ? `Ride Verified! Passenger ${passengerMatch.name} confirmed.` 
+            : `Ride verified and completed!`;
         
         alert(successMsg);
       } catch (err: any) {
-        console.error("Verification deduction error:", err);
-        alert("Error deducting credits. Contact Admin.");
+        console.error("Verification error:", err);
+        alert("Error closing ride. Contact Admin.");
       }
     } else {
       alert("Invalid Code! Ask the passenger for their Ride PIN.");
@@ -1209,6 +1217,24 @@ const App: React.FC = () => {
 
     try {
       if (node.status === 'dispatched' && node.assignedDriverId) {
+        // REFUND LOGIC
+        const driver = drivers.find(d => d.id === node.assignedDriverId);
+        if (driver) {
+             const totalCommission = settings.commissionPerSeat * node.passengers.length;
+             await Promise.all([
+                 supabase.from('unihub_drivers').update({ 
+                     walletBalance: driver.walletBalance + totalCommission 
+                 }).eq('id', driver.id),
+                 supabase.from('unihub_transactions').insert([{
+                    id: `TX-REFUND-${Date.now()}`,
+                    driverId: driver.id,
+                    amount: totalCommission,
+                    type: 'topup', // Use 'topup' type for refund credit
+                    timestamp: new Date().toLocaleString()
+                 }])
+             ]);
+        }
+
         const resetStatus = (node.isSolo || node.isLongDistance) ? 'qualified' : (node.passengers.length >= 4 ? 'qualified' : 'forming');
         // Clear verifications on reset
         const resetPassengers = node.passengers.map(p => {
@@ -1224,7 +1250,7 @@ const App: React.FC = () => {
         }).eq('id', nodeId);
         
         if (resetErr) throw resetErr;
-        alert("Trip assignment reset. No commission was charged.");
+        alert("Trip assignment reset. Commission refunded to partner.");
       } else {
         const { error: deleteErr } = await supabase.from('unihub_nodes').delete().eq('id', nodeId);
         if (deleteErr) throw deleteErr;
@@ -1238,29 +1264,8 @@ const App: React.FC = () => {
   };
 
   const settleNode = async (nodeId: string) => {
-    if (confirm("Force complete this trip? Partner commission will be charged.")) {
-      const node = nodes.find(n => n.id === nodeId);
-      if (node && node.assignedDriverId) {
-        const driver = drivers.find(d => d.id === node.assignedDriverId);
-        if (driver) {
-          const totalCommission = settings.commissionPerSeat * node.passengers.length;
-          await Promise.all([
-            supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId),
-            supabase.from('unihub_drivers').update({ 
-              walletBalance: driver.walletBalance - totalCommission 
-            }).eq('id', driver.id),
-            supabase.from('unihub_transactions').insert([{
-              id: `TX-FORCE-${Date.now()}`,
-              driverId: driver.id,
-              amount: totalCommission,
-              type: 'commission',
-              timestamp: new Date().toLocaleString()
-            }])
-          ]);
-        }
-      } else {
-        await supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId);
-      }
+    if (confirm("Force complete this trip? (Assumes commission was prepaid or not applicable)")) {
+      await supabase.from('unihub_nodes').update({ status: 'completed' }).eq('id', nodeId);
       alert("Trip settled manually.");
     }
   };
@@ -2117,7 +2122,13 @@ function DriverPortal({
                          <p className="text-xl font-black text-amber-500">₵ {node.negotiatedTotalFare || (node.farePerPerson * node.passengers.length)}</p>
                       </div>
                       <div className="space-y-2 mb-4"><div className="flex gap-2 text-sm font-bold text-white"><i className="fas fa-location-dot mt-1 text-slate-500"></i> {node.origin}</div><div className="flex gap-2 text-sm font-bold text-white"><i className="fas fa-flag-checkered mt-1 text-slate-500"></i> {node.destination}</div></div>
-                      <button onClick={() => { if(confirm(`Accept trip near ${node.origin}?`)) onAccept(node.id, activeDriver.id); }} className="w-full py-3 bg-amber-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-lg hover:scale-[1.02] transition-transform">Accept Ride</button>
+                      <button 
+                        onClick={() => { if(confirm(`Accept trip near ${node.origin}?`)) onAccept(node.id, activeDriver.id); }} 
+                        disabled={myRides.length > 0}
+                        className={`w-full py-3 rounded-xl font-black text-[10px] uppercase shadow-lg hover:scale-[1.02] transition-transform ${myRides.length > 0 ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-amber-500 text-[#020617]'}`}
+                      >
+                          {myRides.length > 0 ? 'Complete Active Job First' : 'Accept Ride'}
+                      </button>
                    </div>
                    {/* Insert Ad after every 3rd item */}
                    {(index + 1) % 3 === 0 && <InlineAd settings={settings} />}
@@ -2142,7 +2153,7 @@ function DriverPortal({
                          <input className="flex-1 bg-white/10 border border-white/10 rounded-xl p-3 text-center text-white font-black tracking-[0.5em] outline-none focus:border-indigo-500" placeholder="PIN" maxLength={4} value={verifyCode} onChange={e => setVerifyCode(e.target.value.trim())} />
                       </div>
                       <div className="flex gap-2 mt-3">
-                         <button onClick={() => { if(confirm("Cancel job? Rating may be affected.")) onCancel(node.id); }} className="flex-1 py-3 bg-rose-500/10 text-rose-500 rounded-xl font-black text-[10px] uppercase">Cancel</button>
+                         <button onClick={() => { if(confirm("Cancel job? Commission will be refunded, but rating may be affected.")) onCancel(node.id); }} className="flex-1 py-3 bg-rose-500/10 text-rose-500 rounded-xl font-black text-[10px] uppercase">Cancel & Refund</button>
                          <button onClick={() => onVerify(node.id, verifyCode)} className="flex-[2] py-3 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase shadow-lg">Verify Complete</button>
                       </div>
                    </div>
