@@ -181,6 +181,10 @@ interface AppSettings {
   appLogo?: string; // Base64 string for custom logo
   registrationFee: number;
   hub_announcement?: string;
+  // Social Media Config
+  facebookUrl?: string;
+  instagramUrl?: string;
+  tiktokUrl?: string;
   // AdSense Config
   adSenseClientId?: string;
   adSenseSlotId?: string;
@@ -2077,6 +2081,24 @@ const AdminPortal = ({
                        </label>
                    </div>
               </div>
+              
+              <div>
+                  <h4 className="text-xs font-black uppercase text-white mb-4">Social Media Handles</h4>
+                  <div className="space-y-3">
+                      <div>
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Facebook URL</label>
+                          <input value={localSettings.facebookUrl || ''} onChange={e => setLocalSettings({...localSettings, facebookUrl: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs" placeholder="https://facebook.com/..." />
+                      </div>
+                      <div>
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Instagram URL</label>
+                          <input value={localSettings.instagramUrl || ''} onChange={e => setLocalSettings({...localSettings, instagramUrl: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs" placeholder="https://instagram.com/..." />
+                      </div>
+                      <div>
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">TikTok URL</label>
+                          <input value={localSettings.tiktokUrl || ''} onChange={e => setLocalSettings({...localSettings, tiktokUrl: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs" placeholder="https://tiktok.com/@..." />
+                      </div>
+                  </div>
+              </div>
 
               <div>
                   <h4 className="text-xs font-black uppercase text-white mb-4">AdSense Configuration</h4>
@@ -2238,6 +2260,9 @@ const App: React.FC = () => {
     appLogo: "",
     registrationFee: 20.00,
     hub_announcement: "",
+    facebookUrl: "",
+    instagramUrl: "",
+    tiktokUrl: "",
     // Default AdSense Config
     adSenseClientId: "ca-pub-7812709042449387",
     adSenseSlotId: "9489307110",
@@ -3394,6 +3419,24 @@ const App: React.FC = () => {
                        <i className="fas fa-share-nodes text-amber-500 text-2xl group-hover:scale-110 transition-transform"></i>
                        <span className="text-[9px] font-black uppercase text-slate-500">Share Platform</span>
                     </button>
+                    {settings.facebookUrl && (
+                        <a href={settings.facebookUrl} target="_blank" className="flex flex-col items-center gap-3 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-blue-600/10 hover:border-blue-500/30 transition-all group">
+                            <i className="fab fa-facebook text-blue-500 text-2xl group-hover:scale-110 transition-transform"></i>
+                            <span className="text-[9px] font-black uppercase text-slate-500">Facebook</span>
+                        </a>
+                    )}
+                    {settings.instagramUrl && (
+                        <a href={settings.instagramUrl} target="_blank" className="flex flex-col items-center gap-3 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-pink-600/10 hover:border-pink-500/30 transition-all group">
+                            <i className="fab fa-instagram text-pink-500 text-2xl group-hover:scale-110 transition-transform"></i>
+                            <span className="text-[9px] font-black uppercase text-slate-500">Instagram</span>
+                        </a>
+                    )}
+                    {settings.tiktokUrl && (
+                        <a href={settings.tiktokUrl} target="_blank" className="flex flex-col items-center gap-3 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-gray-600/10 hover:border-gray-500/30 transition-all group">
+                            <i className="fab fa-tiktok text-white text-2xl group-hover:scale-110 transition-transform"></i>
+                            <span className="text-[9px] font-black uppercase text-slate-500">TikTok</span>
+                        </a>
+                    )}
                  </div>
               </div>
               <div className="pt-6 border-t border-white/5 text-center">
