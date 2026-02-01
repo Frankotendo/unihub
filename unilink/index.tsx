@@ -268,6 +268,47 @@ const compressImage = (file: File, quality = 0.6, maxWidth = 800): Promise<strin
 
 // --- SUB-COMPONENTS ---
 
+const QrScannerModal = ({ onScan, onClose }: { onScan: (text: string) => void, onClose: () => void }) => {
+  useEffect(() => {
+    // Safety check if script loaded
+    if (!(window as any).Html5QrcodeScanner) {
+        alert("Scanner library loading... try again.");
+        onClose();
+        return;
+    }
+    
+    const scanner = new (window as any).Html5QrcodeScanner(
+        "reader",
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        false
+    );
+    
+    scanner.render((text: string) => {
+        scanner.clear();
+        onScan(text);
+    }, (err: any) => {
+        // ignore errors
+    });
+    
+    return () => {
+        try { scanner.clear(); } catch(e) {}
+    };
+  }, []);
+  
+  return (
+     <div className="fixed inset-0 bg-black/95 z-[1000] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in">
+         <div className="bg-white w-full max-w-sm rounded-[2rem] overflow-hidden relative shadow-2xl">
+            <button onClick={onClose} className="absolute top-4 right-4 z-20 w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200"><i className="fas fa-times"></i></button>
+            <div className="p-6 text-center">
+               <h3 className="text-lg font-black uppercase text-[#020617]">Scan Rider PIN</h3>
+               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">Align QR code within frame</p>
+               <div id="reader" className="rounded-xl overflow-hidden"></div>
+            </div>
+         </div>
+     </div>
+  );
+};
+
 const GlobalVoiceOrb = ({ 
   mode,
   user,
@@ -1383,9 +1424,10 @@ const DriverPortal = ({
 }: any) => {
   const [loginId, setLoginId] = useState('');
   const [loginPin, setLoginPin] = useState('');
+  const [isScanning, setIsScanning] = useState<string | null>(null);
   
   const [regMode, setRegMode] = useState(false);
-  const [regData, setRegData] = useState<any>({ name: '', vehicleType: 'Pragia', licensePlate: '', contact: '', pin: '', amount: 20, momoReference: '' });
+  const [regData, setRegData] = useState<any>({ name: '', vehicleType: 'Pragia', licensePlate: '', contact: '', pin: '', amount: 20, momoReference: '', avatarUrl: '' });
 
   const [activeTab, setActiveTab] = useState<'market' | 'active' | 'wallet' | 'broadcast'>('market');
   const [verifyCode, setVerifyCode] = useState('');
@@ -1409,6 +1451,26 @@ const DriverPortal = ({
                       <button onClick={() => setRegMode(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white"><i className="fas fa-times"></i></button>
                   </div>
                   <div className="space-y-4">
+                      <div className="flex items-center gap-4 p-4 bg-white/5 rounded-xl border border-white/10">
+                         <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center overflow-hidden relative group">
+                            {regData.avatarUrl ? (
+                               <img src={regData.avatarUrl} className="w-full h-full object-cover" />
+                            ) : (
+                               <i className="fas fa-camera text-slate-400"></i>
+                            )}
+                            <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async (e) => {
+                               if (e.target.files?.[0]) {
+                                  const base64 = await compressImage(e.target.files[0], 0.5, 300);
+                                  setRegData({...regData, avatarUrl: base64});
+                               }
+                            }} />
+                         </div>
+                         <div>
+                            <p className="text-[10px] font-black uppercase text-white">Profile Photo</p>
+                            <p className="text-[9px] text-slate-400">Required for Trust Verification</p>
+                         </div>
+                      </div>
+
                       <input value={regData.name} onChange={e => setRegData({...regData, name: e.target.value})} placeholder="Full Name" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" />
                       <div className="grid grid-cols-2 gap-2">
                          <select value={regData.vehicleType} onChange={e => setRegData({...regData, vehicleType: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs">
@@ -1462,6 +1524,18 @@ const DriverPortal = ({
 
   return (
       <div className="space-y-6">
+          {isScanning && (
+             <QrScannerModal 
+               onClose={() => setIsScanning(null)}
+               onScan={(code) => {
+                 if (isScanning) {
+                    onVerify(isScanning, code);
+                    setIsScanning(null);
+                 }
+               }}
+             />
+          )}
+
           <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar">
              {['market', 'active', 'broadcast', 'wallet'].map(tab => (
                  <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all relative ${activeTab === tab ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>
@@ -1580,6 +1654,9 @@ const DriverPortal = ({
                               </div>
 
                               <div className="flex gap-2">
+                                  <button onClick={() => setIsScanning(node.id)} className="w-12 bg-white/10 text-white rounded-xl flex items-center justify-center hover:bg-white/20 transition-all border border-white/10">
+                                     <i className="fas fa-qrcode"></i>
+                                  </button>
                                   <input type="number" placeholder="Enter PIN from Rider" className="flex-[2] bg-white text-[#020617] rounded-xl px-4 text-center font-black text-lg outline-none placeholder:text-slate-400 placeholder:text-xs placeholder:font-bold" value={verifyCode} onChange={e => setVerifyCode(e.target.value)} />
                                   <button onClick={() => { onVerify(node.id, verifyCode); setVerifyCode(''); }} className="flex-1 py-4 bg-emerald-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-lg">Verify</button>
                                   <button onClick={() => onCancel(node.id)} className="w-12 flex items-center justify-center bg-rose-500/20 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all"><i className="fas fa-ban"></i></button>
@@ -1715,7 +1792,7 @@ const AdminPortal = ({
   adminEmail 
 }: any) => {
   const [newMission, setNewMission] = useState({ location: '', description: '', entryFee: 5 });
-  const [newDriver, setNewDriver] = useState({ name: '', contact: '', vehicleType: 'Pragia', licensePlate: '', pin: '1234' });
+  const [newDriver, setNewDriver] = useState({ name: '', contact: '', vehicleType: 'Pragia', licensePlate: '', pin: '1234', avatarUrl: '' });
   const [localSettings, setLocalSettings] = useState(settings);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -1790,6 +1867,27 @@ const AdminPortal = ({
            <div className="space-y-6">
                <div className="glass p-6 rounded-[2rem] border border-white/10">
                   <h3 className="text-sm font-black text-white uppercase mb-4">Add Partner</h3>
+                  
+                  <div className="flex items-center gap-4 mb-4 bg-white/5 p-3 rounded-xl border border-white/10">
+                      <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center overflow-hidden relative group shrink-0">
+                          {newDriver.avatarUrl ? (
+                              <img src={newDriver.avatarUrl} className="w-full h-full object-cover" />
+                          ) : (
+                              <i className="fas fa-camera text-slate-400"></i>
+                          )}
+                          <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={async (e) => {
+                              if (e.target.files?.[0]) {
+                                  const base64 = await compressImage(e.target.files[0], 0.5, 300);
+                                  setNewDriver({...newDriver, avatarUrl: base64});
+                              }
+                          }} />
+                      </div>
+                      <div>
+                          <p className="text-[10px] font-black uppercase text-white">Driver Photo</p>
+                          <p className="text-[9px] text-slate-400">Required</p>
+                      </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-2 mb-2">
                      <input value={newDriver.name} onChange={e => setNewDriver({...newDriver, name: e.target.value})} placeholder="Name" className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-bold outline-none" />
                      <input value={newDriver.contact} onChange={e => setNewDriver({...newDriver, contact: e.target.value})} placeholder="Phone" className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-bold outline-none" />
@@ -1803,7 +1901,7 @@ const AdminPortal = ({
                      <input value={newDriver.licensePlate} onChange={e => setNewDriver({...newDriver, licensePlate: e.target.value})} placeholder="Plate" className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-bold outline-none" />
                      <input value={newDriver.pin} onChange={e => setNewDriver({...newDriver, pin: e.target.value})} placeholder="PIN" className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-bold outline-none" />
                   </div>
-                  <button onClick={() => { onAddDriver(newDriver); setNewDriver({ name: '', contact: '', vehicleType: 'Pragia', licensePlate: '', pin: '1234' }); }} className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-[9px] uppercase transition-all">Manually Register Driver</button>
+                  <button onClick={() => { onAddDriver(newDriver); setNewDriver({ name: '', contact: '', vehicleType: 'Pragia', licensePlate: '', pin: '1234', avatarUrl: '' }); }} className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-black text-[9px] uppercase transition-all">Manually Register Driver</button>
                </div>
 
                <div className="space-y-2">
