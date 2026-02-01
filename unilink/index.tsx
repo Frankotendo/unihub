@@ -543,6 +543,7 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
             {myRides.map((node: RideNode) => {
               const myPassengerInfo = node.passengers.find(p => p.phone === currentUser.phone);
               const myPin = myPassengerInfo?.verificationCode || node.verificationCode;
+              const assignedDriver = drivers.find((d: Driver) => d.id === node.assignedDriverId);
 
               return (
               <div key={node.id} className="glass p-6 rounded-[2rem] border border-indigo-500/30 bg-indigo-900/10 relative overflow-hidden">
@@ -561,6 +562,20 @@ const PassengerPortal = ({ currentUser, nodes, myRideIds, onAddNode, onJoin, onL
                     </div>
                  </div>
                  
+                 {assignedDriver && (
+                    <div className="flex items-center gap-3 bg-white/5 p-3 rounded-xl mb-4 border border-white/5">
+                        <img src={assignedDriver.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${assignedDriver.name}`} className="w-10 h-10 rounded-full object-cover bg-black" alt="Driver" />
+                        <div>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">Your Partner</p>
+                            <p className="text-sm font-black text-white leading-none">{assignedDriver.name}</p>
+                            <div className="flex items-center gap-1 mt-1">
+                                 <span className="text-[9px] text-amber-500">★ {assignedDriver.rating}</span>
+                                 <span className="text-[9px] text-slate-500">• {assignedDriver.licensePlate}</span>
+                            </div>
+                        </div>
+                    </div>
+                 )}
+
                  {node.assignedDriverId && myPin && (
                     <div className="bg-black/30 p-4 rounded-xl mb-4 flex items-center justify-between gap-4">
                        <div>
@@ -1923,7 +1938,7 @@ function DriverPortal({
   const [view, setView] = useState<'login' | 'register'>('login');
   const [loginId, setLoginId] = useState('');
   const [loginPin, setLoginPin] = useState('');
-  const [regData, setRegData] = useState({ name: '', contact: '', licensePlate: '', pin: '', vehicleType: 'Taxi' as VehicleType, momoReference: '', amount: settings.registrationFee });
+  const [regData, setRegData] = useState({ name: '', contact: '', licensePlate: '', pin: '', vehicleType: 'Taxi' as VehicleType, momoReference: '', amount: settings.registrationFee, avatarUrl: '' });
   const [activeTab, setActiveTab] = useState('market');
   const [verifyCode, setVerifyCode] = useState('');
   const [topupAmount, setTopupAmount] = useState('');
@@ -1966,6 +1981,26 @@ function DriverPortal({
     }
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const compressed = await compressImage(file, 0.6, 400); // 400px width is enough for avatar
+        setRegData({ ...regData, avatarUrl: compressed });
+      } catch (err) {
+        alert("Photo upload failed");
+      }
+    }
+  };
+
+  const handleRegistrationSubmit = () => {
+    if (!regData.name || !regData.contact || !regData.licensePlate || !regData.pin || !regData.momoReference || !regData.avatarUrl) {
+      alert("All fields including a profile photo are required for verification.");
+      return;
+    }
+    onRequestRegistration(regData);
+  };
+
   if (!activeDriver) {
     return (
       <div className="max-w-md mx-auto animate-in zoom-in">
@@ -1986,6 +2021,24 @@ function DriverPortal({
                  <h2 className="text-2xl font-black italic uppercase text-white">Partner Application</h2>
                  <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mt-1">Join the fleet (Fee: ₵{settings.registrationFee})</p>
               </div>
+              
+              <div className="flex justify-center mb-4">
+                 <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" id="driver-avatar-upload" />
+                 <label htmlFor="driver-avatar-upload" className="w-24 h-24 rounded-full bg-white/5 border border-white/10 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative group">
+                    {regData.avatarUrl ? (
+                        <img src={regData.avatarUrl} className="w-full h-full object-cover" />
+                    ) : (
+                        <>
+                           <i className="fas fa-camera text-slate-500 mb-1"></i>
+                           <span className="text-[8px] font-bold text-slate-500 uppercase">Photo</span>
+                        </>
+                    )}
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i className="fas fa-edit text-white"></i>
+                    </div>
+                 </label>
+              </div>
+
               <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" placeholder="Full Name" value={regData.name} onChange={e => setRegData({...regData, name: e.target.value})} />
               <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" placeholder="Phone Contact" value={regData.contact} onChange={e => setRegData({...regData, contact: e.target.value})} />
               <div className="grid grid-cols-2 gap-2">
@@ -1997,7 +2050,7 @@ function DriverPortal({
                  <p className="text-[9px] font-bold text-indigo-300 uppercase">Send ₵{settings.registrationFee} to {settings.adminMomo} <span className="text-white">({settings.adminMomoName})</span></p>
                  <input className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none focus:border-amber-500 text-xs" placeholder="MoMo Reference ID" value={regData.momoReference} onChange={e => setRegData({...regData, momoReference: e.target.value})} />
               </div>
-              <button onClick={() => onRequestRegistration(regData)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Submit Application</button>
+              <button onClick={handleRegistrationSubmit} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Submit Application</button>
               <button onClick={() => setView('login')} className="w-full text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-white">Back to Login</button>
            </div>
          )}
@@ -2205,7 +2258,9 @@ function AdminPortal({
                 {drivers.map((d: any) => (
                    <div key={d.id} className="glass p-6 rounded-[2rem] border border-white/10 relative">
                       <div className="flex items-center gap-3 mb-4">
-                         <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-black">{d.name[0]}</div>
+                         <div className="w-10 h-10 rounded-full bg-white/5 overflow-hidden border border-white/10 shrink-0">
+                            {d.avatarUrl ? <img src={d.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-indigo-600 text-white font-black">{d.name[0]}</div>}
+                         </div>
                          <div><p className="text-white font-bold">{d.name}</p><p className="text-[10px] text-slate-500 uppercase">{d.licensePlate} • {d.vehicleType}</p></div>
                       </div>
                       <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl mb-4"><p className="text-xs font-bold text-slate-400">Wallet Balance</p><p className="text-lg font-black text-white">₵ {d.walletBalance.toFixed(2)}</p></div>
@@ -2229,10 +2284,17 @@ function AdminPortal({
                 <div>
                    <h3 className="text-xs font-black uppercase text-slate-500 mb-4 tracking-widest">Onboarding Applications</h3>
                    {registrationRequests.filter((r: any) => r.status === 'pending').map((r: any) => (
-                      <div key={r.id} className="glass p-6 rounded-[2rem] border border-white/10 mb-4 space-y-2">
-                         <div className="flex justify-between"><h4 className="font-bold text-white">{r.name}</h4><span className="px-2 py-1 bg-white/10 rounded-lg text-[8px] text-slate-400 uppercase">{r.vehicleType}</span></div>
-                         <p className="text-xs text-slate-400">Phone: {r.contact}</p><p className="text-xs text-slate-400">Plate: {r.licensePlate}</p>
-                         <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg"><p className="text-[9px] font-bold text-emerald-400 uppercase">Paid: ₵{r.amount} (Ref: {r.momoReference})</p></div>
+                      <div key={r.id} className="glass p-6 rounded-[2rem] border border-white/10 mb-4 space-y-4">
+                         <div className="flex gap-4">
+                            <div className="w-16 h-16 rounded-2xl bg-white/5 overflow-hidden shrink-0 border border-white/10">
+                               {r.avatarUrl ? <img src={r.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><i className="fas fa-user text-slate-500"></i></div>}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex justify-between mb-1"><h4 className="font-bold text-white text-lg">{r.name}</h4><span className="px-2 py-1 bg-white/10 rounded-lg text-[8px] text-slate-400 uppercase h-fit">{r.vehicleType}</span></div>
+                              <p className="text-xs text-slate-400">Phone: {r.contact}</p><p className="text-xs text-slate-400">Plate: {r.licensePlate}</p>
+                            </div>
+                         </div>
+                         <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl"><p className="text-[9px] font-bold text-emerald-400 uppercase">Paid: ₵{r.amount} (Ref: {r.momoReference})</p></div>
                          <button onClick={() => onApproveRegistration(r.id)} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase mt-2">Approve Partner</button>
                       </div>
                    ))}
@@ -2375,4 +2437,3 @@ if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<App />);
 }
-
