@@ -967,6 +967,7 @@ const PassengerPortal = ({
   onTriggerVoice
 }: any) => {
   const [fareEstimate, setFareEstimate] = useState(0);
+  const [customOffer, setCustomOffer] = useState<number | null>(null);
   const [expandedQr, setExpandedQr] = useState<string | null>(null);
   
   // Ad states
@@ -988,6 +989,8 @@ const PassengerPortal = ({
     let base = newNode.vehicleType === 'Taxi' ? settings.farePerTaxi : settings.farePerPragia;
     if (newNode.isSolo) base *= settings.soloMultiplier;
     setFareEstimate(base);
+    // Reset custom offer when type changes if it is less than base
+    if (customOffer && customOffer < base) setCustomOffer(null);
   }, [newNode.vehicleType, newNode.isSolo, settings]);
 
   const toggleSolo = () => {
@@ -1010,6 +1013,8 @@ const PassengerPortal = ({
 
   const handleSubmit = () => {
     if (!newNode.origin || !newNode.destination) return alert("Please fill all fields");
+    const finalFare = customOffer ? parseFloat(customOffer.toString()) : fareEstimate;
+
     const node: RideNode = {
       id: `NODE-${Date.now()}`,
       origin: newNode.origin!,
@@ -1021,11 +1026,12 @@ const PassengerPortal = ({
       status: newNode.isSolo ? 'qualified' : 'forming',
       leaderName: currentUser.username,
       leaderPhone: currentUser.phone,
-      farePerPerson: fareEstimate,
+      farePerPerson: finalFare,
       createdAt: new Date().toISOString()
     };
     onAddNode(node);
     setCreateMode(false);
+    setCustomOffer(null);
   };
 
   if (createMode) {
@@ -1063,9 +1069,29 @@ const PassengerPortal = ({
                ))}
             </div>
 
-            <div className="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/20 flex justify-between items-center">
-               <span className="text-xs font-bold text-emerald-400 uppercase">Est. Fare</span>
-               <span className="text-xl font-black text-white">₵{fareEstimate.toFixed(2)}</span>
+            {/* Fair Pricing / Bidding Section */}
+            <div className="p-6 bg-indigo-900/30 rounded-2xl border border-indigo-500/20 space-y-3">
+               <div className="flex justify-between items-center">
+                   <span className="text-[10px] font-black uppercase text-indigo-300">Base Fare</span>
+                   <span className="text-sm font-bold text-slate-400">₵{fareEstimate.toFixed(2)}</span>
+               </div>
+               <div>
+                   <div className="flex justify-between items-center mb-1">
+                      <label className="text-[10px] font-black uppercase text-white">Your Offer (₵)</label>
+                      <span className="text-[9px] text-emerald-400 font-bold uppercase">Boost to attract drivers</span>
+                   </div>
+                   <input 
+                      type="number" 
+                      min={fareEstimate}
+                      step="0.5"
+                      value={customOffer || fareEstimate}
+                      onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setCustomOffer(val >= fareEstimate ? val : fareEstimate);
+                      }}
+                      className="w-full bg-[#020617]/50 border border-white/10 rounded-xl px-4 py-3 text-white font-black text-lg outline-none focus:border-emerald-500 transition-colors"
+                   />
+               </div>
             </div>
 
             <button onClick={handleSubmit} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Confirm Request</button>
@@ -1405,7 +1431,9 @@ const DriverPortal = ({
 }: any) => {
   const [loginId, setLoginId] = useState('');
   const [loginPin, setLoginPin] = useState('');
+  const [driverSearch, setDriverSearch] = useState(''); // New Search State
   const [isScanning, setIsScanning] = useState<string | null>(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
   
   const [regMode, setRegMode] = useState(false);
   const [regData, setRegData] = useState<any>({ name: '', vehicleType: 'Pragia', licensePlate: '', contact: '', pin: '', amount: 20, momoReference: '', avatarUrl: '' });
@@ -1429,6 +1457,13 @@ const DriverPortal = ({
   const commissionRate = settings?.commissionPerSeat || 0;
   const requiredBalanceForBroadcast = isShuttle ? (estimatedCapacity * commissionRate) : 0; 
   const canAffordBroadcast = activeDriver ? (activeDriver.walletBalance >= requiredBalanceForBroadcast) : false;
+
+  // Filtered Drivers for Login
+  const filteredDrivers = drivers.filter((d: Driver) => 
+     d.name.toLowerCase().includes(driverSearch.toLowerCase()) || 
+     d.contact.includes(driverSearch) ||
+     d.licensePlate.toLowerCase().includes(driverSearch.toLowerCase())
+  );
 
   if (!activeDriver) {
       if (regMode) {
@@ -1493,15 +1528,47 @@ const DriverPortal = ({
                 <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1">Authorized Personnel Only</p>
              </div>
              
-             <div className="space-y-3">
-               <select value={loginId} onChange={e => setLoginId(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs">
-                  <option value="">Select Your Profile</option>
-                  {drivers.map((d: any) => <option key={d.id} value={d.id}>{d.name} ({d.vehicleType})</option>)}
-               </select>
-               <input type="password" maxLength={4} value={loginPin} onChange={e => setLoginPin(e.target.value)} placeholder="Enter 4-digit PIN" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs text-center tracking-widest" />
-             </div>
-
-             <button onClick={() => onLogin(loginId, loginPin)} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl">Authenticate</button>
+             {/* Smart Driver Search */}
+             {!loginId ? (
+                <div className="space-y-3">
+                   <div className="relative">
+                      <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                      <input 
+                         type="text" 
+                         value={driverSearch} 
+                         onChange={e => setDriverSearch(e.target.value)} 
+                         placeholder="Search Name or Phone" 
+                         className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white font-bold outline-none text-xs focus:border-indigo-500 transition-colors" 
+                      />
+                   </div>
+                   <div className="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                      {filteredDrivers.map((d: Driver) => (
+                         <div key={d.id} onClick={() => setLoginId(d.id)} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 cursor-pointer hover:bg-white/10 transition-colors text-left">
+                            <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-black text-white shrink-0">
+                               {d.name.substring(0,2).toUpperCase()}
+                            </div>
+                            <div className="overflow-hidden">
+                               <p className="text-xs font-bold text-white truncate">{d.name}</p>
+                               <p className="text-[9px] text-slate-400 truncate">{d.licensePlate} • {d.vehicleType}</p>
+                            </div>
+                         </div>
+                      ))}
+                      {filteredDrivers.length === 0 && <p className="text-[10px] text-slate-500 py-2">No partners found.</p>}
+                   </div>
+                </div>
+             ) : (
+                <div className="space-y-4 animate-in slide-in-from-right">
+                   <div className="flex items-center gap-3 p-3 bg-indigo-600/20 border border-indigo-500/30 rounded-xl text-left">
+                       <div className="flex-1">
+                          <p className="text-[9px] font-black uppercase text-indigo-300">Selected Profile</p>
+                          <p className="text-sm font-bold text-white truncate">{drivers.find((d:Driver) => d.id === loginId)?.name}</p>
+                       </div>
+                       <button onClick={() => { setLoginId(''); setLoginPin(''); }} className="text-[10px] text-white bg-white/10 px-2 py-1 rounded-lg">Change</button>
+                   </div>
+                   <input type="password" maxLength={4} value={loginPin} onChange={e => setLoginPin(e.target.value)} placeholder="Enter 4-digit PIN" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs text-center tracking-widest focus:border-indigo-500" />
+                   <button onClick={() => onLogin(loginId, loginPin)} className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl">Authenticate</button>
+                </div>
+             )}
              
              <div className="pt-4 border-t border-white/5">
                 <button onClick={() => setRegMode(true)} className="text-[9px] font-black text-slate-500 uppercase hover:text-white transition-colors">Join the Fleet</button>
@@ -1570,8 +1637,13 @@ const DriverPortal = ({
                              const capacity = node.capacityNeeded;
                              const canAccept = paxCount > 0;
                              
+                             // Calculate base to see if it's a high offer
+                             const baseFare = node.vehicleType === 'Taxi' ? settings.farePerTaxi : settings.farePerPragia;
+                             const expectedFare = node.isSolo ? baseFare * settings.soloMultiplier : baseFare;
+                             const isHighFare = node.farePerPerson > expectedFare;
+
                              return (
-                                 <div key={node.id} className="glass p-6 rounded-[2rem] border border-white/5 hover:border-indigo-500/30 transition-all group relative">
+                                 <div key={node.id} className={`glass p-6 rounded-[2rem] border transition-all group relative ${isHighFare ? 'border-amber-500/40 shadow-lg shadow-amber-500/10' : 'border-white/5 hover:border-indigo-500/30'}`}>
                                      {node.isSolo && <div className="absolute top-4 right-4 text-[9px] font-black uppercase bg-amber-500 text-[#020617] px-2 py-1 rounded-md animate-pulse">Express</div>}
                                      <div className="mb-4">
                                          <h4 className="text-lg font-black text-white">{node.destination}</h4>
@@ -1580,7 +1652,10 @@ const DriverPortal = ({
                                      <div className="flex justify-between items-center mb-4 p-3 bg-white/5 rounded-xl border border-white/5">
                                          <div>
                                             <p className="text-[9px] font-bold text-slate-500 uppercase">Per Pax</p>
-                                            <p className="text-lg font-black text-white">₵ {node.farePerPerson}</p>
+                                            <div className="flex items-center gap-2">
+                                                <p className={`text-lg font-black ${isHighFare ? 'text-amber-400' : 'text-white'}`}>₵ {node.farePerPerson}</p>
+                                                {isHighFare && <i className="fas fa-fire text-amber-500 text-xs animate-bounce"></i>}
+                                            </div>
                                          </div>
                                          <div className="text-right">
                                             <p className="text-[9px] font-bold text-slate-500 uppercase">Est. Total</p>
@@ -1641,13 +1716,29 @@ const DriverPortal = ({
                                  </div>
                               </div>
 
-                              <div className="flex gap-2">
-                                  <button onClick={() => setIsScanning(node.id)} className="w-12 bg-white/10 text-white rounded-xl flex items-center justify-center hover:bg-white/20 transition-all border border-white/10">
-                                     <i className="fas fa-qrcode"></i>
+                              {/* Prominent Scanner Button */}
+                              <button onClick={() => setIsScanning(node.id)} className="w-full py-8 bg-gradient-to-tr from-white to-slate-200 text-indigo-900 rounded-[2rem] shadow-2xl flex flex-col items-center justify-center mb-6 animate-pulse hover:scale-[1.02] transition-transform">
+                                  <i className="fas fa-qrcode text-4xl mb-2"></i>
+                                  <span className="text-xl font-black uppercase tracking-tight">Scan Rider Code</span>
+                                  <span className="text-[10px] font-bold uppercase opacity-60">Tap to Verify</span>
+                              </button>
+
+                              <div className="flex justify-center mb-6">
+                                  <button onClick={() => setShowManualEntry(!showManualEntry)} className="text-[10px] font-bold text-slate-400 underline uppercase">
+                                     Problem scanning? Use Manual Entry
                                   </button>
-                                  <input type="number" placeholder="Enter PIN from Rider" className="flex-[2] bg-white text-[#020617] rounded-xl px-4 text-center font-black text-lg outline-none placeholder:text-slate-400 placeholder:text-xs placeholder:font-bold" value={verifyCode} onChange={e => setVerifyCode(e.target.value)} />
-                                  <button onClick={() => { onVerify(node.id, verifyCode); setVerifyCode(''); }} className="flex-1 py-4 bg-emerald-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-lg">Verify</button>
-                                  <button onClick={() => onCancel(node.id)} className="w-12 flex items-center justify-center bg-rose-500/20 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-all"><i className="fas fa-ban"></i></button>
+                              </div>
+
+                              {showManualEntry && (
+                                <div className="flex gap-2 mb-6 animate-in slide-in-from-top-2 fade-in">
+                                    <input type="number" placeholder="Enter PIN manually" className="flex-[2] bg-white text-[#020617] rounded-xl px-4 text-center font-black text-lg outline-none placeholder:text-slate-400 placeholder:text-xs placeholder:font-bold" value={verifyCode} onChange={e => setVerifyCode(e.target.value)} />
+                                    <button onClick={() => { onVerify(node.id, verifyCode); setVerifyCode(''); }} className="flex-1 py-4 bg-emerald-500 text-[#020617] rounded-xl font-black text-[10px] uppercase shadow-lg">Verify</button>
+                                </div>
+                              )}
+
+                              <div className="text-center">
+                                  <button onClick={() => onCancel(node.id)} className="w-12 h-12 mx-auto flex items-center justify-center bg-rose-500/20 text-rose-500 rounded-full hover:bg-rose-500 hover:text-white transition-all"><i className="fas fa-ban"></i></button>
+                                  <p className="text-[9px] text-rose-500 font-bold uppercase mt-2">Cancel Trip</p>
                               </div>
                           </div>
                       </div>
