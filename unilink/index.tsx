@@ -1442,6 +1442,13 @@ const DriverPortal = ({
 
   const myBroadcasts = allNodes.filter((n: any) => n.assignedDriverId === activeDriver?.id && n.status === 'forming');
 
+  // Anti-Cheat Calculation for Buses/Shuttles
+  const isShuttle = activeDriver?.vehicleType === 'Shuttle';
+  const estimatedCapacity = parseInt(broadcastData.seats) || 0;
+  const commissionRate = settings?.commissionPerSeat || 0;
+  const requiredBalanceForBroadcast = isShuttle ? (estimatedCapacity * commissionRate) : 0; // Only strictly enforce for shuttles pre-broadcast
+  const canAffordBroadcast = activeDriver ? (activeDriver.walletBalance >= requiredBalanceForBroadcast) : false;
+
   if (!activeDriver) {
       if (regMode) {
           return (
@@ -1670,7 +1677,12 @@ const DriverPortal = ({
           {activeTab === 'broadcast' && (
               <div className="space-y-8">
                   <div className="glass p-8 rounded-[2.5rem] border border-white/10">
-                      <h3 className="text-lg font-black italic uppercase text-white mb-6">Create Route</h3>
+                      <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-black italic uppercase text-white">Create Route</h3>
+                        {isShuttle && (
+                          <span className="px-2 py-1 bg-amber-500 text-[#020617] text-[8px] font-black uppercase rounded">Bus Mode</span>
+                        )}
+                      </div>
                       <div className="space-y-4">
                           <input value={broadcastData.origin} onChange={e => setBroadcastData({...broadcastData, origin: e.target.value})} placeholder="Starting Point" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" />
                           <input value={broadcastData.destination} onChange={e => setBroadcastData({...broadcastData, destination: e.target.value})} placeholder="Destination" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" />
@@ -1681,13 +1693,42 @@ const DriverPortal = ({
                               </div>
                               <div>
                                   <label className="text-[8px] text-slate-500 uppercase font-bold pl-2">Seats</label>
-                                  <select value={broadcastData.seats} onChange={e => setBroadcastData({...broadcastData, seats: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs">
-                                      {[1,2,3,4].map(n => <option key={n} value={n}>{n}</option>)}
-                                  </select>
+                                  {isShuttle ? (
+                                     <input 
+                                       type="number" 
+                                       min="5" 
+                                       max="60" 
+                                       placeholder="Capacity"
+                                       value={broadcastData.seats} 
+                                       onChange={e => setBroadcastData({...broadcastData, seats: e.target.value})} 
+                                       className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" 
+                                     />
+                                  ) : (
+                                    <select value={broadcastData.seats} onChange={e => setBroadcastData({...broadcastData, seats: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs">
+                                        {[1,2,3,4].map(n => <option key={n} value={n}>{n}</option>)}
+                                    </select>
+                                  )}
                               </div>
                           </div>
                           <input value={broadcastData.note} onChange={e => setBroadcastData({...broadcastData, note: e.target.value})} placeholder="Note (e.g. Leaving in 5 mins)" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" />
-                          <button onClick={() => onBroadcast(broadcastData)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Broadcast Route</button>
+                          
+                          {/* Anti-Cheat Warning */}
+                          {isShuttle && !canAffordBroadcast && (
+                             <div className="p-4 bg-rose-500/10 rounded-xl border border-rose-500/20 text-center">
+                                <p className="text-[10px] font-black text-rose-500 uppercase mb-1">Insufficient Wallet Balance</p>
+                                <p className="text-[9px] text-slate-400">
+                                   To prevent fraud, you must have at least <b>₵{requiredBalanceForBroadcast.toFixed(2)}</b> in your wallet to broadcast {broadcastData.seats} seats.
+                                </p>
+                             </div>
+                          )}
+
+                          <button 
+                            onClick={() => onBroadcast(broadcastData)} 
+                            disabled={!canAffordBroadcast && isShuttle}
+                            className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all ${!canAffordBroadcast && isShuttle ? 'bg-white/5 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
+                          >
+                             Broadcast Route
+                          </button>
                       </div>
                   </div>
 
@@ -2618,11 +2659,18 @@ const App: React.FC = () => {
       const activeRide = nodes.find(n => n.assignedDriverId === activeDriverId && n.status !== 'completed');
       if (activeRide) { alert("You already have an active/broadcasting trip."); return; }
 
+      // Validate Capacity string to number
+      const capacity = parseInt(data.seats) || 3;
+      if (capacity < 1) {
+          alert("Invalid seat capacity.");
+          return;
+      }
+
       const node: RideNode = {
           id: `NODE-DRV-${Date.now()}`,
           origin: data.origin,
           destination: data.destination,
-          capacityNeeded: parseInt(data.seats),
+          capacityNeeded: capacity,
           passengers: [],
           status: 'forming',
           leaderName: driver?.name || 'Partner',
