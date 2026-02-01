@@ -342,7 +342,12 @@ const DriverVoiceOrb = ({ activeDriver, availableNodes, onUpdateStatus, onAccept
       // Disconnect
       setIsActive(false);
       setState('idle');
-      sessionRef.current?.close();
+      
+      // Fix: sessionRef.current is a Promise, resolve it to close the session
+      if (sessionRef.current) {
+        sessionRef.current.then((session: any) => session.close()).catch((err: any) => console.error("Failed to close session:", err));
+      }
+
       audioContextRef.current?.close();
       return;
     }
