@@ -16,7 +16,8 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       // Expose the API_KEY to the application code via process.env
-      'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
+      // Prioritize GEMINI_API_KEY as it is defined in .env.local
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || env.GEMINI_API_KEY || ''),
     }
   };
 });
