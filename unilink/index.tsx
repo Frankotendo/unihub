@@ -1129,15 +1129,25 @@ const PassengerPortal = ({
                  </div>
                  
                  {assignedDriver && (
-                    <div className="flex items-center gap-3 bg-white/5 p-3 rounded-xl mb-4 border border-white/5">
-                        <img src={assignedDriver.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${assignedDriver.name}`} className="w-10 h-10 rounded-full object-cover bg-black" alt="Driver" />
-                        <div>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">Your Partner</p>
-                            <p className="text-sm font-black text-white leading-none">{assignedDriver.name}</p>
-                            <div className="flex items-center gap-1 mt-1">
-                                 <span className="text-[9px] text-amber-500">★ {assignedDriver.rating}</span>
-                                 <span className="text-[9px] text-slate-500">• {assignedDriver.licensePlate}</span>
-                            </div>
+                    <div className="bg-white/5 p-3 rounded-xl mb-4 border border-white/5">
+                        <div className="flex items-center gap-3 mb-3">
+                           <img src={assignedDriver.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${assignedDriver.name}`} className="w-10 h-10 rounded-full object-cover bg-black" alt="Driver" />
+                           <div>
+                               <p className="text-[10px] text-slate-400 font-bold uppercase">Your Partner</p>
+                               <p className="text-sm font-black text-white leading-none">{assignedDriver.name}</p>
+                               <div className="flex items-center gap-1 mt-1">
+                                    <span className="text-[9px] text-amber-500">★ {assignedDriver.rating}</span>
+                                    <span className="text-[9px] text-slate-500">• {assignedDriver.licensePlate}</span>
+                               </div>
+                           </div>
+                        </div>
+                        <div className="flex gap-2">
+                           <a href={`tel:${assignedDriver.contact}`} className="flex-1 py-2 bg-indigo-600/20 text-indigo-400 rounded-lg text-[9px] font-black uppercase flex items-center justify-center gap-2 hover:bg-indigo-600 hover:text-white transition-all">
+                              <i className="fas fa-phone"></i> Call
+                           </a>
+                           <a href={`https://wa.me/${assignedDriver.contact.replace(/[^0-9]/g, '')}`} target="_blank" className="flex-1 py-2 bg-emerald-500/20 text-emerald-500 rounded-lg text-[9px] font-black uppercase flex items-center justify-center gap-2 hover:bg-emerald-500 hover:text-[#020617] transition-all">
+                              <i className="fab fa-whatsapp"></i> WhatsApp
+                           </a>
                         </div>
                     </div>
                  )}
@@ -1699,7 +1709,10 @@ const DriverPortal = ({
                                                      <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-[10px] font-black">{p.name[0]}</div>
                                                      <div>
                                                          <p className="text-sm font-bold text-white">{p.name}</p>
-                                                         <a href={`tel:${p.phone}`} className="text-[10px] text-indigo-400 underline">{p.phone}</a>
+                                                         <div className="flex gap-3 mt-1">
+                                                            <a href={`tel:${p.phone}`} className="text-[10px] text-indigo-400 font-bold flex items-center gap-1 hover:text-white"><i className="fas fa-phone"></i> Call</a>
+                                                            <a href={`https://wa.me/${p.phone.replace(/[^0-9]/g, '')}`} target="_blank" className="text-[10px] text-emerald-400 font-bold flex items-center gap-1 hover:text-white"><i className="fab fa-whatsapp"></i> Chat</a>
+                                                         </div>
                                                      </div>
                                                  </div>
                                                  <span className="text-[9px] font-black text-slate-500 uppercase">Pending</span>
