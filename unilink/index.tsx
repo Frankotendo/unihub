@@ -2217,26 +2217,37 @@ function AdminPortal({
   });
 
   const [editSettings, setEditSettings] = useState<AppSettings>(settings);
+  const [uploadingField, setUploadingField] = useState<'appWallpaper' | 'aboutMeImages' | 'appLogo' | null>(null);
 
   useEffect(() => {
-    setEditSettings(settings);
+    // Only update local editSettings if we just loaded the ID for the first time
+    // This prevents background syncs from overwriting local edits
+    if (settings.id && !editSettings.id) {
+      setEditSettings(settings);
+    }
   }, [settings]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'appWallpaper' | 'aboutMeImages' | 'appLogo') => {
     const file = e.target.files?.[0];
-    if (file) {
-      try {
-        const compressed = await compressImage(file, 0.6, 800);
-        if (field === 'appWallpaper') {
-          setEditSettings({ ...editSettings, appWallpaper: compressed });
-        } else if (field === 'appLogo') {
-          setEditSettings({ ...editSettings, appLogo: compressed });
-        } else {
-          setEditSettings({ ...editSettings, aboutMeImages: [...(editSettings.aboutMeImages || []), compressed] });
-        }
-      } catch (err) {
-        alert("Image upload failed");
+    if (!file) return;
+
+    // Fix: Clear input value so selecting the same file triggers onChange again
+    e.target.value = '';
+
+    setUploadingField(field);
+    try {
+      const compressed = await compressImage(file, 0.6, 800);
+      if (field === 'appWallpaper') {
+        setEditSettings(prev => ({ ...prev, appWallpaper: compressed }));
+      } else if (field === 'appLogo') {
+        setEditSettings(prev => ({ ...prev, appLogo: compressed }));
+      } else {
+        setEditSettings(prev => ({ ...prev, aboutMeImages: [...(prev.aboutMeImages || []), compressed] }));
       }
+    } catch (err) {
+      alert("Image upload failed");
+    } finally {
+      setUploadingField(null);
     }
   };
 
@@ -2398,15 +2409,23 @@ function AdminPortal({
                       <div>
                          <label className="text-[8px] text-slate-500 uppercase font-bold mb-1 block">App Logo</label>
                          <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'appLogo')} className="hidden" id="logo-upload" />
-                         <label htmlFor="logo-upload" className="w-full h-20 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all bg-center bg-contain bg-no-repeat mb-4" style={editSettings.appLogo ? {backgroundImage: `url(${editSettings.appLogo})`} : {}}>
-                            {!editSettings.appLogo && <><i className="fas fa-camera text-slate-500 mb-1"></i><span className="text-[8px] font-bold text-slate-600 uppercase">Upload Logo</span></>}
+                         <label htmlFor="logo-upload" className="w-full h-20 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all bg-center bg-contain bg-no-repeat mb-4 relative overflow-hidden" style={editSettings.appLogo ? {backgroundImage: `url(${editSettings.appLogo})`} : {}}>
+                            {uploadingField === 'appLogo' ? (
+                               <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-xs font-black uppercase text-white animate-pulse">Compressing...</div>
+                            ) : !editSettings.appLogo && (
+                               <><i className="fas fa-camera text-slate-500 mb-1"></i><span className="text-[8px] font-bold text-slate-600 uppercase">Upload Logo</span></>
+                            )}
                          </label>
                          {editSettings.appLogo && <button onClick={() => setEditSettings({...editSettings, appLogo: ''})} className="text-[8px] text-rose-500 uppercase font-bold underline mb-4">Remove Logo</button>}
 
                          <label className="text-[8px] text-slate-500 uppercase font-bold mb-1 block">App Wallpaper</label>
                          <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'appWallpaper')} className="hidden" id="wallpaper-upload" />
-                         <label htmlFor="wallpaper-upload" className="w-full h-20 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all bg-center bg-cover" style={editSettings.appWallpaper ? {backgroundImage: `url(${editSettings.appWallpaper})`} : {}}>
-                            {!editSettings.appWallpaper && <><i className="fas fa-image text-slate-500 mb-1"></i><span className="text-[8px] font-bold text-slate-600 uppercase">Upload BG</span></>}
+                         <label htmlFor="wallpaper-upload" className="w-full h-20 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all bg-center bg-cover relative overflow-hidden" style={editSettings.appWallpaper ? {backgroundImage: `url(${editSettings.appWallpaper})`} : {}}>
+                            {uploadingField === 'appWallpaper' ? (
+                               <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-xs font-black uppercase text-white animate-pulse">Compressing...</div>
+                            ) : !editSettings.appWallpaper && (
+                               <><i className="fas fa-image text-slate-500 mb-1"></i><span className="text-[8px] font-bold text-slate-600 uppercase">Upload BG</span></>
+                            )}
                          </label>
                          {editSettings.appWallpaper && <button onClick={() => setEditSettings({...editSettings, appWallpaper: ''})} className="mt-1 text-[8px] text-rose-500 uppercase font-bold underline">Remove Wallpaper</button>}
                       </div>
@@ -2441,10 +2460,13 @@ function AdminPortal({
                 <div>
                    <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Portfolio Gallery</h3>
                    <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                      <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'aboutMeImages')} className="hidden" id="portfolio-upload" />
-                      <label htmlFor="portfolio-upload" className="w-24 h-24 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all shrink-0">
-                         <i className="fas fa-plus text-slate-500 mb-1"></i>
-                         <span className="text-[8px] font-bold text-slate-600 uppercase">Add</span>
+                      <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'aboutMeImages')} className="hidden" id="portfolio-upload" disabled={uploadingField !== null} />
+                      <label htmlFor="portfolio-upload" className={`w-24 h-24 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all shrink-0 ${uploadingField !== null ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                         {uploadingField === 'aboutMeImages' ? (
+                             <i className="fas fa-spinner fa-spin text-indigo-500"></i>
+                         ) : (
+                             <><i className="fas fa-plus text-slate-500 mb-1"></i><span className="text-[8px] font-bold text-slate-600 uppercase">Add</span></>
+                         )}
                       </label>
                       {editSettings.aboutMeImages?.map((img, i) => (
                          <div key={i} className="w-24 h-24 rounded-xl overflow-hidden relative shrink-0 group border border-white/10">
@@ -2463,8 +2485,8 @@ function AdminPortal({
                    <label className="text-[9px] text-slate-500 uppercase font-bold">About Text</label>
                    <textarea className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs h-24 mt-1" value={editSettings.aboutMeText} onChange={e => setEditSettings({...editSettings, aboutMeText: e.target.value})} />
                 </div>
-                <button onClick={() => onUpdateSettings(editSettings)} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">
-                   Save Changes
+                <button onClick={() => onUpdateSettings(editSettings)} disabled={uploadingField !== null} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl disabled:opacity-50 disabled:cursor-not-allowed">
+                   {uploadingField !== null ? 'Processing...' : 'Save Changes'}
                 </button>
              </div>
           )}
