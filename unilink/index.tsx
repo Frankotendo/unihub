@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type, Chat, LiveServerMessage, Modality, FunctionDeclaration } from "@google/genai";
@@ -161,7 +162,7 @@ interface Transaction {
   id: string;
   driverId: string;
   amount: number;
-  type: 'commission' | 'topup' | 'registration'; 
+  type: 'commission' | 'topup' | 'registration' | 'refund'; 
   timestamp: string;
 }
 
@@ -181,14 +182,12 @@ interface AppSettings {
   appLogo?: string; // Base64 string for custom logo
   registrationFee: number;
   hub_announcement?: string;
-  // Social Media Config
   facebookUrl?: string;
   instagramUrl?: string;
   tiktokUrl?: string;
-  // AdSense Config
   adSenseClientId?: string;
   adSenseSlotId?: string;
-  adSenseLayoutKey?: string; // Optional for in-feed
+  adSenseLayoutKey?: string;
   adSenseStatus?: 'active' | 'inactive';
 }
 
@@ -251,7 +250,6 @@ const compressImage = (file: File, quality = 0.6, maxWidth = 800): Promise<strin
 
 const QrScannerModal = ({ onScan, onClose }: { onScan: (text: string) => void, onClose: () => void }) => {
   useEffect(() => {
-    // Safety check if script loaded
     if (!(window as any).Html5QrcodeScanner) {
         alert("Scanner library loading... try again.");
         onClose();
@@ -324,14 +322,12 @@ const GlobalVoiceOrb = ({
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
-  // Allow parent to trigger orb
   useEffect(() => {
     if (triggerRef) {
       triggerRef.current = () => toggleSession();
     }
   }, [triggerRef, isActive]);
 
-  // Animation Loop for the Orb
   useEffect(() => {
     if (!isActive || !canvasRef.current) return;
     const ctx = canvasRef.current.getContext('2d');
@@ -349,28 +345,24 @@ const GlobalVoiceOrb = ({
 
       ctx.clearRect(0, 0, width, height);
 
-      // Base color based on state
-      let r = 99, g = 102, b = 241; // Indigo (Idle)
-      if (mode === 'admin') { r = 244; g = 63; b = 94; } // Rose for Admin
-      if (mode === 'driver') { r = 245; g = 158; b = 11; } // Amber for Driver
-      if (mode === 'public') { r = 34; g = 197; b = 94; } // Green for Public
+      let r = 99, g = 102, b = 241; 
+      if (mode === 'admin') { r = 244; g = 63; b = 94; } 
+      if (mode === 'driver') { r = 245; g = 158; b = 11; } 
+      if (mode === 'public') { r = 34; g = 197; b = 94; } 
       
-      if (state === 'listening') { r = 16, g = 185, b = 129; } // Emerald
-      if (state === 'speaking') { r = 255; g = 255; b = 255; } // White
+      if (state === 'listening') { r = 16, g = 185, b = 129; } 
+      if (state === 'speaking') { r = 255; g = 255; b = 255; } 
 
-      // Pulsating Effect
       const baseRadius = 60;
       const pulse = Math.sin(time * 3) * 5;
       const ripple = (time * 50) % 50;
 
-      // Draw Ripples
       ctx.beginPath();
       ctx.arc(centerX, centerY, baseRadius + ripple + 10, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${1 - ripple/50})`;
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Draw Core
       ctx.beginPath();
       ctx.arc(centerX, centerY, baseRadius + pulse, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.8)`;
@@ -378,7 +370,6 @@ const GlobalVoiceOrb = ({
       ctx.shadowColor = `rgb(${r}, ${g}, ${b})`;
       ctx.fill();
 
-      // Inner Core
       ctx.beginPath();
       ctx.arc(centerX, centerY, 30, 0, Math.PI * 2);
       ctx.fillStyle = "#fff";
@@ -405,7 +396,6 @@ const GlobalVoiceOrb = ({
     setIsActive(true);
     setState('listening');
 
-    // DEFINE TOOLS BASED ON MODE
     let tools: FunctionDeclaration[] = [];
     let systemInstruction = "";
 
@@ -477,7 +467,6 @@ const GlobalVoiceOrb = ({
          }
        ]
     } else {
-      // Passenger
       systemInstruction = `${ghanaianPersona}
       You help students find rides.
       CRITICAL: If a user says "I want to go to [Place]", call 'fill_ride_form' IMMEDIATELY to update the screen with the destination. Do not wait for pickup location.
@@ -565,7 +554,6 @@ const GlobalVoiceOrb = ({
               for (const fc of msg.toolCall.functionCalls) {
                  let result: any = { result: "Done" };
                  
-                 // --- HELPER: Clean undefined args ---
                  const cleanArgs = (args: any) => {
                     const clean: any = {};
                     for (const key in args) {
@@ -576,7 +564,6 @@ const GlobalVoiceOrb = ({
                     return clean;
                  };
                  
-                 // --- DRIVER TOOLS ---
                  if (fc.name === 'update_status' && actions.onUpdateStatus) {
                     const s = (fc.args as any).status;
                     actions.onUpdateStatus(s);
@@ -592,7 +579,6 @@ const GlobalVoiceOrb = ({
                     if (rides.length === 0) result = { result: "No rides found." };
                     else result = { result: `Found ${rides.length} rides. ` + rides.map(r => r.destination).join(", ") };
                  
-                 // --- ADMIN TOOLS ---
                  } else if (fc.name === 'analyze_security_threats') {
                     result = { status: "Safe", analysis: "System Nominal.", action: "None." };
                  } else if (fc.name === 'get_revenue_report') {
@@ -601,10 +587,8 @@ const GlobalVoiceOrb = ({
                  } else if (fc.name === 'system_health_check') {
                      result = { result: `Active Drivers: ${contextData.drivers.length}. Total Rides: ${contextData.nodes.length}. Pending: ${contextData.pendingRequests}.` };
 
-                 // --- PASSENGER / PUBLIC TOOLS ---
                  } else if (fc.name === 'fill_ride_form' && actions.onFillRideForm) {
                      const safeArgs = cleanArgs(fc.args);
-                     // If destination provided, we imply a form fill
                      if (safeArgs.destination || safeArgs.origin) {
                          actions.onFillRideForm(safeArgs);
                          result = { result: `Form updated. Destination: ${safeArgs.destination || 'Unset'}, Origin: ${safeArgs.origin || 'Unset'}. Ask for missing details.` };
@@ -820,7 +804,7 @@ const HubGateway = ({
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#020617] p-4 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-tr from-indigo-900/20 to-purple-900/20"></div>
-      <div className="glass-bright w-full max-w-md p-8 rounded-[3rem] border border-white/10 relative z-10 animate-in zoom-in duration-500">
+      <div className="glass-bright w-full max-md:mt-12 max-w-md p-8 rounded-[3rem] border border-white/10 relative z-10 animate-in zoom-in duration-500">
         <div className="text-center mb-8">
           {settings.appLogo ? (
             <img src={settings.appLogo} className="w-24 h-24 object-contain mx-auto mb-4 drop-shadow-2xl" alt="Logo" />
@@ -959,7 +943,6 @@ const PassengerPortal = ({
   settings, 
   onShowQr, 
   onShowAbout,
-  // New State Props for AI Control
   createMode,
   setCreateMode,
   newNode,
@@ -970,11 +953,9 @@ const PassengerPortal = ({
   const [customOffer, setCustomOffer] = useState<number | null>(null);
   const [expandedQr, setExpandedQr] = useState<string | null>(null);
   
-  // Ad states
   const [showSoloAd, setShowSoloAd] = useState(false);
   const [isSoloUnlocked, setIsSoloUnlocked] = useState(false);
 
-  // Filter logic
   const filteredNodes = nodes.filter((n: RideNode) => {
     if (searchConfig.query && !n.origin.toLowerCase().includes(searchConfig.query.toLowerCase()) && !n.destination.toLowerCase().includes(searchConfig.query.toLowerCase())) return false;
     if (searchConfig.vehicleType !== 'All' && n.vehicleType !== searchConfig.vehicleType) return false;
@@ -984,12 +965,10 @@ const PassengerPortal = ({
   const myRides = nodes.filter((n: RideNode) => myRideIds.includes(n.id) && n.status !== 'completed');
   const availableRides = filteredNodes.filter((n: RideNode) => n.status !== 'completed' && n.status !== 'dispatched' && !myRideIds.includes(n.id));
 
-  // Fare estimation effect
   useEffect(() => {
     let base = newNode.vehicleType === 'Taxi' ? settings.farePerTaxi : settings.farePerPragia;
     if (newNode.isSolo) base *= settings.soloMultiplier;
     setFareEstimate(base);
-    // Reset custom offer when type changes if it is less than base
     if (customOffer && customOffer < base) setCustomOffer(null);
   }, [newNode.vehicleType, newNode.isSolo, settings]);
 
@@ -1069,7 +1048,6 @@ const PassengerPortal = ({
                ))}
             </div>
 
-            {/* Fair Pricing / Bidding Section */}
             <div className="p-6 bg-indigo-900/30 rounded-2xl border border-indigo-500/20 space-y-3">
                <div className="flex justify-between items-center">
                    <span className="text-[10px] font-black uppercase text-indigo-300">Base Fare</span>
@@ -1102,7 +1080,6 @@ const PassengerPortal = ({
 
   return (
     <div className="space-y-8">
-       {/* Active Rides */}
        {myRides.length > 0 && (
          <div className="space-y-4">
             <h3 className="text-xs font-black uppercase text-slate-500 tracking-widest px-2">My Active Trips</h3>
@@ -1177,10 +1154,10 @@ const PassengerPortal = ({
                     )}
                  </div>
               </div>
-            )})}\n         </div>
+            )})}
+         </div>
        )}
 
-       {/* Create CTA */}
        <div onClick={() => setCreateMode(true)} className="glass p-8 rounded-[2.5rem] border-2 border-dashed border-white/10 hover:border-amber-500/50 cursor-pointer group transition-all text-center space-y-2">
           <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto text-slate-500 group-hover:bg-amber-500 group-hover:text-[#020617] transition-all">
              <i className="fas fa-plus"></i>
@@ -1189,7 +1166,6 @@ const PassengerPortal = ({
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Create a pool or go solo</p>
        </div>
 
-       {/* Available Rides */}
        <div>
           <h3 className="text-xs font-black uppercase text-slate-500 tracking-widest px-2 mb-4">Community Rides</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1243,7 +1219,6 @@ const PassengerPortal = ({
                       {isPartnerOffer ? 'Join Instantly' : 'Join Ride'}
                    </button>
                 </div>
-                {/* Insert Ad after every 3rd item */}
                 {(index + 1) % 3 === 0 && <InlineAd className="col-span-1" settings={settings} />}
                </React.Fragment>
              )})}
@@ -1460,9 +1435,9 @@ const DriverPortal = ({
 
   const myBroadcasts = allNodes.filter((n: any) => n.assignedDriverId === activeDriver?.id && n.status === 'forming');
 
-  // Anti-Cheat Calculation for Buses/Shuttles
   const isShuttle = activeDriver?.vehicleType === 'Shuttle';
-  const estimatedCapacity = parseInt(broadcastData.seats) || 0;
+  // SYNC Logic: Match Handler's default capacity logic for Shuttle vs Others
+  const estimatedCapacity = parseInt(broadcastData.seats) || (isShuttle ? 10 : 3);
   const commissionRate = settings?.commissionPerSeat || 0;
   const requiredBalanceForBroadcast = isShuttle ? (estimatedCapacity * commissionRate) : 0; 
   const canAffordBroadcast = activeDriver ? (activeDriver.walletBalance >= requiredBalanceForBroadcast) : false;
@@ -1539,7 +1514,6 @@ const DriverPortal = ({
                 <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1">Authorized Personnel Only</p>
              </div>
              
-             {/* Manual Driver Login */}
              <div className="space-y-4 animate-in slide-in-from-right">
                 <div className="text-left space-y-3">
                    <div>
@@ -1566,7 +1540,6 @@ const DriverPortal = ({
                 </div>
                 
                 <button onClick={() => {
-                   // Search for driver
                    const driver = drivers.find((d: Driver) => 
                       d.contact === loginIdentifier || 
                       d.name.toLowerCase() === loginIdentifier.toLowerCase()
@@ -1649,7 +1622,6 @@ const DriverPortal = ({
                              const capacity = node.capacityNeeded;
                              const canAccept = paxCount > 0;
                              
-                             // Calculate base to see if it's a high offer
                              const baseFare = node.vehicleType === 'Taxi' ? settings.farePerTaxi : settings.farePerPragia;
                              const expectedFare = node.isSolo ? baseFare * settings.soloMultiplier : baseFare;
                              const isHighFare = node.farePerPerson > expectedFare;
@@ -1731,7 +1703,6 @@ const DriverPortal = ({
                                  </div>
                               </div>
 
-                              {/* Prominent Scanner Button */}
                               <button onClick={() => setIsScanning(node.id)} className="w-full py-8 bg-gradient-to-tr from-white to-slate-200 text-indigo-900 rounded-[2rem] shadow-2xl flex flex-col items-center justify-center mb-6 animate-pulse hover:scale-[1.02] transition-transform">
                                   <i className="fas fa-qrcode text-4xl mb-2"></i>
                                   <span className="text-xl font-black uppercase tracking-tight">Scan Rider Code</span>
@@ -1757,7 +1728,8 @@ const DriverPortal = ({
                               </div>
                           </div>
                       </div>
-                  ))}\n              </div>
+                  ))}
+              </div>
           )}
 
           {activeTab === 'broadcast' && (
@@ -1791,14 +1763,13 @@ const DriverPortal = ({
                                      />
                                   ) : (
                                     <select value={broadcastData.seats} onChange={e => setBroadcastData({...broadcastData, seats: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs">
-                                        {[1,2,3,4].map(n => <option key={n} value={n}>{n}</option>)}
+                                        {[1,2,3,4].map(n => <option key={n} value={n.toString()}>{n}</option>)}
                                     </select>
                                   )}
                               </div>
                           </div>
                           <input value={broadcastData.note} onChange={e => setBroadcastData({...broadcastData, note: e.target.value})} placeholder="Note (e.g. Leaving in 5 mins)" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-bold outline-none text-xs" />
                           
-                          {/* Anti-Cheat Warning */}
                           {isShuttle && (
                              <div className="p-4 bg-rose-500/10 rounded-xl border border-rose-500/20 text-center">
                                 <p className="text-[10px] font-black text-rose-500 uppercase mb-1">Prepayment Required</p>
@@ -1893,8 +1864,6 @@ const DriverPortal = ({
   );
 };
 
-// ... (AdminPortal remains the same)
-
 const AdminPortal = ({ 
   activeTab, 
   setActiveTab, 
@@ -1925,7 +1894,6 @@ const AdminPortal = ({
   const [localSettings, setLocalSettings] = useState(settings);
   const [isSaving, setIsSaving] = useState(false);
 
-  // New state for admin credentials update
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
 
@@ -1971,7 +1939,6 @@ const AdminPortal = ({
 
   return (
     <div className="space-y-6">
-       {/* Admin Header */}
        <div className="glass p-6 rounded-[2.5rem] border border-white/10 flex justify-between items-center">
           <div>
              <h2 className="text-xl font-black italic uppercase text-white">Command Center</h2>
@@ -1982,7 +1949,6 @@ const AdminPortal = ({
           </button>
        </div>
 
-       {/* Navigation */}
        <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar">
           {['monitor', 'drivers', 'rides', 'finance', 'missions', 'config'].map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>
@@ -2070,7 +2036,6 @@ const AdminPortal = ({
            </div>
        )}
 
-       {/* ... Finance, Config, Missions, Rides tabs are similar ... */}
        {activeTab === 'finance' && (
            <div className="space-y-6">
                <div className="space-y-2">
@@ -2168,6 +2133,17 @@ const AdminPortal = ({
                    <div className="flex items-center gap-4">
                        {localSettings.appLogo && <img src={localSettings.appLogo} className="w-12 h-12 object-contain bg-white/10 rounded-lg" />}
                        <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'appLogo')} className="text-[9px] text-slate-400" />
+                   </div>
+              </div>
+
+              <div>
+                   <label className="text-[9px] font-bold text-slate-500 uppercase mb-2 block">App Wallpaper</label>
+                   <div className="flex items-center gap-4">
+                       {localSettings.appWallpaper && <img src={localSettings.appWallpaper} className="w-16 h-9 object-cover bg-white/10 rounded-lg border border-white/10" />}
+                       <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'appWallpaper')} className="text-[9px] text-slate-400" />
+                       {localSettings.appWallpaper && (
+                           <button onClick={() => setLocalSettings({...localSettings, appWallpaper: ''})} className="ml-2 text-[9px] font-bold text-rose-500 uppercase hover:text-white">Clear</button>
+                       )}
                    </div>
               </div>
 
@@ -2323,9 +2299,8 @@ const AdminPortal = ({
 
 const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<PortalMode>('passenger');
-  const [activeTab, setActiveTab] = useState('monitor'); // Admin portal tab state
+  const [activeTab, setActiveTab] = useState('monitor'); 
   
-  // Auth states
   const [session, setSession] = useState<any>(null);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<UniUser | null>(() => {
@@ -2336,7 +2311,6 @@ const App: React.FC = () => {
     return sessionStorage.getItem('nexryde_driver_session_v1');
   });
 
-  // Global Search State
   const [searchConfig, setSearchConfig] = useState<SearchConfig>({
     query: '',
     vehicleType: 'All',
@@ -2345,13 +2319,11 @@ const App: React.FC = () => {
     isSolo: null
   });
 
-  // Lifted Form States for AI Control
   const [authFormState, setAuthFormState] = useState({ username: '', phone: '', pin: '', mode: 'login' as 'login' | 'signup' });
   const [createMode, setCreateMode] = useState(false);
   const [newNode, setNewNode] = useState<Partial<RideNode>>({ origin: '', destination: '', vehicleType: 'Pragia', isSolo: false });
   const triggerVoiceRef = useRef<() => void>(() => {});
 
-  // Track user's own rides locally
   const [myRideIds, setMyRideIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('nexryde_my_rides_v1');
@@ -2368,7 +2340,6 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(true);
   const [dismissedAnnouncement, setDismissedAnnouncement] = useState(() => localStorage.getItem('nexryde_dismissed_announcement'));
   
-  // Ad states for global AI feature
   const [showAiAd, setShowAiAd] = useState(false);
   const [isAiUnlocked, setIsAiUnlocked] = useState(false);
 
@@ -2389,7 +2360,6 @@ const App: React.FC = () => {
     facebookUrl: "",
     instagramUrl: "",
     tiktokUrl: "",
-    // Default AdSense Config
     adSenseClientId: "ca-pub-7812709042449387",
     adSenseSlotId: "9489307110",
     adSenseLayoutKey: "-fb+5w+4e-db+86",
@@ -2430,7 +2400,6 @@ const App: React.FC = () => {
       if (sData) {
         setSettings(prev => ({ ...prev, ...sData }));
         const currentMsg = sData.hub_announcement || '';
-        // LOGIC FIX: Use localStorage to persist dismissal across sessions
         if (currentMsg !== localStorage.getItem('nexryde_last_announcement')) {
           setDismissedAnnouncement(null);
           localStorage.removeItem('nexryde_dismissed_announcement');
@@ -2454,7 +2423,6 @@ const App: React.FC = () => {
     localStorage.setItem('nexryde_my_rides_v1', JSON.stringify(myRideIds));
   }, [myRideIds]);
 
-  // Inject AdSense Script Dynamically
   useEffect(() => {
     if (settings.adSenseStatus === 'active' && settings.adSenseClientId) {
       const scriptId = 'google-adsense-script';
@@ -2508,6 +2476,12 @@ const App: React.FC = () => {
     registrationRequests.filter(r => r.status === 'pending').length, 
   [topupRequests, registrationRequests]);
 
+  const getLatestDriver = async (id: string) => {
+    const { data, error } = await supabase.from('unihub_drivers').select('*').eq('id', id).single();
+    if (error) throw error;
+    return data as Driver;
+  };
+
   const handleGlobalUserAuth = async (username: string, phone: string, pin: string, mode: 'login' | 'signup') => {
     if (!phone || !pin) {
       alert("Phone number and 4-digit PIN are required.");
@@ -2535,7 +2509,6 @@ const App: React.FC = () => {
         
         const user = data as UniUser;
 
-        // Security Check
         if (user.pin) {
             if (user.pin !== pin) {
                 alert("Access Denied: Incorrect PIN.");
@@ -2543,16 +2516,14 @@ const App: React.FC = () => {
                 return;
             }
         } else {
-            // Legacy Account Claim: First login sets the PIN
             await supabase.from('unihub_users').update({ pin }).eq('id', user.id);
-            user.pin = pin; // Update local object
+            user.pin = pin; 
             alert("Security Update: This PIN has been linked to your account.");
         }
 
         setCurrentUser(user);
         localStorage.setItem('nexryde_user_v1', JSON.stringify(user));
       } else {
-        // Signup
         if (data) {
           alert("An account with this phone already exists! Please Sign In.");
           setIsSyncing(false);
@@ -2581,18 +2552,18 @@ const App: React.FC = () => {
     }
   };
 
-  // ... (Other functions like joinMission, joinNode, etc. remain unchanged)
-
   const joinMission = async (missionId: string, driverId: string) => {
     const mission = missions.find(m => m.id === missionId);
-    const driver = drivers.find(d => d.id === driverId);
+    if (!mission) return;
+    
+    const latestDriver = await getLatestDriver(driverId);
+    if (!latestDriver) return;
 
-    if (!mission || !driver) return;
     if (mission.driversJoined.includes(driverId)) {
       alert("You are already stationed at this hotspot.");
       return;
     }
-    if (driver.walletBalance < mission.entryFee) {
+    if (latestDriver.walletBalance < mission.entryFee) {
       alert("Insufficient Balance for Hotspot Entry Fee.");
       return;
     }
@@ -2601,7 +2572,7 @@ const App: React.FC = () => {
     
     await Promise.all([
       supabase.from('unihub_missions').update({ driversJoined: newJoined }).eq('id', missionId),
-      supabase.from('unihub_drivers').update({ walletBalance: driver.walletBalance - mission.entryFee }).eq('id', driverId),
+      supabase.from('unihub_drivers').update({ walletBalance: latestDriver.walletBalance - mission.entryFee }).eq('id', driverId),
       supabase.from('unihub_transactions').insert([{
         id: `TX-MISSION-${Date.now()}`,
         driverId,
@@ -2626,9 +2597,6 @@ const App: React.FC = () => {
     const node = nodes.find(n => n.id === nodeId);
     if (node && node.passengers.length < node.capacityNeeded) {
       const newPassengers = [...node.passengers, { id: `P-${Date.now()}`, name, phone }];
-      // Logic for status: if filled, keep as is unless it's passenger-led.
-      // If driver-led, status can stay forming or qualified until dispatched.
-      // Standard logic: if capacity met -> qualified.
       const isQualified = newPassengers.length >= node.capacityNeeded;
       let updatedStatus: NodeStatus = node.status;
       if (isQualified && node.status === 'forming') {
@@ -2663,12 +2631,10 @@ const App: React.FC = () => {
   };
 
   const acceptRide = async (nodeId: string, driverId: string, customFare?: number) => {
-    const driver = drivers.find(d => d.id === driverId);
+    const latestDriver = await getLatestDriver(driverId);
     const node = nodes.find(n => n.id === nodeId);
-    if (!driver || !node) return;
+    if (!latestDriver || !node) return;
 
-    // RULE: One active ride at a time (exclude completed). 
-    // If I am broadcasting (assignedDriverId set, status forming/qualified), I cannot accept another.
     const activeRide = nodes.find(n => n.assignedDriverId === driverId && n.status !== 'completed');
     if (activeRide) {
         alert("Please complete your current active ride or broadcast before accepting a new one.");
@@ -2677,7 +2643,7 @@ const App: React.FC = () => {
 
     const totalCommission = settings.commissionPerSeat * node.passengers.length;
 
-    if (driver.walletBalance < totalCommission) {
+    if (latestDriver.walletBalance < totalCommission) {
       alert(`Insufficient Credits! You need at least ₵${totalCommission.toFixed(2)} to accept this ride.`);
       return;
     }
@@ -2698,8 +2664,8 @@ const App: React.FC = () => {
               negotiatedTotalFare: customFare || node?.negotiatedTotalFare
             }).eq('id', nodeId),
             supabase.from('unihub_drivers').update({ 
-                walletBalance: driver.walletBalance - totalCommission 
-            }).eq('id', driver.id),
+                walletBalance: latestDriver.walletBalance - totalCommission 
+            }).eq('id', driverId),
             supabase.from('unihub_transactions').insert([{
                 id: `TX-COMM-${Date.now()}`,
                 driverId: driverId,
@@ -2720,7 +2686,6 @@ const App: React.FC = () => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
 
-    // GUARD: Check if already completed to prevent duplicate verification
     if (node.status === 'completed') {
         alert("Trip already completed.");
         return;
@@ -2754,17 +2719,15 @@ const App: React.FC = () => {
 
     try {
       if (node.assignedDriverId) {
-        // REFUND LOGIC
-        const driver = drivers.find(d => d.id === node.assignedDriverId);
-        const isShuttle = node.vehicleType === 'Shuttle';
+        // Fetch latest driver data for absolute arithmetic precision
+        const latestDriver = await getLatestDriver(node.assignedDriverId);
+        if (!latestDriver) throw new Error("Driver sync error.");
         
-        // Handle refund for dispatched rides
-        if (driver && node.status === 'dispatched') {
-             // For Shuttles that broadcasted, refund based on capacity. 
-             // For accepted rides (rare for shuttle but possible) or other cars, refund based on pax.
-             const isBroadcast = node.leaderPhone === driver.contact;
+        const isShuttle = node.vehicleType === 'Shuttle';
+        const isBroadcast = node.leaderPhone === latestDriver.contact;
+
+        if (node.status === 'dispatched') {
              let refundAmount = 0;
-             
              if (isShuttle && isBroadcast) {
                  refundAmount = node.capacityNeeded * settings.commissionPerSeat;
              } else {
@@ -2773,32 +2736,29 @@ const App: React.FC = () => {
 
              await Promise.all([
                  supabase.from('unihub_drivers').update({ 
-                     walletBalance: driver.walletBalance + refundAmount 
-                 }).eq('id', driver.id),
+                     walletBalance: latestDriver.walletBalance + refundAmount 
+                 }).eq('id', latestDriver.id),
                  supabase.from('unihub_transactions').insert([{
                     id: `TX-REFUND-${Date.now()}`,
-                    driverId: driver.id,
+                    driverId: latestDriver.id,
                     amount: refundAmount,
-                    type: 'topup',
+                    type: 'refund',
                     timestamp: new Date().toLocaleString()
                  }])
              ]);
         }
 
-        // Handle refund/cancel for forming broadcast
-        const isBroadcast = node.leaderPhone === driver?.contact;
         if (isBroadcast || (node.status === 'forming' && node.passengers.length === 0)) {
-            // If dispatched, we handled refund above. If forming/qualified, we handle here.
             if (node.status !== 'dispatched') {
-                if (isShuttle && isBroadcast && driver) {
+                if (isShuttle && isBroadcast) {
                      const refundAmount = node.capacityNeeded * settings.commissionPerSeat;
                      await Promise.all([
-                        supabase.from('unihub_drivers').update({ walletBalance: driver.walletBalance + refundAmount }).eq('id', driver.id),
+                        supabase.from('unihub_drivers').update({ walletBalance: latestDriver.walletBalance + refundAmount }).eq('id', latestDriver.id),
                         supabase.from('unihub_transactions').insert([{
                             id: `TX-REFUND-PRE-${Date.now()}`,
-                            driverId: driver.id,
+                            driverId: latestDriver.id,
                             amount: refundAmount,
-                            type: 'topup',
+                            type: 'refund',
                             timestamp: new Date().toLocaleString()
                         }])
                     ]);
@@ -2810,7 +2770,6 @@ const App: React.FC = () => {
             return;
         }
 
-        // Reset logic for regular rides
         const resetStatus = (node.isSolo || node.isLongDistance) ? 'qualified' : (node.passengers.length >= 4 ? 'qualified' : 'forming');
         const resetPassengers = node.passengers.map(p => {
             const { verificationCode, ...rest } = p;
@@ -2840,23 +2799,18 @@ const App: React.FC = () => {
 
   const handleBroadcast = async (data: any) => {
       if (!activeDriverId) return;
-      const driver = drivers.find(d => d.id === activeDriverId);
+      const latestDriver = await getLatestDriver(activeDriverId);
+      if (!latestDriver) return;
       
       const activeRide = nodes.find(n => n.assignedDriverId === activeDriverId && n.status !== 'completed');
       if (activeRide) { alert("You already have an active/broadcasting trip."); return; }
 
-      // Validate Capacity string to number
-      const capacity = parseInt(data.seats) || 3;
-      if (capacity < 1) {
-          alert("Invalid seat capacity.");
-          return;
-      }
-
-      // --- NEW LOGIC: Shuttle Prepayment ---
-      const isShuttle = driver?.vehicleType === 'Shuttle';
+      const isShuttle = latestDriver.vehicleType === 'Shuttle';
+      const rawSeats = parseInt(data.seats);
+      const capacity = (!rawSeats || rawSeats < 1) ? (isShuttle ? 10 : 3) : rawSeats;
       const commissionAmount = isShuttle ? (capacity * settings.commissionPerSeat) : 0;
       
-      if (isShuttle && (driver?.walletBalance || 0) < commissionAmount) {
+      if (isShuttle && latestDriver.walletBalance < commissionAmount) {
          alert(`Insufficient Wallet Balance. Shuttle broadcasts require prepaid commission of ₵${commissionAmount.toFixed(2)}.`);
          return;
       }
@@ -2868,46 +2822,59 @@ const App: React.FC = () => {
           capacityNeeded: capacity,
           passengers: [],
           status: 'forming',
-          leaderName: driver?.name || 'Partner',
-          leaderPhone: driver?.contact || '',
+          leaderName: latestDriver.name,
+          leaderPhone: latestDriver.contact,
           farePerPerson: data.fare,
           createdAt: new Date().toISOString(),
           assignedDriverId: activeDriverId,
-          vehicleType: driver?.vehicleType,
+          vehicleType: latestDriver.vehicleType,
           driverNote: data.note
       };
       
       try {
-          // --- DEDUCT UPFRONT FOR SHUTTLES ---
-          if (isShuttle && driver) {
-             const { error } = await supabase.from('unihub_drivers').update({ walletBalance: driver.walletBalance - commissionAmount }).eq('id', driver.id);
-             if (error) throw error;
+          if (isShuttle) {
+             const { error: updError } = await supabase.from('unihub_drivers').update({ walletBalance: latestDriver.walletBalance - commissionAmount }).eq('id', latestDriver.id);
+             if (updError) throw updError;
              
              await supabase.from('unihub_transactions').insert([{
                 id: `TX-COMM-PRE-${Date.now()}`,
-                driverId: driver.id,
+                driverId: latestDriver.id,
                 amount: commissionAmount,
                 type: 'commission',
                 timestamp: new Date().toLocaleString()
              }]);
           }
 
-          const { error } = await supabase.from('unihub_nodes').insert([node]);
-          if(error) {
-             // In a real app, we would rollback transaction here
-             throw error;
+          const { error: insError } = await supabase.from('unihub_nodes').insert([node]);
+          if(insError) {
+             // Rollback using relative addition based on LATEST database balance
+             if (isShuttle) {
+                console.warn("Node creation failed. Initiating relative commission rollback...");
+                const reLatest = await getLatestDriver(activeDriverId);
+                await supabase.from('unihub_drivers').update({ walletBalance: reLatest.walletBalance + commissionAmount }).eq('id', latestDriver.id);
+                await supabase.from('unihub_transactions').insert([{
+                    id: `TX-ROLLBACK-${Date.now()}`,
+                    driverId: latestDriver.id,
+                    amount: commissionAmount,
+                    type: 'refund',
+                    timestamp: new Date().toLocaleString()
+                }]);
+             }
+             throw insError;
           }
           
           alert(isShuttle ? `Route broadcasted! ₵${commissionAmount.toFixed(2)} commission prepaid.` : "Route broadcasted to passengers!"); 
       } catch(e: any) {
-          alert("Broadcast failed: " + e.message);
+          console.error("Broadcast Logic Failure:", e);
+          alert("Broadcast failed: " + e.message + ". Funds protected.");
       }
   };
 
   const handleStartBroadcast = async (nodeId: string) => {
     const node = nodes.find(n => n.id === nodeId);
-    const driver = drivers.find(d => d.id === activeDriverId);
-    if (!node || !driver) return;
+    if (!node || !activeDriverId) return;
+    const latestDriver = await getLatestDriver(activeDriverId);
+    if (!latestDriver) return;
     
     if (node.passengers.length === 0) {
         alert("Cannot start trip with 0 passengers.");
@@ -2917,9 +2884,8 @@ const App: React.FC = () => {
     const isShuttle = node.vehicleType === 'Shuttle';
     const totalCommission = settings.commissionPerSeat * node.passengers.length;
     
-    // Only check and deduct funds if NOT shuttle (shuttles paid upfront based on capacity)
     if (!isShuttle) {
-        if (driver.walletBalance < totalCommission) {
+        if (latestDriver.walletBalance < totalCommission) {
             alert(`Insufficient funds. Need ₵${totalCommission} for ${node.passengers.length} passengers.`);
             return;
         }
@@ -2931,7 +2897,6 @@ const App: React.FC = () => {
         verificationCode: Math.floor(1000 + Math.random() * 9000).toString()
     }));
 
-    // Use any[] to accommodate Supabase PostgrestBuilder which is thenable but not strictly a Promise
     const updates: any[] = [
         supabase.from('unihub_nodes').update({
             status: 'dispatched',
@@ -2943,13 +2908,13 @@ const App: React.FC = () => {
     if (!isShuttle) {
         updates.push(
             supabase.from('unihub_drivers').update({
-                walletBalance: driver.walletBalance - totalCommission
-            }).eq('id', driver.id)
+                walletBalance: latestDriver.walletBalance - totalCommission
+            }).eq('id', activeDriverId)
         );
         updates.push(
             supabase.from('unihub_transactions').insert([{
                  id: `TX-COMM-${Date.now()}`,
-                 driverId: driver.id,
+                 driverId: activeDriverId,
                  amount: totalCommission,
                  type: 'commission',
                  timestamp: new Date().toLocaleString()
@@ -3021,11 +2986,11 @@ const App: React.FC = () => {
     const req = topupRequests.find(r => r.id === reqId);
     if (!req || req.status !== 'pending') return;
 
-    const driver = drivers.find(d => d.id === req.driverId);
-    if (!driver) return;
+    const latestDriver = await getLatestDriver(req.driverId);
+    if (!latestDriver) return;
 
     await Promise.all([
-      supabase.from('unihub_drivers').update({ walletBalance: driver.walletBalance + req.amount }).eq('id', req.driverId),
+      supabase.from('unihub_drivers').update({ walletBalance: latestDriver.walletBalance + req.amount }).eq('id', req.driverId),
       supabase.from('unihub_topups').update({ status: 'approved' }).eq('id', reqId),
       supabase.from('unihub_transactions').insert([{
         id: `TX-${Date.now()}`,
@@ -3118,7 +3083,6 @@ const App: React.FC = () => {
 
   const updateGlobalSettings = async (newSettings: AppSettings) => {
     const { id, ...data } = newSettings;
-    // LOGIC FIX: Ensure existing ID is respected to prevent duplicate rows
     const targetId = id || 1;
     await supabase.from('unihub_settings').upsert({ id: targetId, ...data });
     alert("Settings Updated Successfully!");
@@ -3174,7 +3138,6 @@ const App: React.FC = () => {
 
   const handleDismissAnnouncement = () => {
     setDismissedAnnouncement('true');
-    // LOGIC FIX: Use localStorage to persist dismissal across sessions
     localStorage.setItem('nexryde_dismissed_announcement', 'true');
   };
 
@@ -3189,7 +3152,6 @@ const App: React.FC = () => {
     setViewMode(mode);
   };
 
-  // Handle AI unlocking logic
   const handleAiAccess = () => {
     if (isAiUnlocked) {
       setShowAiHelp(true);
@@ -3204,7 +3166,6 @@ const App: React.FC = () => {
     setShowAiHelp(true);
   };
 
-  // --- ACTIONS FOR AI ---
   const aiActions = {
      onUpdateStatus: async (status: string) => {
         if (activeDriverId) await supabase.from('unihub_drivers').update({ status }).eq('id', activeDriverId);
@@ -3217,7 +3178,6 @@ const App: React.FC = () => {
         setNewNode(prev => ({...prev, ...data}));
      },
      onConfirmRide: () => {
-       // Only confirm if valid
        if (newNode.destination) {
          setCreateMode(true);
          setTimeout(() => {
@@ -3267,7 +3227,6 @@ const App: React.FC = () => {
         <div className="absolute inset-0 bg-[#020617]/70 pointer-events-none z-0"></div>
       )}
 
-      {/* Global AI Voice Orb - Always present */}
       <GlobalVoiceOrb 
         mode={currentUser ? viewMode : 'public'}
         user={viewMode === 'driver' ? activeDriver : currentUser}
@@ -3282,7 +3241,6 @@ const App: React.FC = () => {
         triggerRef={triggerVoiceRef}
       />
 
-      {/* GATEWAY CHECK */}
       {!currentUser ? (
          <HubGateway 
             onIdentify={handleGlobalUserAuth} 
@@ -3470,7 +3428,6 @@ const App: React.FC = () => {
               settings={settings} 
               onShowQr={() => setShowQrModal(true)} 
               onShowAbout={() => setShowAboutModal(true)}
-              // New Props
               createMode={createMode}
               setCreateMode={setCreateMode}
               newNode={newNode}
@@ -3541,7 +3498,6 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Global AI Help Trigger - Passenger Only */}
       {viewMode === 'passenger' && (
         <button 
           onClick={handleAiAccess}
@@ -3609,7 +3565,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* NEW HELP MODAL */}
       {showHelpModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
             <div className="glass-bright w-full max-w-4xl rounded-[3rem] p-8 lg:p-12 space-y-8 animate-in zoom-in border border-white/10 overflow-y-auto max-h-[90vh] no-scrollbar">
@@ -3676,7 +3631,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* About Modal (Existing implementation remains) */}
       {showAboutModal && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
            <div className="glass-bright w-full max-w-2xl rounded-[3rem] p-8 lg:p-12 space-y-8 animate-in zoom-in border border-white/10 overflow-y-auto max-h-[90vh] no-scrollbar">
