@@ -172,6 +172,7 @@ interface AppSettings {
   adminMomoName: string;
   whatsappNumber: string;
   commissionPerSeat: number;
+  shuttleCommission: number; 
   adminSecret?: string;
   farePerPragia: number;
   farePerTaxi: number;
@@ -469,14 +470,14 @@ const GlobalVoiceOrb = ({
     } else {
       systemInstruction = `${ghanaianPersona}
       You help students find rides.
-      CRITICAL: If a user says "I want to go to [Place]", call 'fill_ride_form' IMMEDIATELY to update the screen with the destination. Do not wait for pickup location.
+      CRITICAL: If a user says "I want to go to [Place]" or asks to find a location like "Best Waakye spot", use the 'find_destination' tool to get the real address, then call 'fill_ride_form'.
       If they say "Confirm" or "Call the driver", call 'confirm_ride'.
       Pricing: Pragia ₵${contextData.settings.farePerPragia}, Taxi ₵${contextData.settings.farePerTaxi}.
       `;
       tools = [
         { 
           name: 'fill_ride_form', 
-          description: 'Fill the ride request form. Call this immediately with available fields.',
+          description: 'Fill the ride request form.',
           parameters: {
              type: Type.OBJECT,
              properties: { 
@@ -486,6 +487,15 @@ const GlobalVoiceOrb = ({
                isSolo: { type: Type.BOOLEAN, description: "True for solo/express ride, False for pool." }
              },
              required: ['destination']
+          }
+        },
+        {
+          name: 'find_destination',
+          description: 'Use Google Maps to find a place or business name when the user is unsure of the address or asks for a recommendation (e.g., "Find food", "Take me to Casford").',
+          parameters: {
+             type: Type.OBJECT,
+             properties: { query: { type: Type.STRING, description: "The search query for the place." } },
+             required: ['query']
           }
         },
         { name: 'confirm_ride', description: 'Submit the ride request currently on screen.' },
@@ -579,6 +589,41 @@ const GlobalVoiceOrb = ({
                     if (rides.length === 0) result = { result: "No rides found." };
                     else result = { result: `Found ${rides.length} rides. ` + rides.map(r => r.destination).join(", ") };
                  
+                 } else if (fc.name === 'find_destination' && actions.onFillRideForm) {
+                    const query = (fc.args as any).query;
+                    // Use standard GenerateContent with Maps tool for retrieval
+                    try {
+                        const searchAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                        const mapsResp = await searchAi.models.generateContent({
+                            model: "gemini-2.5-flash",
+                            contents: `Find the best match for: ${query}. Return the name and address.`,
+                            config: {
+                                tools: [{ googleMaps: {} }]
+                            }
+                        });
+                        
+                        // Heuristic to extract grounding
+                        const chunks = mapsResp.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+                        const mapChunk = chunks.find((c: any) => c.web?.title || c.web?.uri); // Maps grounding structure fallback
+                        
+                        let placeName = query;
+                        if (mapChunk && mapChunk.web) {
+                            placeName = mapChunk.web.title;
+                        } else {
+                            // Fallback to text
+                            placeName = mapsResp.text?.split('\n')[0] || query;
+                        }
+                        
+                        // Clean up text response if it's chatty
+                        placeName = placeName.replace("The best match is ", "").replace(".", "");
+
+                        actions.onFillRideForm({ destination: placeName });
+                        result = { result: `Found ${placeName}. Ride form updated.` };
+                    } catch (err) {
+                        console.error("Maps grounding failed", err);
+                        result = { result: "Could not find location data. Please try again." };
+                    }
+
                  } else if (fc.name === 'analyze_security_threats') {
                     result = { status: "Safe", analysis: "System Nominal.", action: "None." };
                  } else if (fc.name === 'get_revenue_report') {
@@ -670,7 +715,7 @@ const GlobalVoiceOrb = ({
                  )}
                  {mode === 'passenger' && (
                     <>
-                       <div className="bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-indigo-400">"I wan go Mall"</div>
+                       <div className="bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-indigo-400">"I want Waakye"</div>
                        <div className="bg-indigo-500/10 p-3 rounded-xl border border-indigo-500/20 text-indigo-400">"Call Pragia"</div>
                     </>
                  )}
@@ -1418,6 +1463,7 @@ const DriverPortal = ({
   const [loginPin, setLoginPin] = useState('');
   const [isScanning, setIsScanning] = useState<string | null>(null);
   const [showManualEntry, setShowManualEntry] = useState(false);
+  const [isPlayingBriefing, setIsPlayingBriefing] = useState(false);
   
   const [regMode, setRegMode] = useState(false);
   const [regData, setRegData] = useState<any>({ name: '', vehicleType: 'Pragia', licensePlate: '', contact: '', pin: '', amount: 20, momoReference: '', avatarUrl: '' });
@@ -1438,9 +1484,55 @@ const DriverPortal = ({
   const isShuttle = activeDriver?.vehicleType === 'Shuttle';
   // SYNC Logic: Match Handler's default capacity logic for Shuttle vs Others
   const estimatedCapacity = parseInt(broadcastData.seats) || (isShuttle ? 10 : 3);
-  const commissionRate = settings?.commissionPerSeat || 0;
+  const commissionRate = isShuttle ? (settings.shuttleCommission || 0) : settings.commissionPerSeat;
   const requiredBalanceForBroadcast = isShuttle ? (estimatedCapacity * commissionRate) : 0; 
   const canAffordBroadcast = activeDriver ? (activeDriver.walletBalance >= requiredBalanceForBroadcast) : false;
+
+  const playMorningBriefing = async () => {
+     if (isPlayingBriefing || !activeDriver) return;
+     setIsPlayingBriefing(true);
+     try {
+       const prompt = `TTS the following conversation between Dispatcher Joe and Driver Jane (Keep it short, under 30 seconds):
+          Joe: Good morning ${activeDriver.name}! Ready for the road?
+          Jane: Always ready, Joe. What's the status on campus?
+          Joe: We have ${availableRides.length} pending requests right now. 
+          Jane: Any hotspots active?
+          Joe: Yes, there are ${missions.length} active missions paying bonuses. Check the map!
+          Jane: Copy that. Staying safe. Over.`;
+
+       const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash-preview-tts",
+          contents: [{ parts: [{ text: prompt }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                multiSpeakerVoiceConfig: {
+                  speakerVoiceConfigs: [
+                        { speaker: 'Joe', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+                        { speaker: 'Jane', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } } }
+                  ]
+                }
+            }
+          }
+       });
+
+       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+       if (base64Audio) {
+         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
+         const audioBuffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1);
+         const source = ctx.createBufferSource();
+         source.buffer = audioBuffer;
+         source.connect(ctx.destination);
+         source.start();
+         source.onended = () => setIsPlayingBriefing(false);
+       } else {
+         setIsPlayingBriefing(false);
+       }
+     } catch (e) {
+       console.error("Briefing failed", e);
+       setIsPlayingBriefing(false);
+     }
+  };
 
   if (isLoading) {
       return (
@@ -1575,14 +1667,19 @@ const DriverPortal = ({
                }}
              />
           )}
-
-          <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar mb-6">
-             {['market', 'active', 'broadcast', 'wallet'].map(tab => (
-                 <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all relative ${activeTab === tab ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>
-                    {tab}
-                    {tab === 'active' && myActiveRides.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>}
-                 </button>
-             ))}
+          
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar">
+               {['market', 'active', 'broadcast', 'wallet'].map(tab => (
+                   <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 min-w-[80px] px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all relative ${activeTab === tab ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>
+                      {tab}
+                      {tab === 'active' && myActiveRides.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>}
+                   </button>
+               ))}
+            </div>
+            <button onClick={playMorningBriefing} disabled={isPlayingBriefing} className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-500 flex items-center justify-center text-[#020617] shadow-lg hover:scale-105 transition-transform disabled:opacity-50">
+               {isPlayingBriefing ? <i className="fas fa-volume-high animate-pulse"></i> : <i className="fas fa-play"></i>}
+            </button>
           </div>
 
           {activeTab === 'market' && (
@@ -1893,6 +1990,14 @@ const AdminPortal = ({
   const [newDriver, setNewDriver] = useState({ name: '', contact: '', vehicleType: 'Pragia', licensePlate: '', pin: '1234', avatarUrl: '' });
   const [localSettings, setLocalSettings] = useState(settings);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Marketing / Veo
+  const [videoPrompt, setVideoPrompt] = useState('');
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+
+  // Pulse
+  const [pulseAnalysis, setPulseAnalysis] = useState<any>(null);
+  const [isAnalyzingPulse, setIsAnalyzingPulse] = useState(false);
 
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
@@ -1937,6 +2042,88 @@ const AdminPortal = ({
       setLocalSettings({...localSettings, aboutMeImages: [...(localSettings.aboutMeImages || []), ...newImages]});
   };
 
+  const handleCreatePromo = async () => {
+      if (!videoPrompt) return;
+      const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+      if (!hasKey) {
+          await (window as any).aistudio.openSelectKey();
+          return;
+      }
+
+      setIsGeneratingVideo(true);
+      try {
+          const videoAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          let operation = await videoAi.models.generateVideos({
+              model: 'veo-3.1-fast-generate-preview',
+              prompt: videoPrompt,
+              config: {
+                 numberOfVideos: 1,
+                 resolution: '1080p',
+                 aspectRatio: '16:9'
+              }
+          });
+          
+          while (!operation.done) {
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            operation = await videoAi.operations.getVideosOperation({operation: operation});
+          }
+
+          const uri = operation.response?.generatedVideos?.[0]?.video?.uri;
+          if (uri) {
+              const videoUrl = `${uri}&key=${process.env.API_KEY}`;
+              // For demo purposes, we will just open it or alert. 
+              // In production, we'd save to storage.
+              window.open(videoUrl, '_blank');
+              setVideoPrompt('');
+              alert("Video Generated! Opening in new tab.");
+          }
+      } catch (err: any) {
+          console.error("Video Gen Error", err);
+          alert("Video generation failed: " + err.message);
+          if (err.message.includes("Requested entity was not found")) {
+             await (window as any).aistudio.openSelectKey();
+          }
+      } finally {
+          setIsGeneratingVideo(false);
+      }
+  };
+
+  const handlePulseAnalysis = async () => {
+      setIsAnalyzingPulse(true);
+      try {
+          const activeRides = nodes.filter((n: any) => n.status !== 'completed').length;
+          const onlineDrivers = drivers.filter((d: any) => d.status === 'online').length;
+          const hour = new Date().getHours();
+
+          const prompt = `
+            Analyze these ride-sharing stats:
+            - Active Rides: ${activeRides}
+            - Online Drivers: ${onlineDrivers}
+            - Time of Day: ${hour}:00
+            - Current Settings: Pragia Fare ${settings.farePerPragia}, Multiplier ${settings.soloMultiplier}.
+
+            Output a JSON with:
+            - "status": "Surge" or "Normal" or "Quiet"
+            - "reason": Short explanation.
+            - "suggestedAction": "Raise Pragia Fare by 1", "Lower Multiplier", etc.
+          `;
+          
+          const pulseAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const response = await pulseAi.models.generateContent({
+             model: 'gemini-3-pro-preview',
+             contents: prompt,
+             config: { responseMimeType: 'application/json' }
+          });
+          
+          const json = JSON.parse(response.text || '{}');
+          setPulseAnalysis(json);
+      } catch (e) {
+          console.error("Pulse Failed", e);
+      } finally {
+          setIsAnalyzingPulse(false);
+      }
+  };
+
   return (
     <div className="space-y-6">
        <div className="glass p-6 rounded-[2.5rem] border border-white/10 flex justify-between items-center">
@@ -1950,34 +2137,89 @@ const AdminPortal = ({
        </div>
 
        <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 overflow-x-auto no-scrollbar">
-          {['monitor', 'drivers', 'rides', 'finance', 'missions', 'config'].map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[80px] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>
+          {['monitor', 'drivers', 'rides', 'finance', 'missions', 'marketing', 'config'].map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 min-w-[80px] px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>
                  {tab}
               </button>
           ))}
        </div>
 
        {activeTab === 'monitor' && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-             <div className="glass p-6 rounded-[2rem] border border-white/5">
-                <p className="text-[9px] font-bold text-slate-500 uppercase">Total Revenue</p>
-                <p className="text-2xl font-black text-white">₵ {hubRevenue.toFixed(2)}</p>
+          <div className="space-y-6">
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="glass p-6 rounded-[2rem] border border-white/5">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase">Total Revenue</p>
+                    <p className="text-2xl font-black text-white">₵ {hubRevenue.toFixed(2)}</p>
+                </div>
+                <div className="glass p-6 rounded-[2rem] border border-white/5">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase">Active Drivers</p>
+                    <p className="text-2xl font-black text-emerald-400">{drivers.filter((d:any) => d.status === 'online').length} / {drivers.length}</p>
+                </div>
+                <div className="glass p-6 rounded-[2rem] border border-white/5">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase">Active Rides</p>
+                    <p className="text-2xl font-black text-amber-500">{nodes.filter((n:any) => n.status !== 'completed').length}</p>
+                </div>
+                <div className="glass p-6 rounded-[2rem] border border-white/5">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase">Pending Regs</p>
+                    <p className="text-2xl font-black text-indigo-400">{registrationRequests.filter((r:any) => r.status === 'pending').length}</p>
+                </div>
              </div>
-             <div className="glass p-6 rounded-[2rem] border border-white/5">
-                <p className="text-[9px] font-bold text-slate-500 uppercase">Active Drivers</p>
-                <p className="text-2xl font-black text-emerald-400">{drivers.filter((d:any) => d.status === 'online').length} / {drivers.length}</p>
-             </div>
-             <div className="glass p-6 rounded-[2rem] border border-white/5">
-                <p className="text-[9px] font-bold text-slate-500 uppercase">Active Rides</p>
-                <p className="text-2xl font-black text-amber-500">{nodes.filter((n:any) => n.status !== 'completed').length}</p>
-             </div>
-             <div className="glass p-6 rounded-[2rem] border border-white/5">
-                <p className="text-[9px] font-bold text-slate-500 uppercase">Pending Regs</p>
-                <p className="text-2xl font-black text-indigo-400">{registrationRequests.filter((r:any) => r.status === 'pending').length}</p>
+             
+             <div className="glass p-8 rounded-[2rem] border border-white/10">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-sm font-black text-white uppercase">Market Pulse (AI)</h3>
+                    <button onClick={handlePulseAnalysis} disabled={isAnalyzingPulse} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase disabled:opacity-50">
+                        {isAnalyzingPulse ? 'Reasoning...' : 'Analyze Supply/Demand'}
+                    </button>
+                </div>
+                {pulseAnalysis && (
+                    <div className="bg-white/5 p-4 rounded-xl border border-white/5 animate-in fade-in">
+                        <div className="flex items-center gap-2 mb-2">
+                           <span className={`w-2 h-2 rounded-full ${pulseAnalysis.status === 'Surge' ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+                           <span className="text-sm font-black text-white uppercase">{pulseAnalysis.status}</span>
+                        </div>
+                        <p className="text-xs text-slate-300 mb-2">{pulseAnalysis.reason}</p>
+                        <p className="text-[10px] text-indigo-400 font-bold uppercase">Suggestion: {pulseAnalysis.suggestedAction}</p>
+                    </div>
+                )}
              </div>
           </div>
        )}
        
+       {activeTab === 'marketing' && (
+           <div className="glass p-8 rounded-[2.5rem] border border-white/10 space-y-6">
+               <div className="flex items-center justify-between">
+                   <div>
+                       <h3 className="text-xl font-black italic uppercase text-white">Hub Promos (Veo)</h3>
+                       <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">Generate 1080p Video Content</p>
+                   </div>
+                   <div className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+                       <i className="fas fa-video"></i>
+                   </div>
+               </div>
+               
+               <div className="space-y-4">
+                   <textarea 
+                     value={videoPrompt} 
+                     onChange={(e) => setVideoPrompt(e.target.value)} 
+                     placeholder="Describe your promo video (e.g. A futuristic shuttle driving through a busy campus at sunset with neon lights)..." 
+                     className="w-full h-32 bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold text-xs outline-none focus:border-purple-500 transition-colors"
+                   />
+                   <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/20 flex gap-3 items-center">
+                       <i className="fas fa-info-circle text-purple-400"></i>
+                       <p className="text-[9px] text-slate-400">Requires a paid billing project. You will be asked to select an API Key if not already selected.</p>
+                   </div>
+                   <button 
+                     onClick={handleCreatePromo} 
+                     disabled={isGeneratingVideo || !videoPrompt}
+                     className="w-full py-4 bg-purple-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-500 transition-all"
+                   >
+                     {isGeneratingVideo ? 'Generating Video (This takes time)...' : 'Generate Promo Video'}
+                   </button>
+               </div>
+           </div>
+       )}
+
        {activeTab === 'drivers' && (
            <div className="space-y-6">
                <div className="glass p-6 rounded-[2rem] border border-white/10">
@@ -2099,6 +2341,10 @@ const AdminPortal = ({
                   <div>
                       <label className="text-[9px] font-bold text-slate-500 uppercase">Comm. Per Seat (₵)</label>
                       <input type="number" value={localSettings.commissionPerSeat} onChange={e => setLocalSettings({...localSettings, commissionPerSeat: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold" />
+                  </div>
+                  <div>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase">Shuttle Comm. (₵)</label>
+                      <input type="number" value={localSettings.shuttleCommission || 0} onChange={e => setLocalSettings({...localSettings, shuttleCommission: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold" />
                   </div>
                   <div>
                       <label className="text-[9px] font-bold text-slate-500 uppercase">Solo Multiplier</label>
@@ -2348,6 +2594,7 @@ const App: React.FC = () => {
     adminMomoName: "NexRyde Admin",
     whatsappNumber: "233241234567",
     commissionPerSeat: 2.00,
+    shuttleCommission: 0.5,
     farePerPragia: 5.00,
     farePerTaxi: 8.00,
     soloMultiplier: 2.5,
@@ -2729,7 +2976,9 @@ const App: React.FC = () => {
         if (node.status === 'dispatched') {
              let refundAmount = 0;
              if (isShuttle && isBroadcast) {
-                 refundAmount = node.capacityNeeded * settings.commissionPerSeat;
+                 const cap = node.capacityNeeded;
+                 const rate = settings.shuttleCommission || settings.commissionPerSeat;
+                 refundAmount = cap * rate;
              } else {
                  refundAmount = settings.commissionPerSeat * node.passengers.length;
              }
@@ -2751,7 +3000,9 @@ const App: React.FC = () => {
         if (isBroadcast || (node.status === 'forming' && node.passengers.length === 0)) {
             if (node.status !== 'dispatched') {
                 if (isShuttle && isBroadcast) {
-                     const refundAmount = node.capacityNeeded * settings.commissionPerSeat;
+                     const cap = node.capacityNeeded;
+                     const rate = settings.shuttleCommission || settings.commissionPerSeat;
+                     const refundAmount = cap * rate;
                      await Promise.all([
                         supabase.from('unihub_drivers').update({ walletBalance: latestDriver.walletBalance + refundAmount }).eq('id', latestDriver.id),
                         supabase.from('unihub_transactions').insert([{
@@ -2808,7 +3059,8 @@ const App: React.FC = () => {
       const isShuttle = latestDriver.vehicleType === 'Shuttle';
       const rawSeats = parseInt(data.seats);
       const capacity = (!rawSeats || rawSeats < 1) ? (isShuttle ? 10 : 3) : rawSeats;
-      const commissionAmount = isShuttle ? (capacity * settings.commissionPerSeat) : 0;
+      const rate = isShuttle ? (settings.shuttleCommission || settings.commissionPerSeat) : settings.commissionPerSeat;
+      const commissionAmount = isShuttle ? (capacity * rate) : 0;
       
       if (isShuttle && latestDriver.walletBalance < commissionAmount) {
          alert(`Insufficient Wallet Balance. Shuttle broadcasts require prepaid commission of ₵${commissionAmount.toFixed(2)}.`);
@@ -3708,3 +3960,4 @@ if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<App />);
 }
+
