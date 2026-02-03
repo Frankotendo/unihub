@@ -216,6 +216,7 @@ interface AppSettings {
   adSenseSlotId?: string;
   adSenseLayoutKey?: string;
   adSenseStatus?: 'active' | 'inactive';
+  aiName?: string; // Added Configurable AI Name
 }
 
 // --- UTILS ---
@@ -426,8 +427,10 @@ const GlobalVoiceOrb = ({
     let tools: FunctionDeclaration[] = [];
     let systemInstruction = "";
 
+    const aiName = contextData.settings.aiName || "Kofi"; // Use Configured Name
+
     const ghanaianPersona = `
-      You are "Kofi", the NexRyde Polyglot Assistant.
+      You are "${aiName}", the NexRyde Polyglot Assistant.
       LANGUAGE CAPABILITIES:
       - You can speak and understand English, Twi, Ga, Ewe, Hausa, and Ghanaian Pidgin.
       - DETECT the user's language immediately and respond in that same language/dialect.
@@ -735,7 +738,7 @@ const GlobalVoiceOrb = ({
            <canvas ref={canvasRef} width={400} height={400} className="w-[300px] h-[300px] sm:w-[400px] sm:h-[400px]" />
            <div className="mt-8 text-center px-4">
               <h3 className="text-2xl font-black italic uppercase text-white tracking-widest animate-pulse">
-                {state === 'listening' ? 'Tie me...' : state === 'speaking' ? 'Kofi (AI)' : 'Thinking...'}
+                {state === 'listening' ? 'Tie me...' : state === 'speaking' ? `${contextData.settings.aiName || 'Kofi'} (AI)` : 'Thinking...'}
               </h3>
               <p className="text-xs font-bold opacity-70 uppercase mt-2 tracking-[0.2em]" style={{ color: mode === 'admin' ? '#f43f5e' : '#94a3b8' }}>
                 {mode === 'admin' ? 'Security Protocol Active' : mode === 'driver' ? 'Partner Hands-Free' : 'Polyglot Assistant'}
@@ -1167,8 +1170,8 @@ const PassengerPortal = ({
                       <label className="text-[10px] font-black uppercase text-white">Your Offer (₵)</label>
                       <span className="text-[9px] text-emerald-400 font-bold uppercase">Boost to attract drivers</span>
                    </div>
-                   <div className="flex items-center gap-3">
-                      <button onClick={() => adjustOffer(-0.5)} className="w-12 h-12 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all">
+                   <div className="flex items-center gap-3 h-14">
+                      <button onClick={() => adjustOffer(-0.5)} className="h-full aspect-square bg-white/5 rounded-xl border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all">
                           <i className="fas fa-minus"></i>
                       </button>
                       <input 
@@ -1177,9 +1180,9 @@ const PassengerPortal = ({
                           value={offerInput}
                           onChange={handleOfferChange}
                           onBlur={handleOfferBlur}
-                          className="flex-1 bg-[#020617]/50 border border-white/10 rounded-xl px-4 py-3 text-white font-black text-lg text-center outline-none focus:border-emerald-500 transition-colors"
+                          className="flex-1 h-full bg-[#020617]/50 border border-white/10 rounded-xl px-4 text-white font-black text-lg text-center outline-none focus:border-emerald-500 transition-colors"
                       />
-                      <button onClick={() => adjustOffer(0.5)} className="w-12 h-12 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all">
+                      <button onClick={() => adjustOffer(0.5)} className="h-full aspect-square bg-white/5 rounded-xl border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all">
                           <i className="fas fa-plus"></i>
                       </button>
                    </div>
@@ -2438,6 +2441,11 @@ const AdminPortal = ({
               </div>
 
               <div>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">AI Assistant Name</label>
+                  <input value={localSettings.aiName || ''} onChange={e => setLocalSettings({...localSettings, aiName: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold" placeholder="e.g. Frank" />
+              </div>
+
+              <div>
                   <label className="text-[9px] font-bold text-slate-500 uppercase">System Announcement</label>
                   <textarea value={localSettings.hub_announcement || ''} onChange={e => setLocalSettings({...localSettings, hub_announcement: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs h-20" placeholder="Broadcast message..." />
               </div>
@@ -2679,7 +2687,8 @@ const App: React.FC = () => {
     adSenseClientId: "ca-pub-7812709042449387",
     adSenseSlotId: "9489307110",
     adSenseLayoutKey: "-fb+5w+4e-db+86",
-    adSenseStatus: "active"
+    adSenseStatus: "active",
+    aiName: "Kofi"
   });
   const [nodes, setNodes] = useState<RideNode[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -2738,7 +2747,8 @@ const App: React.FC = () => {
             adSenseSlotId: sData.adsense_slot_id || sData.adSenseSlotId || settings.adSenseSlotId,
             adSenseLayoutKey: sData.adsense_layout_key || sData.adSenseLayoutKey || settings.adSenseLayoutKey,
             adSenseStatus: sData.adsense_status || sData.adSenseStatus || settings.adSenseStatus,
-            hub_announcement: sData.hub_announcement || settings.hub_announcement, 
+            hub_announcement: sData.hub_announcement || settings.hub_announcement,
+            aiName: sData.ai_name || sData.aiName || settings.aiName, 
             id: sData.id
         };
         setSettings(mappedSettings);
@@ -3457,7 +3467,8 @@ const App: React.FC = () => {
         adSenseClientId: data.adSenseClientId,
         adSenseSlotId: data.adSenseSlotId,
         adSenseLayoutKey: data.adSenseLayoutKey,
-        adSenseStatus: data.adSenseStatus
+        adSenseStatus: data.adSenseStatus,
+        aiName: data.aiName
     };
 
     const { error } = await supabase.from('unihub_settings').upsert({ id: targetId, ...dbPayload });
