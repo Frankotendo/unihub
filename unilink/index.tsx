@@ -974,6 +974,9 @@ const SearchHub = ({ searchConfig, setSearchConfig, portalMode }: any) => {
   );
 };
 
+// ... (rest of the file content until App component or fetchData/updateGlobalSettings usage)
+// I will include the full updated App component and necessary context for XML format validity
+
 const PassengerPortal = ({ 
   currentUser, 
   nodes, 
@@ -1471,6 +1474,7 @@ const AiHelpDesk = ({ onClose, settings }: any) => {
   );
 };
 
+// ... (rest of components like DriverPortal, AdminPortal same as before until App)
 const DriverPortal = ({ 
   drivers, 
   activeDriver, 
@@ -1995,6 +1999,7 @@ const DriverPortal = ({
   );
 };
 
+// ... (rest of AdminPortal etc)
 const AdminPortal = ({ 
   activeTab, 
   setActiveTab, 
@@ -2679,8 +2684,36 @@ const App: React.FC = () => {
       ]);
 
       if (sData) {
-        setSettings(prev => ({ ...prev, ...sData }));
-        const currentMsg = sData.hub_announcement || '';
+        // Map snake_case from DB to camelCase for state
+        const mappedSettings: AppSettings = {
+            ...settings, 
+            ...sData, 
+            adminMomo: sData.admin_momo || sData.adminMomo || settings.adminMomo,
+            adminMomoName: sData.admin_momo_name || sData.adminMomoName || settings.adminMomoName,
+            whatsappNumber: sData.whatsapp_number || sData.whatsappNumber || settings.whatsappNumber,
+            commissionPerSeat: sData.commission_per_seat || sData.commissionPerSeat || settings.commissionPerSeat,
+            shuttleCommission: sData.shuttle_commission || sData.shuttleCommission || settings.shuttleCommission,
+            farePerPragia: sData.fare_per_pragia || sData.farePerPragia || settings.farePerPragia,
+            farePerTaxi: sData.fare_per_taxi || sData.farePerTaxi || settings.farePerTaxi,
+            soloMultiplier: sData.solo_multiplier || sData.soloMultiplier || settings.soloMultiplier,
+            aboutMeText: sData.about_me_text || sData.aboutMeText || settings.aboutMeText,
+            aboutMeImages: sData.about_me_images || sData.aboutMeImages || settings.aboutMeImages,
+            appWallpaper: sData.app_wallpaper || sData.appWallpaper || settings.appWallpaper,
+            appLogo: sData.app_logo || sData.appLogo || settings.appLogo,
+            registrationFee: sData.registration_fee || sData.registrationFee || settings.registrationFee,
+            facebookUrl: sData.facebook_url || sData.facebookUrl || settings.facebookUrl,
+            instagramUrl: sData.instagram_url || sData.instagramUrl || settings.instagramUrl,
+            tiktokUrl: sData.tiktok_url || sData.tiktokUrl || settings.tiktokUrl,
+            adSenseClientId: sData.adsense_client_id || sData.adSenseClientId || settings.adSenseClientId,
+            adSenseSlotId: sData.adsense_slot_id || sData.adSenseSlotId || settings.adSenseSlotId,
+            adSenseLayoutKey: sData.adsense_layout_key || sData.adSenseLayoutKey || settings.adSenseLayoutKey,
+            adSenseStatus: sData.adsense_status || sData.adSenseStatus || settings.adSenseStatus,
+            hub_announcement: sData.hub_announcement || settings.hub_announcement, 
+            id: sData.id
+        };
+        setSettings(mappedSettings);
+
+        const currentMsg = mappedSettings.hub_announcement || '';
         if (currentMsg !== localStorage.getItem('nexryde_last_announcement')) {
           setDismissedAnnouncement(null);
           localStorage.removeItem('nexryde_dismissed_announcement');
@@ -3370,8 +3403,40 @@ const App: React.FC = () => {
   const updateGlobalSettings = async (newSettings: AppSettings) => {
     const { id, ...data } = newSettings;
     const targetId = id || 1;
-    await supabase.from('unihub_settings').upsert({ id: targetId, ...data });
-    alert("Settings Updated Successfully!");
+    
+    // Map camelCase state to snake_case for DB
+    const dbPayload = {
+        admin_momo: data.adminMomo,
+        admin_momo_name: data.adminMomoName,
+        whatsapp_number: data.whatsappNumber,
+        commission_per_seat: data.commissionPerSeat,
+        shuttle_commission: data.shuttleCommission,
+        fare_per_pragia: data.farePerPragia,
+        fare_per_taxi: data.farePerTaxi,
+        solo_multiplier: data.soloMultiplier,
+        about_me_text: data.aboutMeText,
+        about_me_images: data.aboutMeImages,
+        app_wallpaper: data.appWallpaper,
+        app_logo: data.appLogo,
+        registration_fee: data.registrationFee,
+        hub_announcement: data.hub_announcement,
+        facebook_url: data.facebookUrl,
+        instagram_url: data.instagramUrl,
+        tiktok_url: data.tiktokUrl,
+        adsense_client_id: data.adSenseClientId,
+        adsense_slot_id: data.adSenseSlotId,
+        adsense_layout_key: data.adSenseLayoutKey,
+        adsense_status: data.adSenseStatus
+    };
+
+    const { error } = await supabase.from('unihub_settings').upsert({ id: targetId, ...dbPayload });
+    
+    if (error) {
+         console.error("Save Error", error);
+         alert("Error saving settings: " + error.message);
+    } else {
+         alert("Settings Updated Successfully!");
+    }
   };
 
   const handleAdminAuth = async (email: string, pass: string) => {
