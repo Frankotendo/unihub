@@ -52,37 +52,11 @@ async function decodeAudioData(
   return buffer;
 }
 
-/**
- * Downsamples audio buffer to 16kHz for Gemini compatibility.
- * Simple averaging is used to prevent aliasing.
- */
-function downsampleTo16k(buffer: Float32Array, sampleRate: number): Float32Array {
-  if (sampleRate === 16000) return buffer;
-  const ratio = sampleRate / 16000;
-  const newLength = Math.ceil(buffer.length / ratio);
-  const result = new Float32Array(newLength);
-  let offsetResult = 0;
-  let offsetBuffer = 0;
-  
-  while (offsetResult < result.length) {
-    const nextOffsetBuffer = Math.round((offsetResult + 1) * ratio);
-    let accum = 0, count = 0;
-    for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
-      accum += buffer[i];
-      count++;
-    }
-    result[offsetResult] = count > 0 ? accum / count : 0;
-    offsetResult++;
-    offsetBuffer = nextOffsetBuffer;
-  }
-  return result;
-}
-
 function createBlob(data: Float32Array): { data: string, mimeType: string } {
   const l = data.length;
   const int16 = new Int16Array(l);
   for (let i = 0; i < l; i++) {
-    int16[i] = Math.max(-1, Math.min(1, data[i])) * 32768; // Clamp values
+    int16[i] = data[i] * 32768;
   }
   return {
     data: encode(new Uint8Array(int16.buffer)),
@@ -216,7 +190,6 @@ interface AppSettings {
   adSenseSlotId?: string;
   adSenseLayoutKey?: string;
   adSenseStatus?: 'active' | 'inactive';
-  aiName?: string; // Added Configurable AI Name
 }
 
 // --- UTILS ---
@@ -427,10 +400,8 @@ const GlobalVoiceOrb = ({
     let tools: FunctionDeclaration[] = [];
     let systemInstruction = "";
 
-    const aiName = contextData.settings.aiName || "Kofi"; // Use Configured Name
-
     const ghanaianPersona = `
-      You are "${aiName}", the NexRyde Polyglot Assistant.
+      You are "Kofi", the NexRyde Polyglot Assistant.
       LANGUAGE CAPABILITIES:
       - You can speak and understand English, Twi, Ga, Ewe, Hausa, and Ghanaian Pidgin.
       - DETECT the user's language immediately and respond in that same language/dialect.
@@ -533,20 +504,13 @@ const GlobalVoiceOrb = ({
     }
 
     try {
-      // Use device native sample rate to prevent audio glitching on mobile
-      const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-      
-      // Explicit resume for mobile browsers
-      await inputAudioContext.resume();
-      await outputAudioContext.resume();
-
       audioContextRef.current = outputAudioContext;
       inputAudioContextRef.current = inputAudioContext;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const inputNode = inputAudioContext.createMediaStreamSource(stream);
-      // Use larger buffer size for better stability on lower-end devices
       const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
 
       const sessionPromise = ai.live.connect({
@@ -564,9 +528,7 @@ const GlobalVoiceOrb = ({
             console.log("Gemini Live Connected");
             scriptProcessor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
-              // Downsample to 16k before sending to Gemini
-              const downsampledData = downsampleTo16k(inputData, inputAudioContext.sampleRate);
-              const pcmBlob = createBlob(downsampledData);
+              const pcmBlob = createBlob(inputData);
               sessionPromise.then(session => session.sendRealtimeInput({ media: pcmBlob }));
             };
             inputNode.connect(scriptProcessor);
@@ -738,7 +700,7 @@ const GlobalVoiceOrb = ({
            <canvas ref={canvasRef} width={400} height={400} className="w-[300px] h-[300px] sm:w-[400px] sm:h-[400px]" />
            <div className="mt-8 text-center px-4">
               <h3 className="text-2xl font-black italic uppercase text-white tracking-widest animate-pulse">
-                {state === 'listening' ? 'Tie me...' : state === 'speaking' ? `${contextData.settings.aiName || 'Kofi'} (AI)` : 'Thinking...'}
+                {state === 'listening' ? 'Tie me...' : state === 'speaking' ? 'Kofi (AI)' : 'Thinking...'}
               </h3>
               <p className="text-xs font-bold opacity-70 uppercase mt-2 tracking-[0.2em]" style={{ color: mode === 'admin' ? '#f43f5e' : '#94a3b8' }}>
                 {mode === 'admin' ? 'Security Protocol Active' : mode === 'driver' ? 'Partner Hands-Free' : 'Polyglot Assistant'}
@@ -1144,11 +1106,11 @@ const PassengerPortal = ({
             </div>
             
             <div className="relative">
-              <input value={newNode.origin} onChange={e => setNewNode({...newNode, origin: e.target.value})} placeholder="Pickup Location" className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-10 py-3 text-white font-bold outline-none text-sm focus:border-indigo-500" />
+              <input value={newNode.origin} onChange={e => setNewNode({...newNode, origin: e.target.value})} placeholder="Pickup Location" className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-4 pr-10 py-3 text-white font-bold outline-none text-sm focus:border-indigo-500" />
               <button onClick={onTriggerVoice} className="absolute right-2 top-2 w-8 h-8 flex items-center justify-center text-indigo-400 hover:text-white"><i className="fas fa-microphone"></i></button>
             </div>
             <div className="relative">
-              <input value={newNode.destination} onChange={e => setNewNode({...newNode, destination: e.target.value})} placeholder="Dropoff Location" className="w-full bg-white/5 border border-white/10 rounded-xl pl-4 pr-10 py-3 text-white font-bold outline-none text-sm focus:border-indigo-500" />
+              <input value={newNode.destination} onChange={e => setNewNode({...newNode, destination: e.target.value})} placeholder="Dropoff Location" className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-4 pr-10 py-3 text-white font-bold outline-none text-sm focus:border-indigo-500" />
               <button onClick={onTriggerVoice} className="absolute right-2 top-2 w-8 h-8 flex items-center justify-center text-indigo-400 hover:text-white"><i className="fas fa-microphone"></i></button>
             </div>
             
@@ -1160,19 +1122,19 @@ const PassengerPortal = ({
                ))}
             </div>
 
-            <div className="p-6 bg-indigo-900/30 rounded-2xl border border-indigo-500/20 space-y-3">
-               <div className="flex justify-between items-center">
+            <div className="p-4 bg-indigo-900/30 rounded-2xl border border-indigo-500/20 space-y-3">
+               <div className="flex justify-between items-center px-1">
                    <span className="text-[10px] font-black uppercase text-indigo-300">Base Fare</span>
-                   <span className="text-sm font-bold text-slate-400">₵{fareEstimate.toFixed(2)}</span>
+                   <span className="text-xs font-bold text-slate-400">₵{fareEstimate.toFixed(2)}</span>
                </div>
                <div>
-                   <div className="flex justify-between items-center mb-1">
+                   <div className="flex justify-between items-center mb-2 px-1">
                       <label className="text-[10px] font-black uppercase text-white">Your Offer (₵)</label>
                       <span className="text-[9px] text-emerald-400 font-bold uppercase">Boost to attract drivers</span>
                    </div>
-                   <div className="flex items-center gap-3 h-14">
-                      <button onClick={() => adjustOffer(-0.5)} className="h-full aspect-square bg-white/5 rounded-xl border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all">
-                          <i className="fas fa-minus"></i>
+                   <div className="flex items-center gap-2">
+                      <button onClick={() => adjustOffer(-0.5)} className="w-11 h-11 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all">
+                          <i className="fas fa-minus text-xs"></i>
                       </button>
                       <input 
                           type="number" 
@@ -1180,16 +1142,16 @@ const PassengerPortal = ({
                           value={offerInput}
                           onChange={handleOfferChange}
                           onBlur={handleOfferBlur}
-                          className="flex-1 h-full bg-[#020617]/50 border border-white/10 rounded-xl px-4 text-white font-black text-lg text-center outline-none focus:border-emerald-500 transition-colors"
+                          className="flex-1 h-11 bg-[#020617]/50 border border-white/10 rounded-xl px-4 text-white font-black text-base text-center outline-none focus:border-emerald-500 transition-colors"
                       />
-                      <button onClick={() => adjustOffer(0.5)} className="h-full aspect-square bg-white/5 rounded-xl border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all">
-                          <i className="fas fa-plus"></i>
+                      <button onClick={() => adjustOffer(0.5)} className="w-11 h-11 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all">
+                          <i className="fas fa-plus text-xs"></i>
                       </button>
                    </div>
                </div>
             </div>
 
-            <button onClick={handleSubmit} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl">Confirm Request</button>
+            <button onClick={handleSubmit} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:scale-[1.01] transition-transform">Confirm Request</button>
          </div>
       </div>
     );
@@ -1509,7 +1471,6 @@ const AiHelpDesk = ({ onClose, settings }: any) => {
   );
 };
 
-// ... (rest of components like DriverPortal, AdminPortal same as before until App)
 const DriverPortal = ({ 
   drivers, 
   activeDriver, 
@@ -1670,7 +1631,7 @@ const DriverPortal = ({
       }
 
       return (
-          <div className="glass p-8 rounded-[2.5rem] border border-white/10 max-w-sm mx-auto text-center space-y-6 animate-in zoom-in">
+          <div className="glass p-8 rounded-[2.5rem] border border-white/10 max-sm mx-auto text-center space-y-6 animate-in zoom-in">
              <div className="w-16 h-16 bg-indigo-600 rounded-2xl mx-auto flex items-center justify-center text-white shadow-xl shadow-indigo-600/20">
                 <i className="fas fa-id-card-clip text-2xl"></i>
              </div>
@@ -2034,7 +1995,6 @@ const DriverPortal = ({
   );
 };
 
-// ... (rest of AdminPortal etc)
 const AdminPortal = ({ 
   activeTab, 
   setActiveTab, 
@@ -2118,9 +2078,9 @@ const AdminPortal = ({
 
   const handleCreatePromo = async () => {
       if (!videoPrompt) return;
-      // Vercel / Production fix: Use environment variable only
-      if (!process.env.API_KEY) {
-          alert("API Key not found in environment variables. Please check deployment settings.");
+      const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+      if (!hasKey) {
+          await (window as any).aistudio.openSelectKey();
           return;
       }
 
@@ -2154,6 +2114,9 @@ const AdminPortal = ({
       } catch (err: any) {
           console.error("Video Gen Error", err);
           alert("Video generation failed: " + err.message);
+          if (err.message.includes("Requested entity was not found")) {
+             await (window as any).aistudio.openSelectKey();
+          }
       } finally {
           setIsGeneratingVideo(false);
       }
@@ -2441,11 +2404,6 @@ const AdminPortal = ({
               </div>
 
               <div>
-                  <label className="text-[9px] font-bold text-slate-500 uppercase">AI Assistant Name</label>
-                  <input value={localSettings.aiName || ''} onChange={e => setLocalSettings({...localSettings, aiName: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold" placeholder="e.g. Frank" />
-              </div>
-
-              <div>
                   <label className="text-[9px] font-bold text-slate-500 uppercase">System Announcement</label>
                   <textarea value={localSettings.hub_announcement || ''} onChange={e => setLocalSettings({...localSettings, hub_announcement: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white font-bold text-xs h-20" placeholder="Broadcast message..." />
               </div>
@@ -2617,7 +2575,6 @@ const AdminPortal = ({
   );
 };
 
-// ... (Rest of App and rootElement code remains the same)
 // --- APP COMPONENT ---
 
 const App: React.FC = () => {
@@ -2687,8 +2644,7 @@ const App: React.FC = () => {
     adSenseClientId: "ca-pub-7812709042449387",
     adSenseSlotId: "9489307110",
     adSenseLayoutKey: "-fb+5w+4e-db+86",
-    adSenseStatus: "active",
-    aiName: "Kofi"
+    adSenseStatus: "active"
   });
   const [nodes, setNodes] = useState<RideNode[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -2747,8 +2703,7 @@ const App: React.FC = () => {
             adSenseSlotId: sData.adsense_slot_id || sData.adSenseSlotId || settings.adSenseSlotId,
             adSenseLayoutKey: sData.adsense_layout_key || sData.adSenseLayoutKey || settings.adSenseLayoutKey,
             adSenseStatus: sData.adsense_status || sData.adSenseStatus || settings.adSenseStatus,
-            hub_announcement: sData.hub_announcement || settings.hub_announcement,
-            aiName: sData.ai_name || sData.aiName || settings.aiName, 
+            hub_announcement: sData.hub_announcement || settings.hub_announcement, 
             id: sData.id
         };
         setSettings(mappedSettings);
@@ -3467,8 +3422,7 @@ const App: React.FC = () => {
         adSenseClientId: data.adSenseClientId,
         adSenseSlotId: data.adSenseSlotId,
         adSenseLayoutKey: data.adSenseLayoutKey,
-        adSenseStatus: data.adSenseStatus,
-        aiName: data.aiName
+        adSenseStatus: data.adSenseStatus
     };
 
     const { error } = await supabase.from('unihub_settings').upsert({ id: targetId, ...dbPayload });
@@ -3518,6 +3472,7 @@ const App: React.FC = () => {
     }
   };
 
+  // Fixed handleDriverLogout: removed undeclared driverId and ensured removeItem receives only 1 argument
   const handleDriverLogout = () => {
     setActiveDriverId(null);
     sessionStorage.removeItem('nexryde_driver_session_v1');
