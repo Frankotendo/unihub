@@ -996,6 +996,7 @@ const PassengerPortal = ({
 }: any) => {
   const [fareEstimate, setFareEstimate] = useState(0);
   const [customOffer, setCustomOffer] = useState<number | null>(null);
+  const [offerInput, setOfferInput] = useState<string>(''); 
   const [expandedQr, setExpandedQr] = useState<string | null>(null);
   
   const [showSoloAd, setShowSoloAd] = useState(false);
@@ -1014,8 +1015,36 @@ const PassengerPortal = ({
     let base = newNode.vehicleType === 'Taxi' ? settings.farePerTaxi : settings.farePerPragia;
     if (newNode.isSolo) base *= settings.soloMultiplier;
     setFareEstimate(base);
-    if (customOffer && customOffer < base) setCustomOffer(null);
+    
+    // Reset custom offer on vehicle/mode change and sync input
+    setCustomOffer(null);
+    setOfferInput(base.toFixed(2));
   }, [newNode.vehicleType, newNode.isSolo, settings]);
+
+  const handleOfferChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      setOfferInput(val);
+      const num = parseFloat(val);
+      if (!isNaN(num)) setCustomOffer(num);
+      else setCustomOffer(null);
+  };
+
+  const handleOfferBlur = () => {
+      const val = parseFloat(offerInput);
+      if (isNaN(val) || val < fareEstimate) {
+          setOfferInput(fareEstimate.toFixed(2));
+          setCustomOffer(null);
+      } else {
+          setOfferInput(val.toFixed(2));
+      }
+  };
+
+  const adjustOffer = (delta: number) => {
+      const current = parseFloat(offerInput) || fareEstimate;
+      const newVal = Math.max(fareEstimate, current + delta);
+      setOfferInput(newVal.toFixed(2));
+      setCustomOffer(newVal);
+  };
 
   const toggleSolo = () => {
     if (newNode.isSolo) {
@@ -1103,17 +1132,22 @@ const PassengerPortal = ({
                       <label className="text-[10px] font-black uppercase text-white">Your Offer (₵)</label>
                       <span className="text-[9px] text-emerald-400 font-bold uppercase">Boost to attract drivers</span>
                    </div>
-                   <input 
-                      type="number" 
-                      min={fareEstimate}
-                      step="0.5"
-                      value={customOffer || fareEstimate}
-                      onChange={(e) => {
-                          const val = parseFloat(e.target.value);
-                          setCustomOffer(val >= fareEstimate ? val : fareEstimate);
-                      }}
-                      className="w-full bg-[#020617]/50 border border-white/10 rounded-xl px-4 py-3 text-white font-black text-lg outline-none focus:border-emerald-500 transition-colors"
-                   />
+                   <div className="flex items-center gap-3">
+                      <button onClick={() => adjustOffer(-0.5)} className="w-12 h-12 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all">
+                          <i className="fas fa-minus"></i>
+                      </button>
+                      <input 
+                          type="number" 
+                          step="0.5"
+                          value={offerInput}
+                          onChange={handleOfferChange}
+                          onBlur={handleOfferBlur}
+                          className="flex-1 bg-[#020617]/50 border border-white/10 rounded-xl px-4 py-3 text-white font-black text-lg text-center outline-none focus:border-emerald-500 transition-colors"
+                      />
+                      <button onClick={() => adjustOffer(0.5)} className="w-12 h-12 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all">
+                          <i className="fas fa-plus"></i>
+                      </button>
+                   </div>
                </div>
             </div>
 
@@ -3504,14 +3538,14 @@ const App: React.FC = () => {
       ) : (
         <>
       {settings.hub_announcement && !dismissedAnnouncement && (
-        <div className="fixed top-0 left-0 right-0 z-[400] bg-gradient-to-r from-amber-600 to-rose-600 px-4 py-3 flex items-center justify-between shadow-2xl animate-in slide-in-from-top duration-500 border-b border-white/10">
-           <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
+        <div className="fixed top-0 left-0 right-0 z-[2000] bg-gradient-to-r from-amber-600 to-rose-600 px-4 py-3 flex items-start sm:items-center justify-between shadow-2xl animate-in slide-in-from-top duration-500 border-b border-white/10">
+           <div className="flex items-start sm:items-center gap-3 flex-1">
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-pulse shrink-0 mt-0.5 sm:mt-0">
                 <i className="fas fa-bullhorn text-white text-xs"></i>
               </div>
-              <p className="text-[10px] sm:text-xs font-black uppercase italic text-white truncate tracking-tight">{settings.hub_announcement}</p>
+              <p className="text-[10px] sm:text-xs font-black uppercase italic text-white tracking-tight leading-relaxed break-words">{settings.hub_announcement}</p>
            </div>
-           <button onClick={handleDismissAnnouncement} className="ml-4 w-7 h-7 rounded-full bg-black/20 flex items-center justify-center text-white text-[10px] hover:bg-white/30 transition-all shrink-0">
+           <button onClick={handleDismissAnnouncement} className="ml-4 w-7 h-7 rounded-full bg-black/20 flex items-center justify-center text-white text-[10px] hover:bg-white/30 transition-all shrink-0 mt-0.5 sm:mt-0">
              <i className="fas fa-times"></i>
            </button>
         </div>
@@ -3960,4 +3994,3 @@ if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<App />);
 }
-
