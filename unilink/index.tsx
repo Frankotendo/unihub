@@ -52,11 +52,37 @@ async function decodeAudioData(
   return buffer;
 }
 
+/**
+ * Downsamples audio buffer to 16kHz for Gemini compatibility.
+ * Simple averaging is used to prevent aliasing.
+ */
+function downsampleTo16k(buffer: Float32Array, sampleRate: number): Float32Array {
+  if (sampleRate === 16000) return buffer;
+  const ratio = sampleRate / 16000;
+  const newLength = Math.ceil(buffer.length / ratio);
+  const result = new Float32Array(newLength);
+  let offsetResult = 0;
+  let offsetBuffer = 0;
+  
+  while (offsetResult < result.length) {
+    const nextOffsetBuffer = Math.round((offsetResult + 1) * ratio);
+    let accum = 0, count = 0;
+    for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+      accum += buffer[i];
+      count++;
+    }
+    result[offsetResult] = count > 0 ? accum / count : 0;
+    offsetResult++;
+    offsetBuffer = nextOffsetBuffer;
+  }
+  return result;
+}
+
 function createBlob(data: Float32Array): { data: string, mimeType: string } {
   const l = data.length;
   const int16 = new Int16Array(l);
   for (let i = 0; i < l; i++) {
-    int16[i] = data[i] * 32768;
+    int16[i] = Math.max(-1, Math.min(1, data[i])) * 32768; // Clamp values
   }
   return {
     data: encode(new Uint8Array(int16.buffer)),
@@ -504,13 +530,20 @@ const GlobalVoiceOrb = ({
     }
 
     try {
-      const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      // Use device native sample rate to prevent audio glitching on mobile
+      const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      
+      // Explicit resume for mobile browsers
+      await inputAudioContext.resume();
+      await outputAudioContext.resume();
+
       audioContextRef.current = outputAudioContext;
       inputAudioContextRef.current = inputAudioContext;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const inputNode = inputAudioContext.createMediaStreamSource(stream);
+      // Use larger buffer size for better stability on lower-end devices
       const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
 
       const sessionPromise = ai.live.connect({
@@ -528,7 +561,9 @@ const GlobalVoiceOrb = ({
             console.log("Gemini Live Connected");
             scriptProcessor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
-              const pcmBlob = createBlob(inputData);
+              // Downsample to 16k before sending to Gemini
+              const downsampledData = downsampleTo16k(inputData, inputAudioContext.sampleRate);
+              const pcmBlob = createBlob(downsampledData);
               sessionPromise.then(session => session.sendRealtimeInput({ media: pcmBlob }));
             };
             inputNode.connect(scriptProcessor);
@@ -2080,9 +2115,9 @@ const AdminPortal = ({
 
   const handleCreatePromo = async () => {
       if (!videoPrompt) return;
-      const hasKey = await (window as any).aistudio.hasSelectedApiKey();
-      if (!hasKey) {
-          await (window as any).aistudio.openSelectKey();
+      // Vercel / Production fix: Use environment variable only
+      if (!process.env.API_KEY) {
+          alert("API Key not found in environment variables. Please check deployment settings.");
           return;
       }
 
@@ -2116,9 +2151,6 @@ const AdminPortal = ({
       } catch (err: any) {
           console.error("Video Gen Error", err);
           alert("Video generation failed: " + err.message);
-          if (err.message.includes("Requested entity was not found")) {
-             await (window as any).aistudio.openSelectKey();
-          }
       } finally {
           setIsGeneratingVideo(false);
       }
@@ -2577,6 +2609,7 @@ const AdminPortal = ({
   );
 };
 
+// ... (Rest of App and rootElement code remains the same)
 // --- APP COMPONENT ---
 
 const App: React.FC = () => {
@@ -4057,4 +4090,3 @@ if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<App />);
 }
-
