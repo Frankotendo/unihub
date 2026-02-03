@@ -974,9 +974,6 @@ const SearchHub = ({ searchConfig, setSearchConfig, portalMode }: any) => {
   );
 };
 
-// ... (rest of the file content until App component or fetchData/updateGlobalSettings usage)
-// I will include the full updated App component and necessary context for XML format validity
-
 const PassengerPortal = ({ 
   currentUser, 
   nodes, 
@@ -3404,29 +3401,30 @@ const App: React.FC = () => {
     const { id, ...data } = newSettings;
     const targetId = id || 1;
     
-    // Map camelCase state to snake_case for DB
+    // Map state to DB columns. 
+    // FIXED: Using camelCase to match the provided SQL schema dump, except for hub_announcement.
     const dbPayload = {
-        admin_momo: data.adminMomo,
-        admin_momo_name: data.adminMomoName,
-        whatsapp_number: data.whatsappNumber,
-        commission_per_seat: data.commissionPerSeat,
-        shuttle_commission: data.shuttleCommission,
-        fare_per_pragia: data.farePerPragia,
-        fare_per_taxi: data.farePerTaxi,
-        solo_multiplier: data.soloMultiplier,
-        about_me_text: data.aboutMeText,
-        about_me_images: data.aboutMeImages,
-        app_wallpaper: data.appWallpaper,
-        app_logo: data.appLogo,
-        registration_fee: data.registrationFee,
+        adminMomo: data.adminMomo,
+        adminMomoName: data.adminMomoName,
+        whatsappNumber: data.whatsappNumber,
+        commissionPerSeat: data.commissionPerSeat,
+        shuttleCommission: data.shuttleCommission,
+        farePerPragia: data.farePerPragia,
+        farePerTaxi: data.farePerTaxi,
+        soloMultiplier: data.soloMultiplier,
+        aboutMeText: data.aboutMeText,
+        aboutMeImages: data.aboutMeImages,
+        appWallpaper: data.appWallpaper,
+        appLogo: data.appLogo,
+        registrationFee: data.registrationFee,
         hub_announcement: data.hub_announcement,
-        facebook_url: data.facebookUrl,
-        instagram_url: data.instagramUrl,
-        tiktok_url: data.tiktokUrl,
-        adsense_client_id: data.adSenseClientId,
-        adsense_slot_id: data.adSenseSlotId,
-        adsense_layout_key: data.adSenseLayoutKey,
-        adsense_status: data.adSenseStatus
+        facebookUrl: data.facebookUrl,
+        instagramUrl: data.instagramUrl,
+        tiktokUrl: data.tiktokUrl,
+        adSenseClientId: data.adSenseClientId,
+        adSenseSlotId: data.adSenseSlotId,
+        adSenseLayoutKey: data.adSenseLayoutKey,
+        adSenseStatus: data.adSenseStatus
     };
 
     const { error } = await supabase.from('unihub_settings').upsert({ id: targetId, ...dbPayload });
@@ -4059,3 +4057,4 @@ if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(<App />);
 }
+
