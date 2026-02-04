@@ -1,41 +1,116 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, Type, Chat, LiveServerMessage, Modality, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
 import { ai, createBlob, decode, decodeAudioData, PortalMode, RideNode, Driver, Transaction, AppSettings, SearchConfig, NodeStatus } from './lib';
 
 export const QrScannerModal = ({ onScan, onClose }: { onScan: (text: string) => void, onClose: () => void }) => {
+  const scannerRef = useRef<any>(null);
+  const [error, setError] = useState<string>('');
+
   useEffect(() => {
-    if (!(window as any).Html5QrcodeScanner) {
-        alert("Scanner library loading... try again.");
-        onClose();
+    if (!(window as any).Html5Qrcode) {
+        setError("Scanner library missing.");
         return;
     }
-    
-    const scanner = new (window as any).Html5QrcodeScanner(
-        "reader",
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        false
-    );
-    
-    scanner.render((text: string) => {
-        scanner.clear();
-        onScan(text);
-    }, (err: any) => {
-        // ignore errors
-    });
-    
+
+    const html5QrCode = new (window as any).Html5Qrcode("reader");
+    scannerRef.current = html5QrCode;
+
+    const startScanner = async () => {
+        try {
+            await html5QrCode.start(
+                { facingMode: "environment" }, 
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0
+                },
+                (decodedText: string) => {
+                    // Success
+                    if (scannerRef.current) {
+                        scannerRef.current.stop().then(() => {
+                            scannerRef.current.clear();
+                            onScan(decodedText);
+                        }).catch((err: any) => {
+                            console.error("Stop failed", err);
+                            onScan(decodedText);
+                        });
+                    }
+                },
+                (errorMessage: string) => {
+                    // parse error, ignore
+                }
+            );
+        } catch (err: any) {
+            console.error("Camera start error", err);
+            setError("Camera access denied or unavailable.");
+        }
+    };
+
+    startScanner();
+
     return () => {
-        try { scanner.clear(); } catch(e) {}
+        if (scannerRef.current && scannerRef.current.isScanning) {
+            scannerRef.current.stop().catch((e: any) => console.error("Cleanup stop error", e));
+            scannerRef.current.clear();
+        }
     };
   }, []);
   
   return (
      <div className="fixed inset-0 bg-black/95 z-[1000] flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in">
          <div className="bg-white w-full max-w-sm rounded-[2rem] overflow-hidden relative shadow-2xl">
-            <button onClick={onClose} className="absolute top-4 right-4 z-20 w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200"><i className="fas fa-times"></i></button>
+            <button 
+                onClick={() => {
+                    if (scannerRef.current && scannerRef.current.isScanning) {
+                        scannerRef.current.stop().then(() => {
+                            scannerRef.current.clear();
+                            onClose();
+                        }).catch(() => onClose());
+                    } else {
+                        onClose();
+                    }
+                }} 
+                className="absolute top-4 right-4 z-20 w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"
+            >
+                <i className="fas fa-times"></i>
+            </button>
+            
             <div className="p-6 text-center">
-               <h3 className="text-lg font-black uppercase text-[#020617]">Scan Rider PIN</h3>
-               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">Align QR code within frame</p>
-               <div id="reader" className="rounded-xl overflow-hidden"></div>
+               <h3 className="text-xl font-black uppercase text-[#020617] mb-2">Scan Rider PIN</h3>
+               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-6">Point camera at passenger's QR</p>
+               
+               <div className="relative rounded-2xl overflow-hidden bg-black aspect-square shadow-inner mx-auto max-w-[300px]">
+                   {/* The library renders the video element here */}
+                   <div id="reader" className="w-full h-full"></div>
+                   
+                   {/* Custom Overlay */}
+                   {!error && (
+                       <div className="absolute inset-0 border-2 border-emerald-500/20 pointer-events-none flex items-center justify-center">
+                            <div className="w-48 h-48 border-2 border-emerald-500 rounded-xl relative shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                                <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-emerald-500 -mt-1 -ml-1"></div>
+                                <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-emerald-500 -mt-1 -mr-1"></div>
+                                <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-emerald-500 -mb-1 -ml-1"></div>
+                                <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-emerald-500 -mb-1 -mr-1"></div>
+                                
+                                <div className="scanner-line"></div>
+                            </div>
+                       </div>
+                   )}
+
+                   {error && (
+                       <div className="absolute inset-0 flex items-center justify-center bg-gray-900 text-white p-4">
+                           <div className="text-center">
+                               <i className="fas fa-exclamation-triangle text-3xl text-amber-500 mb-2"></i>
+                               <p className="text-xs font-bold">{error}</p>
+                           </div>
+                       </div>
+                   )}
+               </div>
+               
+               <p className="text-[9px] text-slate-400 mt-4 uppercase font-bold animate-pulse">
+                   {error ? "Please check permissions" : "Scanning automatically..."}
+               </p>
             </div>
          </div>
      </div>
