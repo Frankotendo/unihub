@@ -1,9 +1,0 @@
-{
-  "name": "NexRyde Dispatch",
-  "description": "Premium campus logistics platform with secure partner onboarding, ride pooling, and marketplace hubs.",
-  "requestFramePermissions": [
-    "geolocation",
-    "camera",
-    "microphone"
-  ]
-}
