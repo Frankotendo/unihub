@@ -13,7 +13,8 @@
     "react": "^18.2.0",
 "react-dom": "^18.2.0",
 "@types/react": "^18.2.0",
-"@types/react-dom": "^18.2.0"
+"@types/react-dom": "^18.2.0",
+        "@google/genai": "^1.38.0",
     "@supabase/supabase-js": "^2.48.1"
   },
   "devDependencies": {
